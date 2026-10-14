@@ -1,0 +1,10 @@
+{
+  "name": "Wallet Click",
+  "short_name": "Wallet Click",
+  "description": "Get paid in BTC or ETH, receive USDT in Coinbase",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#008080",
+  "theme_color": "#008080",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

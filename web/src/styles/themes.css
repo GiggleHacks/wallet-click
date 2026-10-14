@@ -1,0 +1,2752 @@
+/*
+ * Themes. win98.css is the base (Windows 98, the default). Each block below reshapes it:
+ *   win95: solid title bars, Arial, grey Start banner, square tooltips, the start-up splash.
+ *   win10: flat and square, white title bars with accent border, dark taskbar, live tiles, toasts.
+ *   win11: rounded "Mica" glass windows, a centred taskbar, pinned Start menu, accent pills.
+ */
+
+/* ---------------------------------------------------------------- shared bits every theme uses */
+
+.glyph-modern {
+  display: none;
+}
+
+html[data-shell='win10'] .glyph-classic,
+html[data-shell='win11'] .glyph-classic {
+  display: none;
+}
+
+html[data-shell='win10'] .glyph-modern,
+html[data-shell='win11'] .glyph-modern {
+  display: block;
+}
+
+.tb-btn svg.glyph-modern {
+  fill: none;
+}
+
+.taskbar-main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tray-date {
+  display: none;
+}
+
+.start-menu li.has-sep::after {
+  content: '';
+  display: block;
+  height: 2px;
+  margin: 3px 2px;
+  box-shadow: inset 0 1px var(--shade), inset 0 -1px var(--hi);
+}
+
+.start-banner i {
+  font-style: normal;
+  font-weight: 700;
+  color: #fff;
+  font-size: 13px;
+  margin-left: 2px;
+}
+
+.toast-app {
+  display: none;
+}
+
+.progress-modern {
+  height: 6px;
+  margin-top: 10px;
+  background: #e6e6e6;
+  overflow: hidden;
+}
+
+.progress-modern span {
+  display: block;
+  height: 100%;
+  background: #06b025;
+  transition: width 0.5s ease;
+}
+
+.speed-graph {
+  height: 54px;
+  margin-top: 6px;
+  background: #fff;
+  border: 1px solid #c7e6c3;
+}
+
+.speed-graph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.speed-graph .grid {
+  stroke: #e3f1e1;
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.speed-graph .area {
+  fill: #b8e6b1;
+}
+
+.speed-graph .edge {
+  fill: none;
+  stroke: #06b025;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.modern-head {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: #333;
+}
+
+.modern-pct {
+  margin: 10px 0 0;
+  font-size: 20px;
+  font-weight: 300;
+  color: #1a1a1a;
+}
+
+.tab98 {
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tab98:not(.is-active) {
+  margin-top: 2px;
+}
+
+.monitor-wallpaper,
+.mini {
+  width: 100%;
+  height: 100%;
+}
+
+.theme-blurb {
+  margin: 8px 0 0;
+  min-height: 2.8em;
+  font-size: 12px;
+  color: #333;
+}
+
+.listbox .current {
+  color: #666;
+  font-style: normal;
+}
+
+.listbox li.is-selected .current {
+  color: inherit;
+}
+
+.theme-swatch.swatch-win95 {
+  background: linear-gradient(#000080 0 40%, #c0c0c0 40%);
+}
+
+.theme-swatch.swatch-win98 {
+  background: linear-gradient(90deg, #000080, #1084d0) top / 100% 40% no-repeat, #c0c0c0;
+}
+
+.theme-swatch.swatch-win10 {
+  background: linear-gradient(#fff 0 40%, #0078d7 40% 70%, #101010 70%);
+}
+
+.theme-swatch.swatch-win11 {
+  background: linear-gradient(135deg, #cfe3fa, #3f8ff0);
+  border-radius: 3px;
+}
+
+/* ---------------------------------------------------------------- theme previews (always drawn as that theme) */
+
+.mini {
+  position: relative;
+  overflow: hidden;
+}
+
+.monitor-screen {
+  overflow: hidden;
+}
+
+.mini-win {
+  position: absolute;
+  left: 16%;
+  top: 14%;
+  width: 62%;
+  height: 56%;
+  background: #c0c0c0;
+  box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff;
+  padding: 2px;
+}
+
+.mini-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 9px;
+  padding: 0 2px;
+  background: linear-gradient(90deg, #000080, #1084d0);
+}
+
+.mini-title-text {
+  font-size: 6px;
+  line-height: 1;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.mini-x {
+  width: 6px;
+  height: 5px;
+  background: #c0c0c0;
+  box-shadow: inset -1px -1px #404040;
+}
+
+.mini-body {
+  display: flex;
+  gap: 4px;
+  padding: 6px 4px;
+}
+
+.mini-btn {
+  flex: 1;
+  height: 22px;
+  background: #c0c0c0;
+  box-shadow: inset -1px -1px #404040, inset 1px 1px #fff;
+}
+
+.mini-btn::after {
+  content: '';
+  display: block;
+  width: 10px;
+  height: 10px;
+  margin: 6px auto 0;
+  border-radius: 50%;
+}
+
+.mini-btn.is-btc::after {
+  background: #f7931a;
+}
+
+.mini-btn.is-eth::after {
+  background: #627eea;
+}
+
+.mini-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 10px;
+  padding: 1px 2px;
+  background: #c0c0c0;
+  box-shadow: inset 0 1px #fff;
+}
+
+.mini-start {
+  width: 18px;
+  height: 7px;
+  background: #c0c0c0;
+  box-shadow: inset -1px -1px #404040, inset 1px 1px #fff;
+}
+
+.mini-task {
+  width: 28px;
+  height: 7px;
+  box-shadow: inset 1px 1px #404040, inset -1px -1px #fff;
+}
+
+.mini-clock {
+  margin-left: auto;
+  width: 16px;
+  height: 7px;
+  box-shadow: inset 1px 1px #808080, inset -1px -1px #fff;
+}
+
+.mini-win95 .mini-title {
+  background: #000080;
+}
+
+.mini-win10 .mini-win {
+  background: #fff;
+  box-shadow: 0 0 0 1px #0078d7, 0 3px 8px rgba(0, 0, 0, 0.4);
+  padding: 0;
+}
+
+.mini-win10 .mini-title {
+  height: 10px;
+  background: #fff;
+}
+
+.mini-win10 .mini-title-text {
+  color: #000;
+  font-weight: 400;
+}
+
+.mini-win10 .mini-x {
+  background: none;
+  box-shadow: none;
+  border-top: 1px solid #000;
+  transform: rotate(45deg);
+}
+
+.mini-win10 .mini-btn.is-btc {
+  background: #d9790b;
+  box-shadow: none;
+}
+
+.mini-win10 .mini-btn.is-eth {
+  background: #4a5fc1;
+  box-shadow: none;
+}
+
+.mini-win10 .mini-btn::after {
+  background: #fff;
+}
+
+.mini-win10 .mini-bar {
+  height: 11px;
+  background: rgba(16, 16, 16, 0.95);
+  box-shadow: none;
+}
+
+.mini-win10 .mini-start {
+  width: 8px;
+  height: 8px;
+  background: repeating-conic-gradient(#fff 0 25%, transparent 0 50%) 0 0 / 4px 4px;
+  box-shadow: none;
+}
+
+.mini-win10 .mini-task {
+  background: rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid #76b9ed;
+  box-shadow: none;
+}
+
+.mini-win10 .mini-clock {
+  background: rgba(255, 255, 255, 0.5);
+  height: 3px;
+  box-shadow: none;
+}
+
+.mini-win11 .mini-win {
+  background: rgba(243, 243, 243, 0.9);
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.25);
+  padding: 0;
+  overflow: hidden;
+}
+
+.mini-win11 .mini-title {
+  height: 10px;
+  background: transparent;
+}
+
+.mini-win11 .mini-title-text {
+  color: #1a1a1a;
+  font-weight: 400;
+}
+
+.mini-win11 .mini-x {
+  background: none;
+  box-shadow: none;
+  border-top: 1px solid #1a1a1a;
+  transform: rotate(45deg);
+}
+
+.mini-win11 .mini-btn {
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.mini-win11 .mini-bar {
+  justify-content: center;
+  height: 12px;
+  background: rgba(243, 243, 243, 0.9);
+  box-shadow: 0 -1px rgba(0, 0, 0, 0.08);
+}
+
+.mini-win11 .mini-start {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: linear-gradient(135deg, #2b9cf2, #0b6cce);
+  box-shadow: none;
+}
+
+.mini-win11 .mini-task {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #627eea;
+  box-shadow: none;
+}
+
+.mini-win11 .mini-clock {
+  position: absolute;
+  right: 3px;
+  width: 12px;
+  height: 3px;
+  background: #555;
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------------------- Windows 95 */
+
+html[data-theme='win95'] {
+  --title: #000080;
+  --title-off: #808080;
+  --font: 'Microsoft Sans Serif', Arial, 'Noto Sans Variable', 'Helvetica Neue', sans-serif;
+}
+
+html[data-theme='win95'] .titlebar {
+  height: 20px;
+  letter-spacing: 0.2px;
+}
+
+html[data-theme='win95'] .start-banner {
+  background: #808080;
+  color: #c0c0c0;
+}
+
+html[data-theme='win95'] .start-banner span {
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+html[data-theme='win95'] .start-banner b {
+  color: #c0c0c0;
+}
+
+html[data-theme='win95'] .start-banner i {
+  color: #fff;
+}
+
+/* Windows 95 had square yellow tooltips, not speech balloons. */
+html[data-theme='win95'] .balloon {
+  border-radius: 0;
+  padding: 6px 9px;
+}
+
+html[data-theme='win95'] .balloon::after {
+  display: none;
+}
+
+html[data-theme='win95'] .desk-icon:hover span,
+html[data-theme='win95'] .desk-icon:focus-visible span {
+  outline-style: dotted;
+}
+
+html[data-theme='win95'] .coin-name {
+  letter-spacing: 0.3px;
+}
+
+.splash95 {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.splash95-logo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #fff;
+  font: 700 46px/1 Arial, 'Noto Sans Variable', sans-serif;
+  text-shadow: 3px 3px 0 rgba(0, 0, 60, 0.45);
+  animation: splash-in 0.6s ease-out both;
+}
+
+.splash95-logo b {
+  color: #ffd23a;
+}
+
+.splash95-logo sup {
+  font-size: 22px;
+  margin-left: 4px;
+}
+
+.splash95-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 18px;
+  background: linear-gradient(90deg, #00a, #0af, #0f8, #ff0, #f80, #f0a, #80f, #00a);
+  background-size: 50% 100%;
+  animation: splash-bar 1.2s linear infinite;
+}
+
+@keyframes splash-bar {
+  to {
+    background-position: 100% 0;
+  }
+}
+
+@keyframes splash-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+/* ---------------------------------------------------------------- Windows 10 */
+
+html[data-theme='win10'] {
+  --face: #ffffff;
+  --light: #f0f0f0;
+  --hi: #ffffff;
+  --shade: #adadad;
+  --dark: #7a7a7a;
+  --navy: #0078d7;
+  --title: #ffffff;
+  --title-off: #ffffff;
+  --font: 'Segoe UI', 'Noto Sans Variable', system-ui, -apple-system, sans-serif;
+  --raised: inset 0 0 0 1px #adadad;
+  --pressed: inset 0 0 0 1px #005499;
+  --sunken: inset 0 0 0 1px #7a7a7a;
+  --thin-sunken: inset 0 0 0 1px #e5e5e5;
+}
+
+html[data-theme='win10'] body {
+  font-size: 14px;
+}
+
+html[data-theme='win10'] a {
+  color: #0066b4;
+}
+
+html[data-theme='win10'] .win {
+  padding: 0;
+  background: #fff;
+  box-shadow: 0 0 0 1px #0078d7, 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme='win10'] .titlebar {
+  height: 32px;
+  padding: 0 0 0 10px;
+  gap: 8px;
+  background: #fff;
+  color: #000;
+  font-weight: 400;
+  font-size: 12px;
+}
+
+html[data-theme='win10'] .tb-btn {
+  width: 46px;
+  height: 32px;
+  margin: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #000;
+}
+
+html[data-theme='win10'] .titlebar-btns {
+  gap: 0;
+  align-self: stretch;
+}
+
+html[data-theme='win10'] .tb-btn:hover {
+  background: #e5e5e5;
+}
+
+html[data-theme='win10'] .tb-close:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+html[data-theme='win10'] .tb-btn:active {
+  box-shadow: none;
+  background: #ccc;
+}
+
+html[data-theme='win10'] .win-body {
+  padding: 14px 18px 14px;
+}
+
+html[data-theme='win10'] .statusbar {
+  margin: 0;
+  border-top: 1px solid #e5e5e5;
+}
+
+html[data-theme='win10'] .status-cell {
+  box-shadow: none;
+  padding: 4px 12px;
+  color: #555;
+  font-size: 12px;
+}
+
+html[data-theme='win10'] .btn98 {
+  min-height: 32px;
+  padding: 0 18px;
+  background: #e1e1e1;
+}
+
+html[data-theme='win10'] .btn98:hover:not(:disabled) {
+  background: #e5f1fb;
+  box-shadow: inset 0 0 0 1px #0078d7;
+}
+
+html[data-theme='win10'] .btn98:active:not(:disabled),
+html[data-theme='win10'] .btn98.is-pressed {
+  padding: 0 18px;
+  background: #cce4f7;
+  box-shadow: inset 0 0 0 1px #005499;
+}
+
+html[data-theme='win10'] .btn98.is-default {
+  outline: none;
+  box-shadow: inset 0 0 0 2px #0078d7;
+}
+
+html[data-theme='win10'] .btn98:disabled {
+  background: #ccc;
+  color: #838383;
+  text-shadow: none;
+  box-shadow: inset 0 0 0 1px #bfbfbf;
+}
+
+html[data-theme='win10'] .input98 {
+  height: 32px;
+  padding: 4px 8px;
+}
+
+html[data-theme='win10'] .input98:focus {
+  box-shadow: inset 0 0 0 2px #0078d7;
+}
+
+html[data-theme='win10'] .group98 {
+  border: 0;
+  box-shadow: none;
+  padding: 4px 0 0;
+}
+
+html[data-theme='win10'] .group98 legend {
+  padding: 0;
+  font-size: 15px;
+  color: #000;
+}
+
+html[data-theme='win10'] .listview {
+  padding: 0;
+}
+
+html[data-theme='win10'] .listview th {
+  background: #fff;
+  box-shadow: inset -1px 0 #e5e5e5, inset 0 -1px #e5e5e5;
+  color: #4c607a;
+  padding: 6px 10px;
+}
+
+html[data-theme='win10'] .listview td {
+  padding: 6px 10px;
+}
+
+html[data-theme='win10'] .listview tbody tr:hover,
+html[data-theme='win10'] .listview tbody tr:focus-visible {
+  background: #e5f3ff;
+  color: #000;
+}
+
+/* Live tiles. */
+html[data-theme='win10'] .coin-btn {
+  align-items: flex-start;
+  justify-content: space-between;
+  min-height: 150px;
+  padding: 12px;
+  color: #fff;
+  box-shadow: none;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+/* Tile colours win over the generic button hover/pressed colours. */
+html[data-theme='win10'] .coin-btn[data-coin='BTC'],
+html[data-theme='win10'] .coin-btn[data-coin='BTC']:hover:not(:disabled),
+html[data-theme='win10'] .coin-btn[data-coin='BTC']:active:not(:disabled),
+html[data-theme='win10'] .coin-btn[data-coin='BTC'].is-pressed {
+  background: #d9790b;
+}
+
+html[data-theme='win10'] .coin-btn[data-coin='ETH'],
+html[data-theme='win10'] .coin-btn[data-coin='ETH']:hover:not(:disabled),
+html[data-theme='win10'] .coin-btn[data-coin='ETH']:active:not(:disabled),
+html[data-theme='win10'] .coin-btn[data-coin='ETH'].is-pressed {
+  background: #4a5fc1;
+}
+
+html[data-theme='win10'] .coin-btn:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
+html[data-theme='win10'] .coin-btn:active:not(:disabled),
+html[data-theme='win10'] .coin-btn.is-pressed {
+  padding: 12px;
+  transform: scale(0.97);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
+html[data-theme='win10'] .coin-btn:disabled {
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: none;
+}
+
+html[data-theme='win10'] .coin-art {
+  align-self: center;
+  filter: none;
+}
+
+html[data-theme='win10'] .coin-name {
+  font-weight: 400;
+  font-size: 16px;
+}
+
+html[data-theme='win10'] .coin-sub {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+html[data-theme='win10'] .payout-line {
+  background: #f2f2f2;
+  box-shadow: inset 3px 0 #0078d7;
+  padding-left: 12px;
+}
+
+html[data-theme='win10'] .qr-box {
+  box-shadow: inset 0 0 0 1px #e5e5e5;
+}
+
+html[data-theme='win10'] .wait-row {
+  background: #f2f2f2;
+  box-shadow: none;
+}
+
+html[data-theme='win10'] .wait-row.is-live {
+  background: #e5f3ff;
+}
+
+html[data-theme='win10'] .warn-box {
+  background: #fff4ce;
+  box-shadow: none;
+}
+
+html[data-theme='win10'] .modal-layer {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+html[data-theme='win10'] .line-sub {
+  color: #555;
+}
+
+html[data-theme='win10'] .track {
+  border-top: 2px dashed #cfcfcf;
+}
+
+html[data-theme='win10'] .station-label {
+  color: #444;
+}
+
+html[data-theme='win10'] .station-icon {
+  filter: none;
+}
+
+html[data-theme='win10'] .tabs98 {
+  gap: 18px;
+  margin-bottom: 10px;
+}
+
+html[data-theme='win10'] .tab98 {
+  padding: 4px 0;
+  background: none;
+  box-shadow: none;
+  margin: 0;
+  color: #555;
+}
+
+html[data-theme='win10'] .tab98.is-active {
+  color: #000;
+  box-shadow: inset 0 -2px #0078d7;
+}
+
+html[data-theme='win10'] .tab-panel {
+  padding: 0;
+  box-shadow: none;
+}
+
+html[data-theme='win10'] .listbox li.is-selected {
+  background: #cce8ff;
+  color: #000;
+}
+
+html[data-theme='win10'] .monitor-screen {
+  border-color: #1b1b1b;
+  border-width: 7px;
+  border-bottom-width: 11px;
+  box-shadow: none;
+}
+
+html[data-theme='win10'] .monitor-stand {
+  background: #8a8a8a;
+  border: 0;
+}
+
+/* Taskbar: dark, flat, 40px. */
+html[data-theme='win10'] .taskbar {
+  height: 40px;
+  padding: 0;
+  gap: 0;
+  color: #fff;
+  background: rgba(16, 16, 16, 0.94);
+  box-shadow: none;
+  backdrop-filter: blur(20px);
+}
+
+html[data-theme='win10'] .start-btn,
+html[data-theme='win10'] .start-btn.is-pressed {
+  width: 48px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #fff;
+}
+
+html[data-theme='win10'] .start-btn:hover,
+html[data-theme='win10'] .start-btn.is-pressed {
+  background: rgba(255, 255, 255, 0.1);
+  color: #4cc2ff;
+}
+
+html[data-theme='win10'] .tb-divider {
+  display: none;
+}
+
+html[data-theme='win10'] .task-items {
+  gap: 0;
+}
+
+html[data-theme='win10'] .task-item,
+html[data-theme='win10'] .task-item.is-pressed {
+  height: 40px;
+  max-width: 210px;
+  padding: 0 12px;
+  background: transparent;
+  box-shadow: inset 0 -2px transparent;
+  color: #fff;
+  font-weight: 400;
+}
+
+html[data-theme='win10'] .task-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme='win10'] .task-item.is-pressed {
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 -2px #76b9ed;
+}
+
+html[data-theme='win10'] .tray {
+  height: 40px;
+  padding: 0 8px 0 4px;
+  box-shadow: none;
+  color: #fff;
+}
+
+html[data-theme='win10'] .tray-btn {
+  color: #fff;
+  padding: 0 8px;
+  height: 40px;
+}
+
+html[data-theme='win10'] .tray-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme='win10'] .tray-clock,
+html[data-theme='win11'] .tray-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+html[data-theme='win10'] .tray-date,
+html[data-theme='win11'] .tray-date {
+  display: block;
+}
+
+/* Start menu: rail + app list + live tiles. */
+html[data-theme='win10'] .start-menu.start-win10 {
+  left: 0;
+  bottom: 40px;
+  display: grid;
+  grid-template-columns: 48px 230px auto;
+  width: auto;
+  max-width: 100vw;
+  height: min(470px, calc(100dvh - 60px));
+  padding: 0;
+  color: #fff;
+  background: rgba(31, 31, 31, 0.96);
+  box-shadow: 0 0 0 1px #2b2b2b, 6px -6px 24px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(24px);
+}
+
+.s10-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 4px 0;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.s10-rail .grow {
+  flex: 1;
+}
+
+.s10-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: 6px auto;
+  border-radius: 50%;
+  background: #3a3a3a;
+}
+
+.s10-rail-btn {
+  display: grid;
+  place-items: center;
+  height: 44px;
+  border: 0;
+  background: none;
+  color: #fff;
+  cursor: pointer;
+}
+
+.s10-rail-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.s10-list {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+  overflow: auto;
+}
+
+.s10-letter {
+  margin: 4px 14px 6px;
+  font-size: 13px;
+  color: #ccc;
+}
+
+.s10-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  border: 0;
+  background: none;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.s10-item:hover,
+.s10-item:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+
+.s10-item-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  background: #0063b1;
+}
+
+.s10-tiles {
+  padding: 8px 16px 16px 4px;
+  overflow: auto;
+}
+
+.s10-group {
+  margin: 4px 0 10px;
+  font-size: 13px;
+}
+
+.s10-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 104px);
+  gap: 4px;
+}
+
+.s10-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 104px;
+  border: 0;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.s10-tile:hover {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5);
+}
+
+.s10-tile:active {
+  transform: scale(0.96);
+}
+
+.s10-tile-label {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  font-size: 12px;
+}
+
+/* Toast notifications instead of balloons. */
+html[data-theme='win10'] .balloon {
+  right: 0;
+  bottom: 40px;
+  width: min(364px, 100vw);
+  max-width: none;
+  gap: 3px;
+  padding: 14px 16px 16px;
+  border: 0;
+  border-radius: 0;
+  color: #fff;
+  background: rgba(31, 31, 31, 0.97);
+  box-shadow: 0 0 0 1px #2b2b2b, 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme='win10'] .balloon::after,
+html[data-theme='win11'] .balloon::after {
+  display: none;
+}
+
+html[data-theme='win10'] .toast-app,
+html[data-theme='win11'] .toast-app {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+html[data-theme='win10'] .balloon span:not(.toast-app) {
+  color: #ccc;
+}
+
+html[data-theme='win10'] .desk-icon span,
+html[data-theme='win11'] .desk-icon span {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+html[data-theme='win10'] .desk-icon:hover,
+html[data-theme='win10'] .desk-icon:focus-visible {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+html[data-theme='win10'] .desk-icon:hover span,
+html[data-theme='win10'] .desk-icon:focus-visible span {
+  background: none;
+  outline: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+html[data-theme='win10'] .progress98,
+html[data-theme='win11'] .progress98 {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- Windows 11 */
+
+html[data-theme='win11'] {
+  --face: #f3f3f3;
+  --light: #f9f9f9;
+  --hi: #ffffff;
+  --shade: #d1d1d1;
+  --dark: #868686;
+  --navy: #005fb8;
+  --title: transparent;
+  --title-off: transparent;
+  --font: 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', 'Noto Sans Variable', system-ui, -apple-system, sans-serif;
+  --raised: inset 0 0 0 1px rgba(0, 0, 0, 0.07), inset 0 -1px 0 rgba(0, 0, 0, 0.13);
+  --pressed: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --sunken: inset 0 0 0 1px rgba(0, 0, 0, 0.07), inset 0 -1px 0 #868686;
+  --thin-sunken: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme='win11'] body {
+  font-size: 14px;
+  color: #1a1a1a;
+}
+
+html[data-theme='win11'] a {
+  color: #005fb8;
+}
+
+/* Mica: frosted, rounded windows. */
+html[data-theme='win11'] .win {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(243, 243, 243, 0.86);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 16px 48px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(30px) saturate(1.6);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6);
+}
+
+html[data-theme='win11'] .titlebar {
+  height: 34px;
+  padding: 0 0 0 12px;
+  gap: 10px;
+  background: transparent;
+  color: #1a1a1a;
+  font-weight: 400;
+  font-size: 12px;
+}
+
+html[data-theme='win11'] .titlebar.is-inactive {
+  color: #8a8a8a;
+}
+
+html[data-theme='win11'] .titlebar-btns {
+  gap: 0;
+  align-self: stretch;
+}
+
+html[data-theme='win11'] .tb-btn {
+  width: 46px;
+  height: 34px;
+  margin: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #1a1a1a;
+}
+
+html[data-theme='win11'] .tb-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme='win11'] .tb-close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+html[data-theme='win11'] .tb-btn:active {
+  box-shadow: none;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme='win11'] .win-body {
+  padding: 12px 20px 16px;
+}
+
+html[data-theme='win11'] .statusbar {
+  margin: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.35);
+}
+
+html[data-theme='win11'] .status-cell {
+  box-shadow: none;
+  padding: 6px 14px;
+  color: #5d5d5d;
+  font-size: 12px;
+}
+
+html[data-theme='win11'] .btn98 {
+  min-height: 32px;
+  padding: 0 16px;
+  border-radius: 4px;
+  background: #fbfbfb;
+  color: #1a1a1a;
+}
+
+html[data-theme='win11'] .btn98:hover:not(:disabled) {
+  background: #f6f6f6;
+}
+
+html[data-theme='win11'] .btn98:active:not(:disabled),
+html[data-theme='win11'] .btn98.is-pressed {
+  padding: 0 16px;
+  background: #f5f5f5;
+  color: rgba(0, 0, 0, 0.62);
+  box-shadow: var(--pressed);
+}
+
+html[data-theme='win11'] .btn98.is-default {
+  outline: none;
+  background: #005fb8;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme='win11'] .btn98.is-default:hover:not(:disabled) {
+  background: #1a6fc2;
+}
+
+html[data-theme='win11'] .btn98.is-default:active:not(:disabled) {
+  background: #3c82c9;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+html[data-theme='win11'] .btn98:disabled {
+  background: #f5f5f5;
+  color: #a0a0a0;
+  text-shadow: none;
+  box-shadow: var(--pressed);
+}
+
+html[data-theme='win11'] .btn98:focus-visible {
+  outline: 2px solid #1a1a1a;
+  outline-offset: 1px;
+}
+
+html[data-theme='win11'] .input98 {
+  height: 32px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+html[data-theme='win11'] .input98:focus {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.07), inset 0 -2px 0 #005fb8;
+}
+
+html[data-theme='win11'] .group98 {
+  border: 0;
+  box-shadow: none;
+  padding: 4px 0 0;
+}
+
+html[data-theme='win11'] .group98 legend {
+  padding: 0;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+html[data-theme='win11'] .listview {
+  padding: 2px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+html[data-theme='win11'] .listview th {
+  background: rgba(249, 249, 249, 0.95);
+  box-shadow: inset 0 -1px rgba(0, 0, 0, 0.06);
+  color: #5d5d5d;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+html[data-theme='win11'] .listview td {
+  padding: 7px 10px;
+}
+
+html[data-theme='win11'] .listview tbody tr:hover,
+html[data-theme='win11'] .listview tbody tr:focus-visible {
+  background: rgba(0, 0, 0, 0.04);
+  color: inherit;
+  box-shadow: inset 3px 0 #005fb8;
+}
+
+/* Light hover rows keep the coloured status text. */
+html[data-theme='win10'] tr:hover .stage-done,
+html[data-theme='win11'] tr:hover .stage-done {
+  color: #0f7b0f;
+}
+
+html[data-theme='win10'] tr:hover .stage-attention,
+html[data-theme='win11'] tr:hover .stage-attention {
+  color: #c42b1c;
+}
+
+html[data-theme='win10'] tr:hover :is(.stage-received, .stage-swapping, .stage-sending),
+html[data-theme='win11'] tr:hover :is(.stage-received, .stage-swapping, .stage-sending) {
+  color: var(--navy);
+}
+
+/* Fluent cards. */
+html[data-theme='win11'] .coin-btn {
+  min-height: 148px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
+  transition: background 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+html[data-theme='win11'] .coin-btn:hover:not(:disabled) {
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme='win11'] .coin-btn:active:not(:disabled),
+html[data-theme='win11'] .coin-btn.is-pressed {
+  padding: 14px 10px;
+  color: #1a1a1a;
+  transform: scale(0.98);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+html[data-theme='win11'] .coin-art {
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18));
+}
+
+html[data-theme='win11'] .coin-name {
+  font-weight: 600;
+}
+
+html[data-theme='win11'] .coin-sub {
+  color: #5d5d5d;
+}
+
+html[data-theme='win11'] .payout-line,
+html[data-theme='win11'] .wait-row,
+html[data-theme='win11'] .warn-box {
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: var(--thin-sunken);
+}
+
+html[data-theme='win11'] .wait-row.is-live {
+  background: #e8f1fb;
+}
+
+html[data-theme='win11'] .warn-box {
+  background: #fff4ce;
+}
+
+html[data-theme='win11'] .qr-box {
+  border-radius: 8px;
+  box-shadow: var(--thin-sunken);
+}
+
+html[data-theme='win11'] .address-box {
+  border-radius: 4px;
+}
+
+html[data-theme='win11'] .modal-layer {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+html[data-theme='win11'] .line-sub {
+  color: #5d5d5d;
+}
+
+html[data-theme='win11'] .track {
+  border-top: 2px dotted #c3c3c3;
+}
+
+html[data-theme='win11'] .station-label {
+  color: #5d5d5d;
+}
+
+html[data-theme='win11'] .station-icon {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
+}
+
+html[data-theme='win11'] .progress-modern {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme='win11'] .progress-modern span {
+  border-radius: 2px;
+  background: #005fb8;
+}
+
+html[data-theme='win11'] .speed-graph {
+  border-radius: 6px;
+  border-color: #c6dcf2;
+  overflow: hidden;
+}
+
+html[data-theme='win11'] .speed-graph .grid {
+  stroke: #e3eef9;
+}
+
+html[data-theme='win11'] .speed-graph .area {
+  fill: #b9d6f2;
+}
+
+html[data-theme='win11'] .speed-graph .edge {
+  stroke: #005fb8;
+}
+
+html[data-theme='win11'] .tabs98 {
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 3px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  width: fit-content;
+}
+
+html[data-theme='win11'] .tab98 {
+  margin: 0;
+  padding: 4px 14px;
+  border-radius: 4px;
+  background: none;
+  box-shadow: none;
+  color: #5d5d5d;
+}
+
+html[data-theme='win11'] .tab98.is-active {
+  background: #fff;
+  color: #1a1a1a;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+html[data-theme='win11'] .tab-panel {
+  padding: 0;
+  box-shadow: none;
+}
+
+html[data-theme='win11'] .listbox {
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+html[data-theme='win11'] .listbox li {
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+html[data-theme='win11'] .listbox li.is-selected {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1a1a1a;
+  box-shadow: inset 3px 0 #005fb8;
+}
+
+html[data-theme='win11'] .monitor-screen {
+  border-radius: 8px;
+  border-color: #1c1c1c;
+  border-width: 7px;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+html[data-theme='win11'] .monitor-stand {
+  width: 50px;
+  border: 0;
+  border-radius: 0 0 4px 4px;
+  background: #bdbdbd;
+}
+
+/* Taskbar: centred, frosted. */
+html[data-theme='win11'] .taskbar {
+  justify-content: center;
+  height: 48px;
+  padding: 0 12px;
+  color: #1a1a1a;
+  background: rgba(243, 243, 243, 0.86);
+  box-shadow: 0 -1px 0 rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(30px) saturate(1.5);
+  -webkit-backdrop-filter: blur(30px) saturate(1.5);
+}
+
+html[data-theme='win11'] .taskbar-main {
+  flex: none;
+  gap: 4px;
+}
+
+html[data-theme='win11'] .start-btn,
+html[data-theme='win11'] .start-btn.is-pressed,
+html[data-theme='win11'] .task-item,
+html[data-theme='win11'] .task-item.is-pressed {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  min-width: 0;
+  max-width: none;
+  flex: none;
+  justify-content: center;
+  padding: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  font-weight: 400;
+}
+
+html[data-theme='win11'] .start-btn:hover,
+html[data-theme='win11'] .start-btn.is-pressed,
+html[data-theme='win11'] .task-item:hover,
+html[data-theme='win11'] .task-item.is-pressed {
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+html[data-theme='win11'] .task-item svg {
+  width: 22px;
+  height: 22px;
+}
+
+html[data-theme='win11'] .task-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* The little pill under each open app: long and blue for the active one. */
+html[data-theme='win11'] .task-item::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: #8a8a8a;
+  transform: translateX(-50%);
+  transition: width 0.2s;
+}
+
+html[data-theme='win11'] .task-item.is-pressed::after {
+  width: 16px;
+  background: #005fb8;
+}
+
+html[data-theme='win11'] .tb-divider {
+  display: none;
+}
+
+html[data-theme='win11'] .task-items {
+  flex: none;
+  gap: 4px;
+  overflow: visible;
+}
+
+html[data-theme='win11'] .tray {
+  position: absolute;
+  right: 8px;
+  height: 40px;
+  padding: 0 6px;
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+html[data-theme='win11'] .tray:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+html[data-theme='win11'] .tray-clock {
+  align-items: flex-end;
+}
+
+/* Start menu: a centred floating panel with search, pinned apps and a user/power footer. */
+html[data-theme='win11'] .start-menu.start-win11 {
+  left: 50%;
+  bottom: 58px;
+  display: block;
+  width: min(560px, calc(100vw - 16px));
+  min-width: 0;
+  padding: 24px 28px 0;
+  border-radius: 8px;
+  color: #1a1a1a;
+  background: rgba(243, 243, 243, 0.96);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 24px 64px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(30px) saturate(1.6);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6);
+  translate: -50% 0;
+}
+
+.s11-search {
+  width: 100%;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.07), inset 0 -1px 0 #868686;
+  outline: none;
+}
+
+.s11-search:focus {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.07), inset 0 -2px 0 #005fb8;
+}
+
+.s11-head {
+  margin: 20px 4px 10px;
+  font-weight: 600;
+}
+
+.s11-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+  min-height: 120px;
+  padding-bottom: 20px;
+}
+
+.s11-app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.s11-app:hover,
+.s11-app:focus-visible {
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
+  outline: none;
+}
+
+.s11-empty {
+  grid-column: 1 / -1;
+  color: #5d5d5d;
+  text-align: center;
+}
+
+.s11-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 -28px;
+  padding: 12px 28px;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.s11-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.s11-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.s11-power {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.s11-power:hover {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+html[data-theme='win11'] .balloon {
+  right: 12px;
+  bottom: 60px;
+  width: min(364px, calc(100vw - 24px));
+  max-width: none;
+  gap: 3px;
+  padding: 14px 16px 16px;
+  border: 0;
+  border-radius: 8px;
+  color: #1a1a1a;
+  background: rgba(243, 243, 243, 0.96);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(30px);
+}
+
+html[data-theme='win11'] .balloon span:not(.toast-app) {
+  color: #5d5d5d;
+}
+
+html[data-theme='win11'] .desk-icon {
+  border-radius: 4px;
+}
+
+html[data-theme='win11'] .desk-icon:hover,
+html[data-theme='win11'] .desk-icon:focus-visible {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+html[data-theme='win11'] .desk-icon:hover span,
+html[data-theme='win11'] .desk-icon:focus-visible span {
+  background: none;
+  outline: none;
+}
+
+/* ---------------------------------------------------------------- modern sign-in screen (10, 11) */
+
+.signin {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  backdrop-filter: blur(22px) brightness(0.8);
+  -webkit-backdrop-filter: blur(22px) brightness(0.8);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.signin-clock {
+  position: absolute;
+  left: 32px;
+  bottom: 40px;
+  display: flex;
+  flex-direction: column;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.signin-clock span {
+  font-size: 64px;
+  font-weight: 200;
+  line-height: 1;
+}
+
+.signin-clock small {
+  font-size: 22px;
+  font-weight: 300;
+}
+
+.signin-win11 .signin-clock {
+  left: 50%;
+  top: 9vh;
+  bottom: auto;
+  align-items: center;
+  transform: translateX(-50%);
+}
+
+.signin-win11 .signin-clock span {
+  font-size: 88px;
+  font-weight: 600;
+}
+
+.signin-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(320px, calc(100vw - 32px));
+}
+
+.signin-avatar {
+  display: grid;
+  place-items: center;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+
+.signin-name {
+  margin: 4px 0 6px;
+  font-size: 30px;
+  font-weight: 300;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.signin-row {
+  display: flex;
+  width: 100%;
+}
+
+.signin-row .field {
+  flex: 1;
+  margin: 0;
+}
+
+.signin-row .pw-box {
+  gap: 0;
+}
+
+.signin-row .input98 {
+  height: 36px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.95);
+  color: #000;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.4);
+}
+
+.signin-row .input98:focus {
+  box-shadow: inset 0 0 0 2px #0078d7;
+}
+
+.signin-row .pw-toggle {
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  box-shadow: inset 0 2px rgba(0, 0, 0, 0.4), inset 0 -2px rgba(0, 0, 0, 0.4);
+}
+
+.signin-go {
+  width: 40px;
+  height: 36px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.signin-go:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.signin-go:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.signin-msg {
+  min-height: 1.4em;
+  margin: 0;
+  font-size: 14px;
+  text-align: center;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.signin-win11 .signin-avatar {
+  width: 120px;
+  height: 120px;
+}
+
+.signin-win11 .signin-name {
+  font-weight: 600;
+  font-size: 26px;
+}
+
+.signin-win11 .signin-row .input98,
+.signin-win11 .signin-row .pw-toggle,
+.signin-win11 .signin-go {
+  height: 34px;
+  min-height: 34px;
+}
+
+.signin-win11 .signin-row .input98 {
+  border-radius: 4px 0 0 4px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1), inset 0 -2px 0 #005fb8;
+}
+
+.signin-win11 .signin-row .pw-toggle {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.signin-win11 .signin-go {
+  border-radius: 0 4px 4px 0;
+  background: #005fb8;
+}
+
+.signin-win11 .signin-go:hover:not(:disabled) {
+  background: #1a6fc2;
+}
+
+@media (max-width: 560px) {
+  html[data-theme='win10'] .start-menu.start-win10 {
+    grid-template-columns: 48px 1fr;
+  }
+  .s10-tiles {
+    display: none;
+  }
+  .signin-clock {
+    display: none;
+  }
+  html[data-theme='win11'] .tray-date,
+  html[data-theme='win10'] .tray-date {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- modern taskbar heights and pressed states */
+
+html[data-theme='win10'] .modal-layer {
+  bottom: 40px;
+}
+
+html[data-theme='win11'] .modal-layer {
+  bottom: 48px;
+}
+
+html[data-theme='win10'] .workspace,
+html[data-theme='win11'] .workspace {
+  padding-bottom: 72px;
+}
+
+html[data-theme='win10'] .task-item:active:not(:disabled) {
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 -2px #76b9ed;
+}
+
+html[data-theme='win10'] .start-btn:active:not(:disabled) {
+  padding: 0;
+  box-shadow: none;
+}
+
+html[data-theme='win11'] .task-item:active:not(:disabled),
+html[data-theme='win11'] .start-btn:active:not(:disabled) {
+  padding: 0;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+html[data-theme='win10'] .pw-toggle:active:not(:disabled),
+html[data-theme='win11'] .pw-toggle:active:not(:disabled) {
+  padding: 0 8px;
+}
+
+/* Short screens: keep the sign-in clock from covering the avatar. */
+@media (max-height: 700px) {
+  .signin-win11 .signin-clock {
+    display: none;
+  }
+}
+
+@media (max-height: 560px) {
+  .signin-clock {
+    display: none;
+  }
+}
+
+/* iPhone home-screen mode: keep the modern taskbars clear of the home indicator. */
+html[data-theme='win10'] .taskbar {
+  height: calc(40px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html[data-theme='win11'] .taskbar {
+  height: calc(48px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.status-cell.is-offline {
+  color: #a00000;
+  font-weight: 700;
+}
+
+/* iPhone home-screen mode: everything that sits above the taskbar also clears the home indicator. */
+.modal-layer {
+  bottom: calc(34px + env(safe-area-inset-bottom, 0px));
+}
+
+.workspace {
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+}
+
+.start-menu {
+  bottom: calc(33px + env(safe-area-inset-bottom, 0px));
+}
+
+.balloon {
+  bottom: calc(42px + env(safe-area-inset-bottom, 0px));
+}
+
+html[data-theme='win10'] .modal-layer {
+  bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+}
+
+html[data-theme='win11'] .modal-layer {
+  bottom: calc(48px + env(safe-area-inset-bottom, 0px));
+}
+
+html[data-theme='win10'] .workspace,
+html[data-theme='win11'] .workspace {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+
+html[data-theme='win10'] .start-menu.start-win10,
+html[data-theme='win10'] .balloon {
+  bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+}
+
+html[data-theme='win11'] .start-menu.start-win11 {
+  bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+}
+
+html[data-theme='win11'] .balloon {
+  bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+}
+
+.workspace.is-center {
+  padding-bottom: 28px;
+}
+
+/* ---------------------------------------------------------------- "remember this device" checkbox */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+  margin: -1px;
+}
+
+.check98 {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 0 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.check98 input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+
+.check98-box {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 13px;
+  height: 13px;
+  background: #fff;
+  box-shadow: var(--sunken);
+}
+
+.check98 input:checked + .check98-box::after {
+  content: '';
+  width: 7px;
+  height: 3px;
+  margin-top: -2px;
+  border-left: 2px solid #000;
+  border-bottom: 2px solid #000;
+  transform: rotate(-48deg);
+}
+
+.check98 input:focus-visible ~ .check98-text {
+  outline: 1px dotted currentColor;
+  outline-offset: 1px;
+}
+
+/* Windows 10/11 sign-in screens: white text on the blurred wallpaper. */
+.signin .check98 {
+  margin-top: 2px;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+html[data-shell='win10'] .check98-box {
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+
+html[data-shell='win10'] .check98 input:checked + .check98-box {
+  background: #0078d7;
+  box-shadow: inset 0 0 0 2px #0078d7;
+}
+
+html[data-shell='win10'] .check98 input:checked + .check98-box::after,
+html[data-shell='win11'] .check98 input:checked + .check98-box::after {
+  width: 9px;
+  height: 4px;
+  border-color: #fff;
+}
+
+html[data-shell='win11'] .check98-box {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
+html[data-shell='win11'] .check98 input:checked + .check98-box {
+  background: #005fb8;
+  box-shadow: inset 0 0 0 1px #005fb8;
+}
+
+/* ---------------------------------------------------------------- transfer animation (GPU: transforms + opacity only) */
+
+.station-machine {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+}
+
+/* Coins flying down a lane. */
+.lane {
+  position: absolute;
+  top: 24px;
+  height: 24px;
+  pointer-events: none;
+}
+
+.lane-runner {
+  position: absolute;
+  inset: 0;
+  animation: lane-run var(--dur) linear var(--delay) infinite;
+  will-change: transform, opacity;
+}
+
+.lane-coin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  animation: lane-pop var(--dur) ease-in-out var(--delay) infinite;
+  /* a faint speed trail behind each coin */
+  filter: drop-shadow(-7px 0 2px rgba(255, 255, 255, 0.45)) drop-shadow(1px 2px 0 rgba(0, 0, 0, 0.22));
+}
+
+@keyframes lane-run {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  10%,
+  88% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(100%, 0, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes lane-pop {
+  0%,
+  100% {
+    transform: scale(0.6);
+  }
+  12%,
+  86% {
+    transform: scale(1);
+  }
+}
+
+/* The swap: a glow that breathes, sparks on a tilted orbit, a 3D coin flipping between the two coins. */
+.swap-glow {
+  position: absolute;
+  left: 50%;
+  top: 21px;
+  z-index: 0;
+  width: 100px;
+  height: 100px;
+  margin: -50px 0 0 -50px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--glow, rgba(255, 205, 70, 0.6)), transparent 62%);
+  animation: glow-breathe 1.2s ease-in-out infinite;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+html[data-shell='win10'] .swap-glow {
+  --glow: rgba(76, 194, 255, 0.55);
+}
+
+html[data-shell='win11'] .swap-glow {
+  --glow: rgba(63, 143, 240, 0.5);
+}
+
+@keyframes glow-breathe {
+  0%,
+  100% {
+    transform: scale(0.82);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.14);
+    opacity: 1;
+  }
+}
+
+.station.is-working .station-machine {
+  animation: machine-rumble 0.28s linear infinite;
+}
+
+@keyframes machine-rumble {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  25% {
+    transform: translate3d(-0.7px, 0.4px, 0);
+  }
+  50% {
+    transform: translate3d(0.6px, -0.4px, 0);
+  }
+  75% {
+    transform: translate3d(-0.4px, -0.5px, 0);
+  }
+}
+
+.spin3d {
+  position: absolute;
+  left: 50%;
+  top: 5px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  margin-left: -16px;
+  perspective: 240px;
+  pointer-events: none;
+}
+
+.spin3d-coin {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  animation: coin-flip 1.3s infinite;
+  will-change: transform;
+}
+
+/* Rest on each face for a beat, then whip round: you can read both coins, and it feels snappy. */
+@keyframes coin-flip {
+  0% {
+    transform: rotateY(0deg);
+    animation-timing-function: cubic-bezier(0.7, 0, 0.3, 1);
+  }
+  50% {
+    transform: rotateY(180deg);
+    animation-timing-function: cubic-bezier(0.7, 0, 0.3, 1);
+  }
+  100% {
+    transform: rotateY(360deg);
+  }
+}
+
+.spin3d-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.spin3d-face.is-front {
+  transform: translateZ(2px);
+}
+
+.spin3d-face.is-back {
+  transform: rotateY(180deg) translateZ(2px);
+}
+
+/* A light sweep across the metal as it turns. */
+.spin3d-face::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: 50%;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.8) 50%, transparent 62%) 150% 0 / 260% 100% no-repeat;
+  animation: coin-shine 1.3s ease-in-out infinite;
+}
+
+@keyframes coin-shine {
+  0%,
+  20% {
+    background-position: 150% 0;
+  }
+  50%,
+  70% {
+    background-position: -50% 0;
+  }
+  100% {
+    background-position: 150% 0;
+  }
+}
+
+/* The coin's rim: only visible edge-on. */
+.spin3d-edge {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  width: 4px;
+  height: 28px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: linear-gradient(#f3d27a, #b8860b 50%, #7a5508);
+  transform: rotateY(90deg);
+}
+
+.sparkles {
+  position: absolute;
+  left: 50%;
+  top: 23px;
+  width: 0;
+  height: 0;
+  transform: scaleY(0.42);
+  pointer-events: none;
+}
+
+.sparkles.is-back {
+  z-index: 0;
+}
+
+.sparkles.is-front {
+  z-index: 3;
+}
+
+.sparkles i {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 22%, #ffe27a 42%, rgba(255, 226, 122, 0) 70%);
+  will-change: transform, opacity;
+}
+
+html[data-shell='win10'] .sparkles i,
+html[data-shell='win11'] .sparkles i {
+  background: radial-gradient(circle, #fff 0 22%, #8fd0ff 42%, rgba(143, 208, 255, 0) 70%);
+}
+
+.sparkles.is-front i {
+  animation: orbit-front 1.8s linear infinite;
+}
+
+.sparkles.is-back i {
+  animation: orbit-back 1.8s linear infinite;
+}
+
+/* The front half of the ring (passing in front of the machine) is big and bright...
+   (the ring is squashed to look tilted; rotate(-a) + scale(x, x / 0.42) keep each spark round) */
+@keyframes orbit-front {
+  0% {
+    transform: rotate(0deg) translateX(36px) rotate(0deg) scale(0.75, 1.786);
+    opacity: 1;
+  }
+  25% {
+    transform: rotate(90deg) translateX(36px) rotate(-90deg) scale(1.25, 2.976);
+    opacity: 1;
+  }
+  49.9% {
+    transform: rotate(180deg) translateX(36px) rotate(-180deg) scale(0.75, 1.786);
+    opacity: 1;
+  }
+  50%,
+  100% {
+    transform: rotate(180deg) translateX(36px) rotate(-180deg) scale(0.75, 1.786);
+    opacity: 0;
+  }
+}
+
+/* ...the back half (behind it) is small and dim. */
+@keyframes orbit-back {
+  0%,
+  49.9% {
+    transform: rotate(180deg) translateX(36px) rotate(-180deg) scale(0.7, 1.667);
+    opacity: 0;
+  }
+  50% {
+    transform: rotate(180deg) translateX(36px) rotate(-180deg) scale(0.7, 1.667);
+    opacity: 0.7;
+  }
+  75% {
+    transform: rotate(270deg) translateX(36px) rotate(-270deg) scale(0.45, 1.071);
+    opacity: 0.35;
+  }
+  100% {
+    transform: rotate(360deg) translateX(36px) rotate(-360deg) scale(0.75, 1.786);
+    opacity: 0.7;
+  }
+}
+
+/* The coin going in: a quick flash. */
+.swap-flash {
+  position: absolute;
+  left: 50%;
+  top: 21px;
+  z-index: 4;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff, rgba(255, 255, 255, 0) 70%);
+  animation: swap-flash 0.55s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes swap-flash {
+  0% {
+    transform: scale(0.3);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+/* USDT popping out of the machine, and arriving at Coinbase: ring + dots. */
+.burst {
+  position: absolute;
+  left: 50%;
+  top: 21px;
+  z-index: 4;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.burst.is-center {
+  top: 32px;
+}
+
+.burst-ring {
+  position: absolute;
+  left: -24px;
+  top: -24px;
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--burst);
+  border-radius: 50%;
+  animation: burst-ring 0.6s ease-out forwards;
+}
+
+.burst i {
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--burst);
+  animation: burst-dot 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+
+@keyframes burst-ring {
+  0% {
+    transform: scale(0.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+@keyframes burst-dot {
+  0% {
+    transform: rotate(var(--a)) translateX(4px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--a)) translateX(40px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lane-runner,
+  .lane-coin,
+  .spin3d-coin,
+  .spin3d-face::after,
+  .sparkles i,
+  .swap-glow,
+  .swap-flash,
+  .burst-ring,
+  .burst i,
+  .station.is-working .station-machine {
+    animation: none !important;
+  }
+  .lane-runner {
+    transform: translate3d(50%, 0, 0);
+  }
+  .sparkles,
+  .burst,
+  .swap-flash {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- version tag */
+
+.version-tag {
+  font-size: 11px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.lock-version {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  z-index: 1;
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+.menu-version {
+  display: block;
+  margin: 0;
+  padding: 6px 14px 4px 8px;
+  color: var(--shade, #808080);
+}
+
+html[data-shell='win10'] .menu-version {
+  padding: 10px 12px 4px;
+  color: #aaa;
+}
+
+html[data-shell='win11'] .menu-version {
+  margin-left: 8px;
+  color: #6a6a6a;
+}
+
+html[data-shell='win11'] .s11-user {
+  flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------- phones and touch screens */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  overscroll-behavior-y: none; /* no pull-to-refresh or rubber-banding while a transfer is on screen */
+}
+
+button,
+.listbox li,
+.desk-icon,
+.station {
+  touch-action: manipulation; /* no double-tap-to-zoom delay */
+}
+
+/* Fingers, not mice: bigger things to hit, and 16px fields so iOS doesn't zoom in when one is focused. */
+@media (pointer: coarse) {
+  input,
+  .input98,
+  .s11-search {
+    font-size: 16px;
+  }
+
+  html[data-shell='classic'] .titlebar {
+    height: 30px;
+  }
+
+  html[data-shell='classic'] .tb-btn {
+    width: 28px;
+    height: 24px;
+  }
+
+  html[data-shell='classic'] .tb-btn svg {
+    transform: scale(1.3);
+  }
+
+  html[data-shell='classic'] .btn98 {
+    min-height: 34px;
+  }
+
+  html[data-shell='classic'] .input98 {
+    height: 34px;
+  }
+
+  html[data-shell='classic'] .start-btn,
+  html[data-shell='classic'] .task-item {
+    height: 36px;
+  }
+
+  html[data-shell='classic'] .taskbar {
+    height: calc(44px + env(safe-area-inset-bottom, 0px));
+  }
+
+  html[data-shell='classic'] .tray {
+    height: 36px;
+  }
+
+  html[data-shell='classic'] .tray-btn {
+    padding: 8px;
+  }
+
+  html[data-shell='classic'] .modal-layer {
+    bottom: calc(44px + env(safe-area-inset-bottom, 0px));
+  }
+
+  html[data-shell='classic'] .start-menu {
+    bottom: calc(43px + env(safe-area-inset-bottom, 0px));
+  }
+
+  html[data-shell='classic'] .balloon {
+    bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+  }
+
+  html[data-shell='classic'] .workspace {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .start-menu li button,
+  .listbox li,
+  .s10-item {
+    min-height: 40px;
+  }
+
+  .tab98 {
+    padding: 8px 16px;
+  }
+
+  .pw-toggle {
+    min-width: 56px;
+  }
+}
+
+/* Never taller than the screen; scroll inside the menu instead. */
+.start-menu {
+  max-width: calc(100vw - 4px);
+  max-height: calc(100dvh - 60px);
+  overflow-y: auto;
+}
+
+@media (max-width: 560px) {
+  /* Windows use the whole width of a phone. */
+  .workspace {
+    padding-left: max(8px, env(safe-area-inset-left, 0px));
+    padding-right: max(8px, env(safe-area-inset-right, 0px));
+  }
+
+  .win,
+  .win-dialog,
+  .win-msg,
+  .win-display {
+    width: 100%;
+  }
+
+  .modal-layer {
+    padding: 8px max(8px, env(safe-area-inset-right, 0px)) 8px max(8px, env(safe-area-inset-left, 0px));
+  }
+
+  .win-body {
+    padding: 10px 8px 8px;
+  }
+
+  .btn-row {
+    gap: 6px;
+  }
+
+  .btn-row .btn98 {
+    flex: 1 1 auto;
+  }
+
+  .balloon {
+    left: 8px;
+    right: 8px;
+    max-width: none;
+  }
+
+  .balloon::after {
+    right: 36px;
+  }
+
+  /* The Start menu spans the screen like a phone sheet. */
+  .start-menu,
+  html[data-theme='win10'] .start-menu.start-win10,
+  html[data-theme='win11'] .start-menu.start-win11 {
+    left: 2px;
+    right: 2px;
+    min-width: 0;
+    width: auto;
+  }
+
+  .address-box {
+    word-break: break-all;
+  }
+}
+
+@media (max-width: 360px) {
+  .win-body {
+    padding: 8px 6px 6px;
+  }
+
+  .station-label {
+    font-size: 11px;
+  }
+
+  .tray-clock {
+    font-size: 12px;
+  }
+
+  .task-label {
+    display: none; /* icons only on the narrowest phones */
+  }
+}
+
+/* A phone on its side: little height, so the dialogs scroll and the big monitor picture goes. */
+@media (max-height: 500px) {
+  .workspace {
+    padding-top: 8px;
+  }
+
+  .modal-layer {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .monitor {
+    display: none;
+  }
+}
+
+@media (max-height: 640px) and (max-width: 560px) {
+  .monitor {
+    display: none;
+  }
+}

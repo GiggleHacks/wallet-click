@@ -1,0 +1,366 @@
+import { AnimatePresence } from 'motion/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api } from './api';
+import { AppMark, CoinIcon, DisplayIcon, PlayIcon, WarnIcon } from './components/art';
+import { DisplayProperties } from './components/DisplayProperties';
+import { Taskbar, type Balloon, type TaskItem } from './components/Taskbar';
+import { TransferDialog } from './components/TransferDialog';
+import { VersionTag } from './components/VersionTag';
+import { DragBounds, ModalLayer, Window } from './components/Win98';
+import { DEMO_ID, useDemo } from './lib/demo';
+import { trimAmount, usdt } from './lib/format';
+import { applyThemeAttr, saveTheme, savedTheme, ThemeContext, type Theme } from './lib/themes';
+import { savedWallpaper, saveWallpaper, wallpaperById, type Wallpaper } from './lib/wallpapers';
+import { setSoundTheme, sfx } from './lib/sound';
+import { Home } from './pages/Home';
+import { Lock } from './pages/Lock';
+import { Receive } from './pages/Receive';
+import { APP_VERSION } from './version';
+import type { Coin, Meta, Order, Stage, Status } from './types';
+
+const POLL_MS = 2000;
+
+/** Flashes the tab title until you come back to it (like a Win98 taskbar button asking for attention). */
+function flashTitle(text: string): void {
+  if (document.hasFocus()) return;
+  let on = false;
+  const iv = setInterval(() => {
+    on = !on;
+    document.title = on ? `💰 ${text}` : 'Wallet Click';
+  }, 900);
+  const stop = () => {
+    clearInterval(iv);
+    document.title = 'Wallet Click';
+    window.removeEventListener('focus', stop);
+  };
+  window.addEventListener('focus', stop);
+}
+const IDLE: Stage[] = ['waiting', 'expired'];
+
+function MessageBox({ title, text, onOk }: { title: string; text: string; onOk(): void }) {
+  return (
+    <ModalLayer>
+      <Window title={title} onClose={onOk} className="win-msg" role="alertdialog">
+        <div className="msg">
+          <WarnIcon size={32} />
+          <p>{text}</p>
+        </div>
+        <div className="btn-row is-center">
+          <button type="button" className="btn98 is-default" onClick={onOk} autoFocus>
+            OK
+          </button>
+        </div>
+      </Window>
+    </ModalLayer>
+  );
+}
+
+type View = { name: 'home' } | { name: 'receive'; id: string };
+
+function DesktopIcons({ onDemo, onDisplay }: { onDemo(): void; onDisplay(): void }) {
+  return (
+    <nav className="desk-icons" aria-label="Desktop">
+      <button type="button" className="desk-icon" onClick={onDemo}>
+        <PlayIcon size={32} />
+        <span>How it works</span>
+      </button>
+      <button type="button" className="desk-icon" onClick={onDisplay}>
+        <DisplayIcon size={32} />
+        <span>Themes</span>
+      </button>
+    </nav>
+  );
+}
+
+interface MainProps {
+  onLocked(): void;
+  theme: Theme;
+  wallpaper: Wallpaper;
+  onLook(theme: Theme, wallpaper: Wallpaper): void;
+}
+
+function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
+  const [meta, setMeta] = useState<Meta | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [view, setView] = useState<View>({ name: 'home' });
+  const [dialog, setDialog] = useState<{ id: string; auto: boolean } | null>(null);
+  const [creating, setCreating] = useState<Coin | null>(null);
+  const [balloon, setBalloon] = useState<Balloon | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [display, setDisplay] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const demoCoin = useRef<Coin>('ETH');
+
+  const stages = useRef(new Map<string, Stage>());
+  const loaded = useRef(false);
+  const dialogRef = useRef(dialog);
+  dialogRef.current = dialog;
+
+  useEffect(() => {
+    api
+      .meta()
+      .then((m) => {
+        setMeta(m);
+        // An old copy is still open (an installed home-screen app keeps its files): offer a reload.
+        if (m.version && APP_VERSION !== 'dev' && m.version !== APP_VERSION) {
+          setBalloon({ id: Date.now(), title: 'Update available', text: `Wallet Click v${m.version} is ready. Tap to reload.`, onClick: () => location.reload() });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const notify = (title: string, text: string, onClick?: () => void) => setBalloon({ id: Date.now(), title, text, onClick });
+
+  /** Polls every order and reacts to stage changes, whichever screen is open. */
+  const refresh = useCallback(async () => {
+    const { orders: list } = await api.orders();
+    for (const o of list) {
+      const prev = stages.current.get(o.id);
+      stages.current.set(o.id, o.stage);
+      if (!loaded.current || prev === o.stage) continue;
+      const showing = dialogRef.current?.id === o.id;
+      const open = () => {
+        setView({ name: 'receive', id: o.id });
+        setDialog({ id: o.id, auto: false });
+      };
+      if (IDLE.includes(prev ?? 'waiting') && !IDLE.includes(o.stage)) {
+        // A payment landed: pop the transfer window and play the whole flow (it rings the bell).
+        // A real payment always wins over the "How it works" demo.
+        demoRef.current?.stop();
+        flashTitle(`Payment detected: ${trimAmount(o.received)} ${o.coin}`);
+        if (!showing) {
+          setView({ name: 'receive', id: o.id });
+          setDialog({ id: o.id, auto: true });
+        }
+      } else if (!showing && o.stage === 'done') {
+        sfx.tada();
+        notify('USDT sent to Coinbase', o.usdt ? `${usdt(o.usdt)} USDT from ${trimAmount(o.received)} ${o.coin}.` : `${o.coinName} swap finished.`, open);
+      } else if (!showing && o.stage === 'attention') {
+        sfx.error();
+        const flags = o.emergency?.flags ?? [];
+        if (flags.includes('LIMIT') && flags.includes('LESS') && !flags.includes('MORE') && !o.autoRefundError) {
+          notify('Payment below the minimum', `${trimAmount(o.received)} ${o.coin} can't be swapped. Sending it back to the sender.`, open);
+        } else notify('A transfer needs you', `${o.coinName} payment ${o.id}: click to see why.`, open);
+      } else if (!showing && o.stage === 'refunded') {
+        notify(
+          o.refundTx ? 'Payment sent back' : 'Refund requested',
+          `${trimAmount(o.received)} ${o.coin} is going back to ${o.refundSource === 'manual' ? 'the address you entered' : 'the sender'}.`,
+          open,
+        );
+      }
+    }
+    loaded.current = true;
+    setOrders(list);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const loop = async () => {
+      try {
+        await refresh();
+        setOffline(false);
+      } catch {
+        setOffline(true); // shown in the status bar; we keep trying
+      }
+      if (alive) timer = setTimeout(loop, POLL_MS);
+    };
+    void loop();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [refresh]);
+
+  const realDialogOpen = () => Boolean(dialogRef.current && dialogRef.current.id !== DEMO_ID);
+  const demo = useDemo(meta?.payout.address ?? '', {
+    // Never cover a real transfer window with the demo.
+    onOpen: (o) => !realDialogOpen() && setView({ name: 'receive', id: o.id }),
+    onDetected: (o) => !realDialogOpen() && setDialog({ id: o.id, auto: true }),
+  });
+  const demoRef = useRef(demo);
+  demoRef.current = demo;
+  const playDemo = (coin?: Coin) => {
+    const c = coin ?? demoCoin.current;
+    demoCoin.current = c === 'ETH' ? 'BTC' : 'ETH'; // alternate between runs
+    setDialog(null);
+    setView({ name: 'home' });
+    demo.start(c);
+  };
+  const stopDemo = demo.stop;
+
+  const create = async (coin: Coin) => {
+    if (creating) return;
+    stopDemo();
+    setCreating(coin);
+    document.body.classList.add('busy');
+    try {
+      const o = await api.createOrder(coin);
+      stages.current.set(o.id, o.stage);
+      setOrders((prev) => [o, ...prev.filter((x) => x.id !== o.id)]);
+      setDialog(null);
+      setView({ name: 'receive', id: o.id });
+      sfx.open();
+    } catch (e) {
+      sfx.error();
+      setMessage(e instanceof Error ? e.message : "Couldn't get an address");
+    } finally {
+      setCreating(null);
+      document.body.classList.remove('busy');
+    }
+  };
+
+  const updateOrder = (o: Order) => {
+    stages.current.set(o.id, o.stage);
+    setOrders((prev) => prev.map((x) => (x.id === o.id ? o : x)));
+  };
+
+  const openOrder = (o: Order) => {
+    sfx.open();
+    setView({ name: 'receive', id: o.id });
+    setDialog(IDLE.includes(o.stage) ? null : { id: o.id, auto: false });
+  };
+
+  const lock = () => {
+    api.logout().finally(onLocked);
+  };
+
+  const findOrder = (id: string) => (id === DEMO_ID ? (demo.order ?? undefined) : orders.find((o) => o.id === id));
+  const current = view.name === 'receive' ? findOrder(view.id) : undefined;
+  const dialogOrder = dialog ? findOrder(dialog.id) : undefined;
+  const isDemo = current?.id === DEMO_ID;
+  const closeDialog = useCallback(() => setDialog(null), []);
+  const goHome = () => {
+    setDialog(null);
+    setView({ name: 'home' });
+    if (demo.order) stopDemo();
+  };
+  const dismissBalloon = useCallback(() => setBalloon(null), []);
+
+  const items: TaskItem[] = [
+    { key: 'home', label: 'Wallet Click', icon: <AppMark />, active: view.name === 'home' && !dialogOrder, onClick: goHome },
+  ];
+  if (current) items.push({ key: 'recv', label: `Receive ${current.coinName}`, icon: <CoinIcon coin={current.coin} size={16} />, active: !dialogOrder, onClick: () => setDialog(null) });
+  if (dialogOrder) items.push({ key: 'dlg', label: 'Swapping…', icon: <AppMark />, active: true, onClick: () => {} });
+
+  return (
+    <>
+      <main className="workspace">
+        <AnimatePresence mode="wait">
+          {current ? (
+            <Receive
+              key={`r-${current.id}`}
+              order={current}
+              demo={isDemo}
+              offline={offline}
+              creating={creating !== null}
+              onNew={() => (isDemo ? playDemo(current.coin) : void create(current.coin))}
+              onBack={goHome}
+              onShowProgress={() => setDialog({ id: current.id, auto: false })}
+            />
+          ) : (
+            <Home key="home" meta={meta} orders={orders} creating={creating} offline={offline} pressing={demo.pressing} onCreate={(c) => void create(c)} onOpen={openOrder} onDemo={() => playDemo()} />
+          )}
+        </AnimatePresence>
+      </main>
+      <DesktopIcons onDemo={() => playDemo()} onDisplay={() => setDisplay(true)} />
+      <AnimatePresence>
+        {dialogOrder && <TransferDialog key={dialogOrder.id} order={dialogOrder} autoplay={dialog?.auto} onClose={closeDialog} onUpdate={updateOrder} />}
+      </AnimatePresence>
+      <AnimatePresence>{display && <DisplayProperties theme={theme} wallpaper={wallpaper} onApply={onLook} onClose={() => setDisplay(false)} />}</AnimatePresence>
+      {message && <MessageBox title="Wallet Click" text={message} onOk={() => setMessage(null)} />}
+      <Taskbar
+        items={items}
+        balloon={balloon}
+        onDismissBalloon={dismissBalloon}
+        onCreate={(c) => void create(c)}
+        onDemo={() => playDemo()}
+        onDisplay={() => setDisplay(true)}
+        onLock={lock}
+      />
+    </>
+  );
+}
+
+/** Windows 95's start-up screen: the sky, the name and the sliding colour bar. Click to skip. */
+function Splash95({ onDone }: { onDone(): void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 2200);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <div className="splash95" onClick={onDone} role="presentation" style={{ background: wallpaperById('clouds')?.css }}>
+      <div className="splash95-logo">
+        <AppMark size={64} />
+        <span>
+          Wallet <b>Click</b>
+          <sup>95</sup>
+        </span>
+      </div>
+      <div className="splash95-bar" />
+    </div>
+  );
+}
+
+export function App() {
+  const desktop = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<Status | null>(null);
+  const [theme, setTheme] = useState(savedTheme);
+  const [wallpaper, setWallpaper] = useState(() => savedWallpaper(savedTheme().wallpaper));
+  const [splash, setSplash] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    applyThemeAttr(theme);
+    setSoundTheme(theme.id);
+  }, [theme]);
+
+  const changeLook = (t: Theme, w: Wallpaper) => {
+    const newTheme = t.id !== theme.id;
+    setTheme(t);
+    saveTheme(t.id);
+    setWallpaper(w);
+    saveWallpaper(w.id);
+    if (newTheme) {
+      setSoundTheme(t.id);
+      sfx.unlock(); // each theme announces itself with its own start-up sound
+    }
+  };
+  const endSplash = useCallback(() => setSplash(false), []);
+
+  useEffect(() => {
+    api
+      .status()
+      .then(setStatus)
+      .catch((e: Error) => setError(e.message));
+    const onLocked = () => setStatus((s) => (s ? { ...s, authed: false } : s));
+    window.addEventListener('wc:locked', onLocked);
+    return () => window.removeEventListener('wc:locked', onLocked);
+  }, []);
+
+  return (
+    <ThemeContext.Provider value={theme}>
+      <div ref={desktop} className="desktop" data-wallpaper={wallpaper.id} style={{ background: wallpaper.css }}>
+        <DragBounds.Provider value={desktop}>
+          {!status ? (
+            error && <MessageBox title="Wallet Click" text={error} onOk={() => location.reload()} />
+          ) : !status.authed ? (
+            <main className="workspace is-center">
+              <Lock
+                status={status}
+                onUnlocked={() => {
+                  setStatus({ ...status, authed: true });
+                  if (theme.id === 'win95') setSplash(true);
+                }}
+              />
+              <VersionTag className="lock-version" />
+            </main>
+          ) : (
+            <Main onLocked={() => setStatus({ ...status, authed: false })} theme={theme} wallpaper={wallpaper} onLook={changeLook} />
+          )}
+          {splash && <Splash95 onDone={endSplash} />}
+        </DragBounds.Provider>
+      </div>
+    </ThemeContext.Provider>
+  );
+}

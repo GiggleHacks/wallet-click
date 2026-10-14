@@ -1,0 +1,9 @@
+node_modules/
+dist/
+data/
+.env
+*.log
+.smoke-data/
+.smoke.env
+archive/
+.claude/
