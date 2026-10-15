@@ -113,6 +113,9 @@ export interface Transfer {
   releaseAt: number | null;
   unlockedAt: number | null;
   xmr: string | null;
+  /** The XMR has reached the vault (it then unlocks over 10 blocks). */
+  xmrArrived?: boolean;
+  xmrConfirmations?: number;
   steps: TransferStep[];
   attention: string | null;
   error: string | null;

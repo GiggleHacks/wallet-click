@@ -7,11 +7,24 @@ import { APP_VERSION } from '../web/src/version';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const sounds = vi.hoisted(() => ({ ding: 0, swap: 0, send: 0, tada: 0, error: 0 }));
+const sounds = vi.hoisted(() => ({ ding: 0, swap: 0, send: 0, tada: 0, error: 0, vaultLock: 0, shuffle: 0, vaultOpen: 0 }));
 vi.mock('../web/src/lib/sound', () => {
   const count = (k: keyof typeof sounds) => () => void sounds[k]++;
   return {
-    sfx: { tap() {}, open() {}, copy() {}, unlock() {}, ding: count('ding'), swap: count('swap'), send: count('send'), tada: count('tada'), error: count('error') },
+    sfx: {
+      tap() {},
+      open() {},
+      copy() {},
+      unlock() {},
+      ding: count('ding'),
+      swap: count('swap'),
+      send: count('send'),
+      tada: count('tada'),
+      error: count('error'),
+      vaultLock: count('vaultLock'),
+      shuffle: count('shuffle'),
+      vaultOpen: count('vaultOpen'),
+    },
     audioState: () => 'ready',
     primeAudio() {},
     setSoundTheme() {},
@@ -263,21 +276,27 @@ describe('Wallet Click UI', () => {
         ],
       }),
     ];
-    await waitFor(() => text().includes('Holding 0.2231 XMR'), 'journey window', 8000);
+    // It plays every moment from the payment on, then settles on the wait.
+    await waitFor(() => text().includes('Holding 0.2231 XMR'), 'journey window', 25_000);
     expect(text()).toMatch(/for another 1[01] h/);
     expect(button('Release now')).toBeTruthy();
     expect(button('Change wait…')).toBeTruthy();
     serverTransfers = [];
-  });
+  }, 45_000);
 
   it('plays the "How it works" demo end to end without touching the server', async () => {
     status = { ...status, authed: true };
     serverOrders = [];
-    Object.assign(sounds, { ding: 0, swap: 0, send: 0, tada: 0, error: 0 });
+    Object.assign(sounds, { ding: 0, swap: 0, send: 0, tada: 0, error: 0, vaultLock: 0, shuffle: 0, vaultOpen: 0 });
     await mount();
     await waitFor(() => !!button('How it works'), 'demo button');
     const before = calls.filter((c) => c.startsWith('POST')).length;
     await click(button('How it works'), 'How it works');
+    // A picker: one button per flow.
+    await waitFor(() => text().includes('Pick a flow to watch'), 'demo picker');
+    const pick = (label: string) => [...host.querySelectorAll('.win-picker button')].find((b) => b.textContent?.includes(label));
+    expect(pick('Bitcoin') && pick('Monero') && pick('Privacy Enhanced')).toBeTruthy();
+    await click(pick('Ethereum'), 'Ethereum');
     await waitFor(() => text().includes('Receive Ethereum (demo)'), 'demo receive window');
     expect(text()).toContain('no money moves');
     expect(text()).not.toMatch(/0x[0-9a-fA-F]{40}(?!.*7E57)/); // no real-looking deposit address
@@ -288,6 +307,55 @@ describe('Wallet Click UI', () => {
     expect(sounds).toMatchObject({ ding: 1, swap: 1, send: 1, tada: 1, error: 0 });
     expect(calls.filter((c) => c.startsWith('POST')).length).toBe(before); // nothing was created
   }, 45_000);
+
+  it('previews a payment to a permanent address: it lands, is forwarded, swapped and sent', async () => {
+    status = { ...status, authed: true };
+    serverOrders = [];
+    serverTransfers = [];
+    Object.assign(sounds, { ding: 0, swap: 0, send: 0, tada: 0, error: 0, vaultLock: 0, shuffle: 0, vaultOpen: 0 });
+    await mount();
+    await waitFor(() => !!button('How it works'), 'demo button');
+    const before = calls.filter((c) => c.startsWith('POST')).length;
+    await click(button('How it works'), 'How it works');
+    await waitFor(() => text().includes('When you send to one of your permanent addresses'), 'demo picker');
+    await click([...host.querySelectorAll('.win-picker button')].find((b) => b.textContent?.includes('You send BTC from your phone')), 'permanent: straight to USDT');
+    // No address window: you send from your phone, and the transfer window opens when it lands.
+    await waitFor(() => text().includes('Payment at "Phone → Coinbase"'), 'payment at the permanent address', 10_000);
+    expect(host.querySelector('.journey-strip .stack-badge')).toBeTruthy();
+    expect(host.querySelector('.journey-strip.is-five')).toBeNull();
+    await waitFor(() => text().includes('forwarding it to a fresh FixedFloat order'), 'forward', 10_000);
+    await waitFor(() => text().includes('Done!'), 'route demo done', 20_000);
+    expect(text()).toContain('124.03 USDT');
+    expect(sounds).toMatchObject({ ding: 1, swap: 1, send: 1, tada: 1, error: 0, vaultLock: 0 });
+    expect(calls.filter((c) => c.startsWith('POST')).length).toBe(before);
+  }, 60_000);
+
+  it('plays the Privacy Enhanced demo: swap to Monero, the vault, a time-lapse wait, swap to USDT', async () => {
+    status = { ...status, authed: true };
+    serverOrders = [];
+    serverTransfers = [];
+    Object.assign(sounds, { ding: 0, swap: 0, send: 0, tada: 0, error: 0, vaultLock: 0, shuffle: 0, vaultOpen: 0 });
+    await mount();
+    await waitFor(() => !!button('How it works'), 'demo button');
+    const before = calls.filter((c) => c.startsWith('POST')).length;
+    await click(button('How it works'), 'How it works');
+    await waitFor(() => text().includes('Pick a flow to watch'), 'demo picker');
+    await click([...host.querySelectorAll('.win-picker button')].find((b) => b.textContent?.includes('Privacy Enhanced')), 'Privacy Enhanced');
+    await waitFor(() => text().includes('Receive Bitcoin (demo)'), 'demo receive window');
+    expect(text()).toContain('Becomes Monero first');
+    await waitFor(() => text().includes('Payment received'), 'privacy demo payment', 10_000);
+    expect(host.querySelector('.journey-strip.is-five')).toBeTruthy();
+    await waitFor(() => !!host.querySelector('.vault3d.is-closed'), 'vault door shuts', 20_000);
+    await waitFor(() => text().includes('Moving it to a fresh spot'), 'churn', 10_000);
+    expect(host.querySelector('.churn-hop')).toBeTruthy();
+    await waitFor(() => text().includes('Time-lapse'), 'time-lapse wait', 10_000);
+    expect(text()).toMatch(/Holding 0\.2231 XMR for another/);
+    expect(host.querySelector('.vault-ring.is-wait')).toBeTruthy();
+    await waitFor(() => text().includes('Done!'), 'privacy demo done', 30_000);
+    expect(text()).toContain('118.42 USDT');
+    expect(sounds).toMatchObject({ ding: 1, swap: 2, send: 2, vaultLock: 1, shuffle: 1, vaultOpen: 1, tada: 1, error: 0 });
+    expect(calls.filter((c) => c.startsWith('POST')).length).toBe(before); // nothing was created
+  }, 90_000);
 
   const option = (label: string) => [...host.querySelectorAll('[role="option"]')].find((o) => o.textContent?.includes(label));
   const desktopIcon = (label: string) => [...host.querySelectorAll('.desk-icon')].find((b) => b.textContent?.includes(label));

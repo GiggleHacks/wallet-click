@@ -70,7 +70,8 @@ export interface TransferRecord {
   forwardInputs?: string[];
   forward?: Send;
   leg1?: string;
-  vault?: { index: number; address: string; amount: string | null; confirmations: number; unlockedAt: number | null };
+  /** seenAt: when the XMR first showed up in the wallet. */
+  vault?: { index: number; address: string; amount: string | null; confirmations: number; unlockedAt: number | null; seenAt?: number | null };
   churn?: Send & { index: number; address: string };
   releaseAt: number | null;
   leg2?: string;
@@ -378,9 +379,10 @@ async function xmrIn(t: TransferRecord, now: number): Promise<void> {
   const rows = await xmr.incoming(v.index);
   const fresh = rows.filter((r) => r.pool || r.confirmations < xmr.XMR_LOCK_BLOCKS);
   const confirmations = fresh.length ? Math.min(...fresh.map((r) => r.confirmations)) : xmr.XMR_LOCK_BLOCKS;
-  if (v.amount !== xmr.formatXmr(b.total) || v.confirmations !== confirmations) markDirty();
+  if (v.amount !== xmr.formatXmr(b.total) || v.confirmations !== confirmations || !v.seenAt) markDirty();
   v.amount = xmr.formatXmr(b.total);
   v.confirmations = confirmations;
+  v.seenAt ??= now;
   if (b.unlocked > 0n && b.unlocked >= b.total) {
     v.unlockedAt = now;
     t.releaseAt = now + delayMs(t) + t.jitterMs;
@@ -867,6 +869,9 @@ export function transferView(t: TransferRecord, now = Date.now()) {
     releaseAt: t.releaseAt,
     unlockedAt: t.vault?.unlockedAt ?? null,
     xmr: t.vault?.amount ?? null,
+    /** The XMR has reached our vault subaddress (it then unlocks over 10 blocks). */
+    xmrArrived: Boolean(t.vault?.seenAt) || ['churn', 'wait', 'open2', 'send2', 'swap2', 'done'].includes(t.state),
+    xmrConfirmations: t.vault?.confirmations ?? 0,
     steps: stepsOf(t, leg1, leg2, route, now),
     attention: t.attention,
     error: t.error,

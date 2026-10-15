@@ -63,25 +63,23 @@ export function Flyers({ from, to, children, count = 4, duration = 1.6 }: { from
   );
 }
 
-/** The coin spinning in 3D inside the machine: the paid coin on one face, USDT on the other, a metal edge between. */
-function SpinCoin({ coin }: { coin: Order['coin'] }) {
+/** A coin spinning in 3D inside a swap machine: what goes in on one face, what comes out on the other, a metal edge between. */
+export function SpinFaces({ front, back }: { front: ReactNode; back: ReactNode }) {
   return (
     <div className="spin3d">
       <div className="spin3d-coin">
-        <span className="spin3d-face is-front">
-          <CoinIcon coin={coin} size={30} />
-        </span>
+        <span className="spin3d-face is-front">{front}</span>
         <span className="spin3d-edge" />
-        <span className="spin3d-face is-back">
-          <UsdtIcon size={30} />
-        </span>
+        <span className="spin3d-face is-back">{back}</span>
       </div>
     </div>
   );
 }
 
+const SpinCoin = ({ coin }: { coin: Order['coin'] }) => <SpinFaces front={<CoinIcon coin={coin} size={30} />} back={<UsdtIcon size={30} />} />;
+
 /** Sparks orbiting the machine on a tilted ring: a back half (behind the machine) and a front half. */
-function Sparkles({ side, count = 6 }: { side: 'back' | 'front'; count?: number }) {
+export function Sparkles({ side, count = 6 }: { side: 'back' | 'front'; count?: number }) {
   return (
     <div className={`sparkles is-${side}`}>
       {Array.from({ length: count }, (_, i) => (

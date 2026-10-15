@@ -339,3 +339,262 @@ html[data-theme='win11'] .extra-btn small {
     align-items: flex-start;
   }
 }
+
+/* ---------------------------------------------------------------- the Monero vault (Privacy Enhanced) */
+
+.vault3d {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 44px;
+  perspective: 150px;
+}
+
+.vault-body {
+  position: relative;
+  z-index: 1;
+  display: block;
+}
+
+/* The pile of Monero inside: only while there's something in the vault. */
+.vault-inside {
+  opacity: 0;
+  transition: opacity 0.35s ease 0.5s;
+}
+
+.vault3d.has-coins .vault-inside {
+  opacity: 1;
+}
+
+/* The door hangs on its left edge: it swings wide open, and slams shut (then the whole vault thuds). */
+.vault-door {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  z-index: 2;
+  width: 36px;
+  height: 30px;
+  transform-origin: 0 50%;
+  transform: rotateY(-112deg);
+  transition: transform 0.8s cubic-bezier(0.2, 0.9, 0.3, 1.25);
+  will-change: transform;
+}
+
+.vault-door svg {
+  display: block;
+}
+
+.vault3d.is-closed .vault-door {
+  transform: rotateY(0deg);
+  transition: transform 0.42s cubic-bezier(0.55, 0, 1, 0.45);
+}
+
+.vault3d.is-closed .vault-body {
+  animation: vault-thud 0.32s ease-out 0.4s;
+}
+
+@keyframes vault-thud {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  30% {
+    transform: translate3d(0, 1.5px, 0) scale(1.02, 0.97);
+  }
+  60% {
+    transform: translate3d(0, -0.5px, 0);
+  }
+}
+
+.vault-dial {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.vault3d.is-turning .vault-dial {
+  animation: dial-turn 1.6s ease-in-out infinite;
+}
+
+@keyframes dial-turn {
+  0% {
+    transform: rotate(0deg);
+  }
+  35% {
+    transform: rotate(210deg);
+  }
+  65% {
+    transform: rotate(90deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* The ring around the vault: it fills as the Monero unlocks, and drains as the wait runs out. */
+.vault-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 0;
+  margin: -32px 0 0 -32px;
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+
+.vault-ring-track {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.14);
+  stroke-width: 3.5;
+}
+
+.vault-ring-fill {
+  fill: none;
+  stroke: #ff6600;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.35s linear;
+}
+
+.vault-ring.is-unlock .vault-ring-fill {
+  stroke: var(--navy);
+}
+
+.vault-lock {
+  position: absolute;
+  right: -7px;
+  top: -6px;
+  z-index: 3;
+  animation: lock-pop 0.35s cubic-bezier(0.3, 1.8, 0.5, 1) 0.45s both;
+}
+
+@keyframes lock-pop {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* The churn: two coins swapping places above the vault. */
+.churn-hop {
+  position: absolute;
+  left: 50%;
+  top: -14px;
+  z-index: 3;
+  width: 40px;
+  height: 18px;
+  margin-left: -20px;
+  pointer-events: none;
+}
+
+.churn-hop i {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  display: grid;
+  animation: hop-right 1.1s ease-in-out infinite;
+  will-change: transform;
+}
+
+.churn-hop i + i {
+  left: 26px;
+  animation-name: hop-left;
+}
+
+@keyframes hop-right {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(13px, -11px, 0) rotate(180deg);
+  }
+  100% {
+    transform: translate3d(26px, 0, 0) rotate(360deg);
+  }
+}
+
+@keyframes hop-left {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-13px, 5px, 0) scale(0.85);
+  }
+  100% {
+    transform: translate3d(-26px, 0, 0);
+  }
+}
+
+.journey-strip.is-five .station-machine svg {
+  max-width: 48px;
+}
+
+.timelapse {
+  font-weight: 700;
+  color: var(--navy);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vault-door,
+  .vault3d.is-closed .vault-door {
+    transition: none;
+  }
+  .vault3d.is-closed .vault-body,
+  .vault3d.is-turning .vault-dial,
+  .churn-hop i,
+  .vault-lock {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- "How it works" picker */
+
+.win-picker {
+  width: min(460px, 100%);
+}
+
+.picker-intro {
+  margin: 0 0 10px;
+}
+
+.pick-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pick-btn {
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 64px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.pick-btn b {
+  display: block;
+  font-size: 14px;
+}
+
+.pick-btn small {
+  display: block;
+  font-size: 11px;
+  color: #333;
+}
+
+.pick-btn .stack-badge {
+  right: -8px;
+  bottom: -3px;
+}
+
+html[data-theme='win10'] .pick-btn small,
+html[data-theme='win11'] .pick-btn small {
+  color: #555;
+}
+
+@media (max-width: 560px) {
+  .pick-grid {
+    grid-template-columns: 1fr;
+  }
+}

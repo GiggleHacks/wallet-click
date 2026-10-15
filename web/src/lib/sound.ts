@@ -230,6 +230,25 @@ export const sfx = {
   tada: () => voice.tada(),
   error: () => voice.error(),
   unlock: () => voice.unlock(),
+  /** Privacy Enhanced: the Monero is in, the vault door swings shut (a heavy thud, then the latch). */
+  vaultLock: () => {
+    tone(110, 0, 0.42, { type: 'triangle', gain: 0.18, slideTo: 52 });
+    whoosh(0, 0.2, 320, 110, 0.07);
+    tone(1750, 0.22, 0.05, { type: 'square', gain: 0.03, lowpass: 3000 });
+    tone(1320, 0.29, 0.06, { type: 'square', gain: 0.03, lowpass: 3000 });
+  },
+  /** The coins move to a fresh spot inside the vault (the churn): a quick jingle. */
+  shuffle: () =>
+    [0, 0.08, 0.19, 0.26, 0.36].forEach((t, i) => {
+      tone(2400 + i * 260, t, 0.11, { gain: 0.035 });
+      tone(4900 + i * 310, t, 0.05, { gain: 0.01 });
+    }),
+  /** The wait is over: the dial clicks round and the door swings open. */
+  vaultOpen: () => {
+    [0, 0.07, 0.14].forEach((t) => tone(1600, t, 0.03, { type: 'square', gain: 0.025, lowpass: 2600 }));
+    whoosh(0.22, 0.42, 160, 900, 0.06);
+    tone(196, 0.24, 0.5, { type: 'triangle', gain: 0.08, slideTo: 392 });
+  },
 };
 
 /** Browsers only allow audio after a user gesture; warm the context on the first tap. */
