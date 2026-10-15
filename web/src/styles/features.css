@@ -1006,3 +1006,11 @@ html[data-theme='win11'] .log-list {
 html[data-mode='dark'][data-theme='win11'] .log-list {
   background: #1d1d1d;
 }
+
+/* The version, always on show next to the clock. */
+.tray-version {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+  white-space: nowrap;
+}

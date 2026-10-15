@@ -3,7 +3,8 @@ import { api } from '../api';
 import { BookIcon, CoinbaseIcon, UsdtIcon } from '../components/art';
 import { PasswordField } from '../components/PasswordField';
 import { ModalLayer, Window } from '../components/Win98';
-import { shortAddr } from '../lib/format';
+import { MASK_ADDR, shortAddr } from '../lib/format';
+import { usePref } from '../lib/prefs';
 import { sfx } from '../lib/sound';
 import type { Destination } from '../types';
 
@@ -15,6 +16,7 @@ interface Props {
 
 /** Saved USDT payout addresses. Adding and removing ask for the password again. */
 export function AddressBook({ destinations, onChange, onClose }: Props) {
+  const hideFigures = usePref('hideFigures');
   const [selected, setSelected] = useState(destinations[0]?.id ?? 'coinbase');
   const [mode, setMode] = useState<'list' | 'add' | 'remove'>('list');
   const [label, setLabel] = useState('');
@@ -88,7 +90,7 @@ export function AddressBook({ destinations, onChange, onClose }: Props) {
               {current.label}
               <span className="line-sub"> · {current.builtIn ? 'built in' : `added ${new Date(current.createdAt).toLocaleDateString()}`}</span>
             </span>
-            <div className="address-box">{current.address}</div>
+            <div className="address-box">{hideFigures ? MASK_ADDR : current.address}</div>
           </div>
         )}
 

@@ -1,5 +1,7 @@
-type PrefKey = 'sound' | 'remember' | 'hideAddr';
-const DEFAULTS: Record<PrefKey, boolean> = { sound: true, remember: true, hideAddr: false };
+import { useSyncExternalStore } from 'react';
+
+type PrefKey = 'sound' | 'remember' | 'hideFigures';
+const DEFAULTS: Record<PrefKey, boolean> = { sound: true, remember: true, hideFigures: false };
 
 export function getPref(key: PrefKey): boolean {
   try {
@@ -18,6 +20,14 @@ export function setPref(key: PrefKey, value: boolean): void {
   }
   window.dispatchEvent(new Event('wc:prefs'));
 }
+
+const subscribe = (cb: () => void) => {
+  window.addEventListener('wc:prefs', cb);
+  return () => window.removeEventListener('wc:prefs', cb);
+};
+
+/** A preference that re-renders the component when it changes. */
+export const usePref = (key: PrefKey) => useSyncExternalStore(subscribe, () => getPref(key));
 
 /** A remembered choice (e.g. the destination picked on the home window). */
 export function getChoice(key: string): string | null {

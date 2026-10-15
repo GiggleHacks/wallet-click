@@ -311,7 +311,10 @@ export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, on
           >
             {SpeakerIcon(16, audio !== 'ready')}
           </button>
-          <span className="tray-clock" title={`Wallet Click v${APP_VERSION}`}>
+          <span className="tray-version" title={`Wallet Click version ${APP_VERSION}`}>
+            v{APP_VERSION}
+          </span>
+          <span className="tray-clock">
             <span>{time}</span>
             <span className="tray-date">{date}</span>
           </span>

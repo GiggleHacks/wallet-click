@@ -219,19 +219,25 @@ describe('Wallet Click UI', () => {
     expect(text()).toContain('0x7E57…7E57');
   });
 
-  it('can hide the payout address preview for privacy, and remembers the choice', async () => {
+  it('can hide amounts and addresses for privacy, and remembers the choice', async () => {
     status = { ...status, authed: true };
-    localStorage.removeItem('wc.hideAddr');
+    serverOrders = [{ ...baseOrder, stage: 'done', status: 'DONE', received: '0.00250000', usdt: '123.45' }];
+    localStorage.removeItem('wc.hideFigures');
     await mount();
     await waitFor(() => text().includes('0x7E57…7E57'), 'address preview');
-    await click(host.querySelector('button[aria-label="Hide address"]'), 'Hide address');
+    await waitFor(() => text().includes('123.45'), 'transfer list');
+    expect(text()).toContain('0.0025');
+    await click(host.querySelector('button[aria-label="Hide amounts and addresses"]'), 'Hide');
     expect(text()).not.toContain('0x7E57');
+    expect(text()).not.toContain('123.45');
+    expect(text()).not.toContain('0.0025');
     expect(host.querySelector('.payout-line code')?.getAttribute('title')).toBeNull();
-    expect(localStorage.getItem('wc.hideAddr')).toBe('1');
-    await click(host.querySelector('button[aria-label="Show address"]'), 'Show address');
+    expect(localStorage.getItem('wc.hideFigures')).toBe('1');
+    await click(host.querySelector('button[aria-label="Show amounts and addresses"]'), 'Show');
     expect(text()).toContain('0x7E57…7E57');
-    expect(localStorage.getItem('wc.hideAddr')).toBe('0');
-    localStorage.removeItem('wc.hideAddr');
+    expect(text()).toContain('123.45');
+    expect(localStorage.getItem('wc.hideFigures')).toBe('0');
+    localStorage.removeItem('wc.hideFigures');
   });
 
   it('shows a fresh address with a QR code, then plays the whole swap when the payment lands', async () => {
@@ -515,6 +521,15 @@ describe('Wallet Click UI', () => {
     expect(text()).toContain('at createOrder (orders.js:12)');
     await click(button('Close'), 'close');
     await waitFor(() => !host.querySelector('.win-logs'), 'Logs closed', 3000);
+  });
+
+  it('always shows the version in the taskbar', async () => {
+    status = { ...status, authed: true };
+    serverOrders = [];
+    serverTransfers = [];
+    await mount();
+    await waitFor(() => !!host.querySelector('.taskbar'), 'taskbar');
+    expect(host.querySelector('.taskbar .tray-version')?.textContent).toBe(`v${APP_VERSION}`);
   });
 
   it('lists many recent transfers (not just the last twelve), in a box that scrolls', async () => {

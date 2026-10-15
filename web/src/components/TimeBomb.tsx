@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useReducer, useRef } from 'react';
+import { trimAmount, usdt } from '../lib/format';
 import { sfx } from '../lib/sound';
 import type { Transfer } from '../types';
 import { BombIcon, BoomBurst, UsdtIcon } from './art';
@@ -56,7 +57,7 @@ export function countdown(ms: number): string {
 }
 
 export const usdText = (t: Transfer) =>
-  t.usdValue ? `≈ $${t.usdValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : t.xmr ? `${t.xmr} XMR` : t.received ? `${t.received} ${t.coin}` : '';
+  t.usdValue ? `≈ $${usdt(String(t.usdValue))}` : t.xmr ? `${trimAmount(t.xmr)} XMR` : t.received ? `${trimAmount(t.received)} ${t.coin}` : '';
 
 /**
  * Works out every bomb's timer, and makes the noises: a tick in the last ten seconds, and BOOM when one runs
@@ -111,7 +112,7 @@ export function useBombs(fused: Fused[], testDelayMin: number | null = null): Bo
 
 const label = (b: Bomb) => {
   const t = b.transfer;
-  const what = `Privacy transfer${t.received ? ` of ${t.received} ${t.coin}` : ''} to ${t.destinationLabel}`;
+  const what = `Privacy transfer${t.received ? ` of ${trimAmount(t.received)} ${t.coin}` : ''} to ${t.destinationLabel}`;
   if (b.phase === 'attention') return `${what}: needs you`;
   if (b.phase === 'swapping') return `${what}: the wait is over, swapping to USDT`;
   if (b.phase === 'armed') return `${what}: a ${countdown(b.left)} wait starts once the Monero unlocks`;

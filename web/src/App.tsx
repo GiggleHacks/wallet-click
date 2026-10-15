@@ -11,7 +11,7 @@ import { VersionTag } from './components/VersionTag';
 import { DragBounds, ModalLayer, Window } from './components/Win98';
 import { DEMO_ID, DEMO_TRANSFER, useDemo, type DemoKind } from './lib/demo';
 import { trimAmount, usdt } from './lib/format';
-import { getChoice, setChoice } from './lib/prefs';
+import { getChoice, setChoice, usePref } from './lib/prefs';
 import { applyThemeAttr, saveMode, savedMode, saveTheme, savedTheme, ThemeContext, useDark, type Mode, type Theme } from './lib/themes';
 import { savedWallpaper, saveWallpaper, wallpaperById, wallpaperCss, type Wallpaper } from './lib/wallpapers';
 import { setSoundTheme, sfx } from './lib/sound';
@@ -493,6 +493,7 @@ function Splash95({ onDone }: { onDone(): void }) {
 }
 
 export function App() {
+  usePref('hideFigures'); // re-render the whole tree so every amount and address re-masks
   const desktop = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const [theme, setTheme] = useState(savedTheme);

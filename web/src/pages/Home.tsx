@@ -1,10 +1,9 @@
 import { motion } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { useState } from 'react';
 import { AppMark, BookIcon, CoinIcon, EyeIcon, HouseIcon, PlayIcon, ShieldIcon, UsdtIcon } from '../components/art';
 import { transferStatus } from '../components/JourneyDialog';
 import { Window } from '../components/Win98';
-import { getPref, setPref } from '../lib/prefs';
+import { setPref, usePref } from '../lib/prefs';
 import { shortAddr, timeAgo, trimAmount, usdt } from '../lib/format';
 import type { Coin, Destination, Meta, Order, Stage, Transfer } from '../types';
 
@@ -169,11 +168,8 @@ interface Props {
 }
 
 export function Home({ meta, orders, transfers, onOpenTransfer, onPrivacy, onAddresses, destinations, destinationId, onDestination, onAddressBook, creating, offline, pressing, onCreate, onOpen, onDemo }: Props) {
-  const [hideAddr, setHideAddr] = useState(() => getPref('hideAddr'));
-  const toggleHideAddr = () => {
-    setPref('hideAddr', !hideAddr);
-    setHideAddr(!hideAddr);
-  };
+  const hideFigures = usePref('hideFigures');
+  const toggleHide = () => setPref('hideFigures', !hideFigures);
   const dest = destinations.find((d) => d.id === destinationId) ?? destinations[0];
   const payoutAddress = dest?.address ?? meta?.payout.address;
   const active =
@@ -254,16 +250,16 @@ export function Home({ meta, orders, transfers, onOpenTransfer, onPrivacy, onAdd
         )}
         {payoutAddress && (
           <>
-            <code title={hideAddr ? undefined : payoutAddress}>{hideAddr ? '••••…••••' : shortAddr(payoutAddress)}</code>
+            <code title={hideFigures ? undefined : payoutAddress}>{shortAddr(payoutAddress)}</code>
             <button
               type="button"
               className="btn98 btn-icon"
-              onClick={toggleHideAddr}
-              aria-pressed={hideAddr}
-              title={hideAddr ? 'Show address' : 'Hide address'}
-              aria-label={hideAddr ? 'Show address' : 'Hide address'}
+              onClick={toggleHide}
+              aria-pressed={hideFigures}
+              title={hideFigures ? 'Show amounts and addresses' : 'Hide amounts and addresses'}
+              aria-label={hideFigures ? 'Show amounts and addresses' : 'Hide amounts and addresses'}
             >
-              <EyeIcon size={16} off={hideAddr} />
+              <EyeIcon size={16} off={hideFigures} />
             </button>
           </>
         )}

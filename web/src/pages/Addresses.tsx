@@ -4,7 +4,7 @@ import { CoinIcon, HouseIcon, ShieldIcon, WarnIcon } from '../components/art';
 import { DelaySlider } from '../components/DelaySlider';
 import { QrCode } from '../components/QrCode';
 import { ModalLayer, Window } from '../components/Win98';
-import { shortAddr, usdt } from '../lib/format';
+import { shortAddr, trimAmount, usdt } from '../lib/format';
 import { sfx } from '../lib/sound';
 import type { Coin, Destination, Quote, Route } from '../types';
 
@@ -66,13 +66,13 @@ function SendForm({ route }: { route: Route }) {
         <>
           <p className="send-quote">
             ≈ <b>
-              {quote.amount} {route.coin}
+              {trimAmount(quote.amount)} {route.coin}
             </b>{' '}
             → about <b>{usdt(quote.usdtEstimate)} USDT</b> in {route.destinationLabel}
           </p>
           {below && (
             <p className="error-text">
-              FixedFloat's minimum here is {quote.minAmount} {route.coin} (≈ ${quote.minUsd.toFixed(2)}). Smaller payments wait at this address until they add up to it.
+              FixedFloat's minimum here is {trimAmount(quote.minAmount)} {route.coin} (≈ ${usdt(String(quote.minUsd))}). Smaller payments wait at this address until they add up to it.
             </p>
           )}
           <div className="send-pay">

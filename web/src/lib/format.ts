@@ -1,14 +1,23 @@
-export const shortAddr = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
+import { getPref } from './prefs';
+
+/** The "hide" eye on the home window: amounts and addresses turn into dots everywhere they're shown. */
+export const MASK = '•••';
+export const MASK_ADDR = '••••…••••';
+export const figuresHidden = () => getPref('hideFigures');
+
+export const shortAddr = (a: string) => (figuresHidden() ? MASK_ADDR : a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
 
 /** "0.01500000" -> "0.015" */
 export function trimAmount(v: string | null | undefined): string {
   if (!v) return '';
+  if (figuresHidden()) return MASK;
   if (!v.includes('.')) return v;
   return v.replace(/0+$/, '').replace(/\.$/, '');
 }
 
 export function usdt(v: string | null | undefined): string {
   const n = Number(v);
+  if (figuresHidden()) return Number.isFinite(n) ? MASK : '';
   return Number.isFinite(n) ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
 }
 
