@@ -1,4 +1,5 @@
-import type { Coin, Destination, Meta, Order, Quote, Route, Status, Transfer } from './types';
+import { clientLog } from './lib/devlog';
+import type { Coin, Destination, LogLine, Meta, Order, Quote, Route, Status, Transfer } from './types';
 
 export class ApiError extends Error {
   constructor(
@@ -20,11 +21,16 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
+    clientLog('error', `${method} ${path.split('?')[0]}: no connection`);
     throw new ApiError(0, "Can't reach the Wallet Click server. Check your connection.", {});
   }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (res.status === 401 && path !== '/api/login' && !path.endsWith('/refund')) window.dispatchEvent(new Event('wc:locked'));
-  if (!res.ok) throw new ApiError(res.status, String(data.error ?? `Request failed (${res.status})`), data);
+  if (!res.ok) {
+    const message = String(data.error ?? `Request failed (${res.status})`);
+    clientLog(res.status >= 500 ? 'error' : 'warn', `${method} ${path.split('?')[0]} → ${res.status}: ${message}`);
+    throw new ApiError(res.status, message, data);
+  }
   return data as T;
 }
 
@@ -46,5 +52,6 @@ export const api = {
   addresses: () => request<{ addresses: Route[]; available: Record<Coin | 'privacy', boolean> }>('GET', '/api/addresses'),
   createAddress: (body: { coin: Coin; mode: 'direct' | 'privacy'; delayHours: number | null; destinationId: string; label: string }) => request<Route>('POST', '/api/addresses', body),
   updateAddress: (id: string, patch: { label?: string; delayHours?: number; archived?: boolean }) => request<Route>('POST', `/api/addresses/${id}`, patch),
+  logs: (after: number) => request<{ lines: LogLine[]; startedAt: number }>('GET', `/api/logs?after=${after}`),
   quote: (coin: Coin, usd: number, mode: 'direct' | 'privacy') => request<Quote>('GET', `/api/quote?coin=${coin}&usd=${usd}&mode=${mode}`),
 };

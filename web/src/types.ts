@@ -116,6 +116,8 @@ export interface Transfer {
   /** The XMR has reached the vault (it then unlocks over 10 blocks). */
   xmrArrived?: boolean;
   xmrConfirmations?: number;
+  /** Roughly what it's worth in US dollars right now (the Monero held, or what was paid in). */
+  usdValue?: number | null;
   steps: TransferStep[];
   attention: string | null;
   error: string | null;
@@ -152,4 +154,16 @@ export interface Quote {
   usdtEstimate: string;
   minAmount: string;
   minUsd: number;
+}
+
+/** One line of the server's log (a message repeating straight away is one line with a count). */
+export interface LogLine {
+  id: number;
+  run: number;
+  count: number;
+  at: number;
+  first: number;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  msg: string;
+  detail?: string;
 }

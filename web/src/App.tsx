@@ -1,18 +1,19 @@
 import { AnimatePresence } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
-import { AppMark, BookIcon, CoinIcon, DisplayIcon, HouseIcon, PlayIcon, ShieldIcon, WarnIcon } from './components/art';
+import { AppMark, BookIcon, CoinIcon, DisplayIcon, HouseIcon, LogIcon, PlayIcon, ShieldIcon, WarnIcon } from './components/art';
 import { JourneyDialog } from './components/JourneyDialog';
 import { DisplayProperties } from './components/DisplayProperties';
 import { Taskbar, type Balloon, type TaskItem } from './components/Taskbar';
+import { DesktopBombs, TrayBomb, isBomb, useBombs, type Bomb, type Fused } from './components/TimeBomb';
 import { TransferDialog } from './components/TransferDialog';
 import { VersionTag } from './components/VersionTag';
 import { DragBounds, ModalLayer, Window } from './components/Win98';
 import { DEMO_ID, DEMO_TRANSFER, useDemo, type DemoKind } from './lib/demo';
 import { trimAmount, usdt } from './lib/format';
 import { getChoice, setChoice } from './lib/prefs';
-import { applyThemeAttr, saveTheme, savedTheme, ThemeContext, type Theme } from './lib/themes';
-import { savedWallpaper, saveWallpaper, wallpaperById, type Wallpaper } from './lib/wallpapers';
+import { applyThemeAttr, saveMode, savedMode, saveTheme, savedTheme, ThemeContext, useDark, type Mode, type Theme } from './lib/themes';
+import { savedWallpaper, saveWallpaper, wallpaperById, wallpaperCss, type Wallpaper } from './lib/wallpapers';
 import { setSoundTheme, sfx } from './lib/sound';
 import { AddressBook } from './pages/AddressBook';
 import { Addresses } from './pages/Addresses';
@@ -20,6 +21,7 @@ import { DemoPicker } from './pages/DemoPicker';
 import { PrivacyDialog } from './pages/PrivacyDialog';
 import { Home } from './pages/Home';
 import { Lock } from './pages/Lock';
+import { Logs } from './pages/Logs';
 import { Receive } from './pages/Receive';
 import { APP_VERSION } from './version';
 import type { Coin, Destination, Meta, Order, Stage, Status, Transfer, TransferStage } from './types';
@@ -66,7 +68,17 @@ type View = { name: 'home' } | { name: 'receive'; id: string };
 const DELAYS = [4, 12, 24, 42];
 const LIVE: TransferStage[] = ['received', 'swapping', 'holding', 'sending'];
 
-function DesktopIcons({ onDemo, onDisplay, onAddressBook, onAddresses }: { onDemo(): void; onDisplay(): void; onAddressBook(): void; onAddresses(): void }) {
+interface DesktopProps {
+  onDemo(): void;
+  onDisplay(): void;
+  onAddressBook(): void;
+  onAddresses(): void;
+  onLogs(): void;
+  bombs: Bomb[];
+  onBomb(t: Transfer): void;
+}
+
+function DesktopIcons({ onDemo, onDisplay, onAddressBook, onAddresses, onLogs, bombs, onBomb }: DesktopProps) {
   return (
     <nav className="desk-icons" aria-label="Desktop">
       <button type="button" className="desk-icon" onClick={onDemo}>
@@ -85,6 +97,11 @@ function DesktopIcons({ onDemo, onDisplay, onAddressBook, onAddresses }: { onDem
         <DisplayIcon size={32} />
         <span>Themes</span>
       </button>
+      <button type="button" className="desk-icon" onClick={onLogs}>
+        <LogIcon size={32} />
+        <span>Logs</span>
+      </button>
+      <DesktopBombs bombs={bombs} onOpen={onBomb} />
     </nav>
   );
 }
@@ -93,10 +110,11 @@ interface MainProps {
   onLocked(): void;
   theme: Theme;
   wallpaper: Wallpaper;
-  onLook(theme: Theme, wallpaper: Wallpaper): void;
+  mode: Mode;
+  onLook(theme: Theme, wallpaper: Wallpaper, mode: Mode): void;
 }
 
-function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
+function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [view, setView] = useState<View>({ name: 'home' });
@@ -112,6 +130,7 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
   const [demoPicker, setDemoPicker] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   const [myAddresses, setMyAddresses] = useState(false);
+  const [logs, setLogs] = useState(false);
   const [offline, setOffline] = useState(false);
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [destinationId, setDestinationId] = useState(() => getChoice('destination') ?? 'coinbase');
@@ -307,6 +326,18 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
     if (t.leg1 && !t.routeId && t.leg1.stage === 'waiting') setView({ name: 'receive', id: t.leg1.id });
     else setJourney({ id: t.id, auto: false });
   };
+  // Long Privacy waits tick away on the desktop as bombs (the demo's too, on its fast-forwarded clock).
+  const lapse = demo.timeLapse;
+  const fused: Fused[] = transfers.filter(isBomb).map((t) => ({ transfer: t, now: Date.now }));
+  if (demo.transfer && isBomb(demo.transfer)) {
+    fused.push({ transfer: demo.transfer, now: () => (lapse ? lapse.virtualStart + (Date.now() - lapse.realStart) * lapse.speed : Date.now()), fast: Boolean(lapse) });
+  }
+  const bombs = useBombs(fused, meta?.privacy?.testDelayMin ?? null);
+  const openBomb = (t: Transfer) => {
+    sfx.open();
+    setJourney({ id: t.id, auto: false });
+  };
+
   const current = view.name === 'receive' ? findOrder(view.id) : undefined;
   const dialogOrder = dialog ? findOrder(dialog.id) : undefined;
   const isDemo = current?.id === DEMO_ID;
@@ -366,11 +397,19 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
           )}
         </AnimatePresence>
       </main>
-      <DesktopIcons onDemo={pickDemo} onDisplay={() => setDisplay(true)} onAddressBook={() => setBook(true)} onAddresses={() => setMyAddresses(true)} />
+      <DesktopIcons
+        onDemo={pickDemo}
+        onDisplay={() => setDisplay(true)}
+        onAddressBook={() => setBook(true)}
+        onAddresses={() => setMyAddresses(true)}
+        onLogs={() => (sfx.open(), setLogs(true))}
+        bombs={bombs}
+        onBomb={openBomb}
+      />
       <AnimatePresence>
         {dialogOrder && <TransferDialog key={dialogOrder.id} order={dialogOrder} autoplay={dialog?.auto} onClose={closeDialog} onUpdate={updateOrder} />}
       </AnimatePresence>
-      <AnimatePresence>{display && <DisplayProperties theme={theme} wallpaper={wallpaper} onApply={onLook} onClose={() => setDisplay(false)} />}</AnimatePresence>
+      <AnimatePresence>{display && <DisplayProperties theme={theme} wallpaper={wallpaper} mode={mode} onApply={onLook} onClose={() => setDisplay(false)} />}</AnimatePresence>
       <AnimatePresence>{book && <AddressBook destinations={destinations} onChange={setDestinations} onClose={() => setBook(false)} />}</AnimatePresence>
       <AnimatePresence>
         {journeyT && (
@@ -413,6 +452,7 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
       <AnimatePresence>
         {myAddresses && <Addresses delays={delays} destinations={destinations} seedBackupPending={meta?.features?.seedBackupPending} onClose={() => setMyAddresses(false)} />}
       </AnimatePresence>
+      <AnimatePresence>{logs && <Logs onClose={() => setLogs(false)} />}</AnimatePresence>
       {message && <MessageBox title="Wallet Click" text={message} onOk={() => setMessage(null)} />}
       <Taskbar
         items={items}
@@ -424,7 +464,9 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
         onAddressBook={() => setBook(true)}
         onPrivacy={() => setPrivacy(true)}
         onAddresses={() => setMyAddresses(true)}
+        onLogs={() => setLogs(true)}
         onLock={lock}
+        tray={<TrayBomb bombs={bombs} onOpen={openBomb} />}
       />
     </>
   );
@@ -455,15 +497,19 @@ export function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [theme, setTheme] = useState(savedTheme);
   const [wallpaper, setWallpaper] = useState(() => savedWallpaper(savedTheme().wallpaper));
+  const [mode, setMode] = useState<Mode>(savedMode);
+  const dark = useDark(mode);
   const [splash, setSplash] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    applyThemeAttr(theme);
+    applyThemeAttr(theme, dark);
     setSoundTheme(theme.id);
-  }, [theme]);
+  }, [theme, dark]);
 
-  const changeLook = (t: Theme, w: Wallpaper) => {
+  const changeLook = (t: Theme, w: Wallpaper, m: Mode = mode) => {
+    setMode(m);
+    saveMode(m);
     const newTheme = t.id !== theme.id;
     setTheme(t);
     saveTheme(t.id);
@@ -488,7 +534,7 @@ export function App() {
 
   return (
     <ThemeContext.Provider value={theme}>
-      <div ref={desktop} className="desktop" data-wallpaper={wallpaper.id} style={{ background: wallpaper.css }}>
+      <div ref={desktop} className="desktop" data-wallpaper={wallpaper.id} style={{ background: wallpaperCss(wallpaper, dark) }}>
         <DragBounds.Provider value={desktop}>
           {!status ? (
             error && <MessageBox title="Wallet Click" text={error} onOk={() => location.reload()} />
@@ -504,7 +550,7 @@ export function App() {
               <VersionTag className="lock-version" />
             </main>
           ) : (
-            <Main onLocked={() => setStatus({ ...status, authed: false })} theme={theme} wallpaper={wallpaper} onLook={changeLook} />
+            <Main onLocked={() => setStatus({ ...status, authed: false })} theme={theme} wallpaper={wallpaper} mode={mode} onLook={changeLook} />
           )}
           {splash && <Splash95 onDone={endSplash} />}
         </DragBounds.Provider>

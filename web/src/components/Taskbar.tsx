@@ -6,7 +6,7 @@ import { useTheme, type Theme } from '../lib/themes';
 import type { Coin } from '../types';
 import { APP_VERSION } from '../version';
 import { VersionTag } from './VersionTag';
-import { AppMark, BookIcon, CoinIcon, DisplayIcon, HouseIcon, KeyIcon, LineSpeaker, PlayIcon, PowerIcon, ShieldIcon, Speaker, StartGlyph } from './art';
+import { AppMark, BookIcon, CoinIcon, DisplayIcon, HouseIcon, KeyIcon, LineSpeaker, LogIcon, PlayIcon, PowerIcon, ShieldIcon, Speaker, StartGlyph } from './art';
 
 export interface TaskItem {
   key: string;
@@ -33,7 +33,10 @@ interface Props {
   onAddressBook(): void;
   onPrivacy(): void;
   onAddresses(): void;
+  onLogs(): void;
   onLock(): void;
+  /** Extra things in the notification area (a countdown on phones). */
+  tray?: ReactNode;
 }
 
 /** One Start menu entry; each shell lays these out its own way (list, live tiles, pinned grid). */
@@ -172,7 +175,7 @@ function Win11Menu({ entries }: { entries: Entry[] }) {
   );
 }
 
-export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, onDisplay, onAddressBook, onPrivacy, onAddresses, onLock }: Props) {
+export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, onDisplay, onAddressBook, onPrivacy, onAddresses, onLogs, onLock, tray }: Props) {
   const theme = useTheme();
   const [menu, setMenu] = useState(false);
   const { time, date } = useClock();
@@ -218,6 +221,7 @@ export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, on
     { key: 'book', label: 'Address Book…', short: 'Address Book', icon: (s) => <BookIcon size={s} />, onClick: pick(onAddressBook), tile: '#1d5aa8' },
     { key: 'demo', label: 'How it works', short: 'How it works', icon: (s) => <PlayIcon size={s} />, onClick: pick(onDemo), tile: '#744da9' },
     { key: 'themes', label: 'Themes and background…', short: 'Themes', icon: (s) => <DisplayIcon size={s} />, onClick: pick(onDisplay), tile: '#0063b1' },
+    { key: 'logs', label: 'Logs', short: 'Logs', icon: (s) => <LogIcon size={s} />, onClick: pick(onLogs), tile: '#4c4a48' },
     { key: 'sound', label: `Sound: ${audio === 'off' ? 'Off' : 'On'}`, short: 'Sound', icon: (s) => SpeakerIcon(s, audio === 'off'), onClick: pick(toggleSound), tile: '#00796b' },
     { key: 'lock', label: 'Log off…', short: 'Log off', icon: (s) => <KeyIcon size={s} />, onClick: pick(onLock), tile: '#b03030' },
   ];
@@ -297,6 +301,7 @@ export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, on
           </div>
         </div>
         <div className="tray">
+          {tray}
           <button
             type="button"
             className={`tray-btn ${audio === 'locked' ? 'is-attn' : ''}`}

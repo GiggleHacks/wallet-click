@@ -1,0 +1,637 @@
+/* Wallet Click: dark mode, one per theme (html[data-mode='dark'], set from Themes → Appearance or the device).
+   Windows 95/98: the classic bevelled look in charcoal. Windows 10/11: their own dark modes.
+   QR codes stay dark-on-white on purpose: wallets scan those. */
+
+/* ---------------------------------------------------------------- shared */
+
+html[data-mode='dark'] {
+  color-scheme: dark;
+  --text: #e8e8e8;
+  --text-dim: #b9b9b9;
+  --text-faint: #8f8f8f;
+  --field: #1c1c1c;
+  --note: #3b3720;
+  --demo-note: #45391a;
+  --link: #8cb8ff;
+  --error: #ff8a80;
+  --ok: #7bd67b;
+  --accent-text: #9cc0ff;
+  --holding: #3b3160;
+  --ring-track: rgba(255, 255, 255, 0.16);
+}
+
+html[data-mode='dark'] .modern-head,
+html[data-mode='dark'] .theme-blurb {
+  color: var(--text-dim);
+}
+
+html[data-mode='dark'] .modern-pct {
+  color: var(--text);
+}
+
+html[data-mode='dark'] .listbox .current {
+  color: var(--text-faint);
+}
+
+html[data-mode='dark'] .listbox li.is-selected .current {
+  color: inherit;
+}
+
+html[data-mode='dark'] .extra-btn small,
+html[data-mode='dark'] .pick-btn small {
+  color: var(--text-dim);
+}
+
+html[data-mode='dark'] .status-cell.is-offline {
+  color: var(--error);
+}
+
+html[data-mode='dark'] .check98-box {
+  background: var(--field);
+}
+
+html[data-mode='dark'] .check98 input:checked + .check98-box::after {
+  border-color: var(--text);
+}
+
+html[data-mode='dark'] .progress-modern {
+  background: #3d3d3d;
+}
+
+html[data-mode='dark'] .speed-graph {
+  background: #1c1c1c;
+  border-color: #2e5a2a;
+}
+
+html[data-mode='dark'] .speed-graph .grid {
+  stroke: #233823;
+}
+
+html[data-mode='dark'] .speed-graph .area {
+  fill: #2c6e25;
+}
+
+/* ---------------------------------------------------------------- Windows 95 / 98: charcoal bevels */
+
+html[data-mode='dark'][data-shell='classic'] {
+  --navy: #2f56c2; /* selection and progress: a brighter blue reads on charcoal */
+  --face: #3a3a3a;
+  --light: #4a4a4a;
+  --hi: #646464;
+  --shade: #222222;
+  --dark: #0a0a0a;
+  --title-off: linear-gradient(90deg, #2a2a2a, #4a4a4a);
+}
+
+html[data-mode='dark'][data-theme='win95'] {
+  --title-off: #2a2a2a;
+}
+
+html[data-mode='dark'][data-shell='classic'] .titlebar.is-inactive {
+  color: #9a9a9a;
+}
+
+html[data-mode='dark'][data-shell='classic'] .btn98:disabled {
+  color: #7a7a7a;
+  text-shadow: 1px 1px 0 #1a1a1a;
+}
+
+html[data-mode='dark'][data-shell='classic'] .monitor-screen {
+  border-color: #555;
+}
+
+html[data-mode='dark'][data-shell='classic'] .monitor-stand {
+  background: #4a4a4a;
+}
+
+html[data-mode='dark'][data-shell='classic'] .start-banner {
+  background: linear-gradient(0deg, #000050, #0b5a96);
+}
+
+html[data-mode='dark'][data-theme='win95'] .start-banner {
+  background: #2a2a2a;
+  color: #8a8a8a;
+}
+
+html[data-mode='dark'][data-theme='win95'] .start-banner b {
+  color: #9a9a9a;
+}
+
+/* ---------------------------------------------------------------- Windows 10: its dark mode */
+
+html[data-mode='dark'][data-theme='win10'] {
+  --face: #2b2b2b;
+  --light: #333333;
+  --hi: #2b2b2b;
+  --shade: #5c5c5c;
+  --dark: #8c8c8c;
+  --navy: #0078d7;
+  --title: #2b2b2b;
+  --title-off: #2b2b2b;
+  --raised: inset 0 0 0 1px #5c5c5c;
+  --pressed: inset 0 0 0 1px #4cc2ff;
+  --sunken: inset 0 0 0 1px #8c8c8c;
+  --thin-sunken: inset 0 0 0 1px #3d3d3d;
+  --text: #ffffff;
+  --text-dim: #c8c8c8;
+  --text-faint: #9a9a9a;
+  --field: #1f1f1f;
+  --note: #3d3416;
+  --link: #4cc2ff;
+  --accent-text: #6cc6ff;
+}
+
+html[data-mode='dark'][data-theme='win10'] a {
+  color: #4cc2ff;
+}
+
+html[data-mode='dark'][data-theme='win10'] .win {
+  background: #2b2b2b;
+}
+
+html[data-mode='dark'][data-theme='win10'] .titlebar {
+  background: #2b2b2b;
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win10'] .tb-btn {
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win10'] .tb-btn:hover {
+  background: #3d3d3d;
+}
+
+html[data-mode='dark'][data-theme='win10'] .tb-btn:active {
+  background: #4a4a4a;
+}
+
+html[data-mode='dark'][data-theme='win10'] .tb-close:hover {
+  background: #e81123;
+}
+
+html[data-mode='dark'][data-theme='win10'] .statusbar {
+  border-top-color: #3d3d3d;
+}
+
+html[data-mode='dark'][data-theme='win10'] .status-cell {
+  color: #b8b8b8;
+}
+
+/* (The coin buttons keep their live-tile colours.) */
+html[data-mode='dark'][data-theme='win10'] .btn98:not(.coin-btn) {
+  background: #3a3a3a;
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win10'] .btn98:not(.coin-btn):hover:not(:disabled) {
+  background: #454545;
+  box-shadow: inset 0 0 0 1px #4cc2ff;
+}
+
+html[data-mode='dark'][data-theme='win10'] .btn98:not(.coin-btn):active:not(:disabled),
+html[data-mode='dark'][data-theme='win10'] .btn98.is-pressed:not(.coin-btn) {
+  background: #1f3b53;
+  box-shadow: inset 0 0 0 1px #4cc2ff;
+}
+
+html[data-mode='dark'][data-theme='win10'] .btn98.is-default {
+  box-shadow: inset 0 0 0 2px #0078d7;
+}
+
+html[data-mode='dark'][data-theme='win10'] .btn98:disabled {
+  background: #333;
+  color: #777;
+  box-shadow: inset 0 0 0 1px #444;
+}
+
+html[data-mode='dark'][data-theme='win10'] .input98 {
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win10'] .group98 legend {
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win10'] .listview th {
+  background: #2b2b2b;
+  box-shadow: inset -1px 0 #3d3d3d, inset 0 -1px #3d3d3d;
+  color: #9ab8d8;
+}
+
+html[data-mode='dark'][data-theme='win10'] .listview tbody tr:hover,
+html[data-mode='dark'][data-theme='win10'] .listview tbody tr:focus-visible {
+  background: #1f3b53;
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win10'] tr:hover .stage-done {
+  color: #7bd67b;
+}
+
+html[data-mode='dark'][data-theme='win10'] tr:hover .stage-attention {
+  color: #ff8a80;
+}
+
+html[data-mode='dark'][data-theme='win10'] .payout-line,
+html[data-mode='dark'][data-theme='win10'] .wait-row {
+  background: #333;
+}
+
+html[data-mode='dark'][data-theme='win10'] .wait-row.is-live {
+  background: #1f3b53;
+}
+
+html[data-mode='dark'][data-theme='win10'] .warn-box {
+  background: #3d3416;
+}
+
+html[data-mode='dark'][data-theme='win10'] .modal-layer {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+html[data-mode='dark'][data-theme='win10'] .line-sub,
+html[data-mode='dark'][data-theme='win10'] .station-label {
+  color: #c8c8c8;
+}
+
+html[data-mode='dark'][data-theme='win10'] .track {
+  border-top-color: #555;
+}
+
+html[data-mode='dark'][data-theme='win10'] .tab98 {
+  color: #aaa;
+}
+
+html[data-mode='dark'][data-theme='win10'] .tab98.is-active {
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win10'] .listbox li.is-selected {
+  background: #1f3b53;
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win10'] .monitor-screen {
+  border-color: #111;
+}
+
+/* ---------------------------------------------------------------- Windows 11: dark glass */
+
+html[data-mode='dark'][data-theme='win11'] {
+  --face: #2c2c2c;
+  --light: #333333;
+  --hi: #3a3a3a;
+  --shade: #454545;
+  --dark: #9d9d9d;
+  --navy: #4cc2ff;
+  --raised: inset 0 0 0 1px rgba(255, 255, 255, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --pressed: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --sunken: inset 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 -1px 0 #9d9d9d;
+  --thin-sunken: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --text: #ffffff;
+  --text-dim: #c5c5c5;
+  --text-faint: #9d9d9d;
+  --field: rgba(255, 255, 255, 0.05);
+  --note: rgba(255, 255, 255, 0.05);
+  --demo-note: rgba(255, 200, 80, 0.12);
+  --link: #60cdff;
+  --accent-text: #60cdff;
+}
+
+html[data-mode='dark'][data-theme='win11'] body {
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win11'] a {
+  color: #60cdff;
+}
+
+html[data-mode='dark'][data-theme='win11'] .win {
+  background: rgba(32, 32, 32, 0.88);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+html[data-mode='dark'][data-theme='win11'] .titlebar,
+html[data-mode='dark'][data-theme='win11'] .tb-btn {
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win11'] .titlebar.is-inactive {
+  color: #8a8a8a;
+}
+
+html[data-mode='dark'][data-theme='win11'] .tb-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+html[data-mode='dark'][data-theme='win11'] .tb-btn:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+html[data-mode='dark'][data-theme='win11'] .tb-close:hover {
+  background: #c42b1c;
+}
+
+html[data-mode='dark'][data-theme='win11'] .statusbar {
+  border-top-color: rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+html[data-mode='dark'][data-theme='win11'] .status-cell,
+html[data-mode='dark'][data-theme='win11'] .coin-sub,
+html[data-mode='dark'][data-theme='win11'] .line-sub,
+html[data-mode='dark'][data-theme='win11'] .station-label {
+  color: #c5c5c5;
+}
+
+html[data-mode='dark'][data-theme='win11'] .btn98 {
+  background: #373737;
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win11'] .btn98:hover:not(:disabled) {
+  background: #3c3c3c;
+}
+
+html[data-mode='dark'][data-theme='win11'] .btn98:active:not(:disabled),
+html[data-mode='dark'][data-theme='win11'] .btn98.is-pressed {
+  background: #333;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+html[data-mode='dark'][data-theme='win11'] .btn98.is-default {
+  background: #4cc2ff;
+  color: #000;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+}
+
+html[data-mode='dark'][data-theme='win11'] .btn98.is-default:hover:not(:disabled) {
+  background: #48b2e9;
+}
+
+html[data-mode='dark'][data-theme='win11'] .btn98.is-default:active:not(:disabled) {
+  background: #42a1d2;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+html[data-mode='dark'][data-theme='win11'] .btn98:disabled {
+  background: #2a2a2a;
+  color: #6e6e6e;
+}
+
+html[data-mode='dark'][data-theme='win11'] .btn98:focus-visible {
+  outline-color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win11'] .input98 {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win11'] .input98:focus {
+  background: #1f1f1f;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 -2px 0 #4cc2ff;
+}
+
+html[data-mode='dark'][data-theme='win11'] .listview {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+html[data-mode='dark'][data-theme='win11'] .listview th {
+  background: rgba(44, 44, 44, 0.95);
+  box-shadow: inset 0 -1px rgba(255, 255, 255, 0.06);
+  color: #c5c5c5;
+}
+
+html[data-mode='dark'][data-theme='win11'] .listview tbody tr:hover,
+html[data-mode='dark'][data-theme='win11'] .listview tbody tr:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 3px 0 #4cc2ff;
+}
+
+html[data-mode='dark'][data-theme='win11'] tr:hover .stage-done {
+  color: #7bd67b;
+}
+
+html[data-mode='dark'][data-theme='win11'] tr:hover .stage-attention {
+  color: #ff8a80;
+}
+
+html[data-mode='dark'][data-theme='win11'] .coin-btn {
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+html[data-mode='dark'][data-theme='win11'] .coin-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 8px 16px rgba(0, 0, 0, 0.35);
+}
+
+html[data-mode='dark'][data-theme='win11'] .coin-btn:active:not(:disabled),
+html[data-mode='dark'][data-theme='win11'] .coin-btn.is-pressed {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+html[data-mode='dark'][data-theme='win11'] .payout-line,
+html[data-mode='dark'][data-theme='win11'] .wait-row {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+html[data-mode='dark'][data-theme='win11'] .wait-row.is-live {
+  background: rgba(76, 194, 255, 0.12);
+}
+
+html[data-mode='dark'][data-theme='win11'] .warn-box {
+  background: #433519;
+}
+
+html[data-mode='dark'][data-theme='win11'] .modal-layer {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+html[data-mode='dark'][data-theme='win11'] .track {
+  border-top-color: #555;
+}
+
+html[data-mode='dark'][data-theme='win11'] .progress-modern {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+html[data-mode='dark'][data-theme='win11'] .progress-modern span {
+  background: #4cc2ff;
+}
+
+html[data-mode='dark'][data-theme='win11'] .speed-graph {
+  border-color: #2a4a66;
+}
+
+html[data-mode='dark'][data-theme='win11'] .speed-graph .grid {
+  stroke: #22384d;
+}
+
+html[data-mode='dark'][data-theme='win11'] .speed-graph .area {
+  fill: #1f5a85;
+}
+
+html[data-mode='dark'][data-theme='win11'] .speed-graph .edge {
+  stroke: #4cc2ff;
+}
+
+html[data-mode='dark'][data-theme='win11'] .tabs98 {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+html[data-mode='dark'][data-theme='win11'] .tab98 {
+  color: #c5c5c5;
+}
+
+html[data-mode='dark'][data-theme='win11'] .tab98.is-active {
+  background: #3a3a3a;
+  color: #fff;
+}
+
+html[data-mode='dark'][data-theme='win11'] .listbox {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+html[data-mode='dark'][data-theme='win11'] .listbox li.is-selected {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  box-shadow: inset 3px 0 #4cc2ff;
+}
+
+html[data-mode='dark'][data-theme='win11'] .monitor-stand {
+  background: #555;
+}
+
+html[data-mode='dark'][data-theme='win11'] .taskbar {
+  color: #fff;
+  background: rgba(28, 28, 28, 0.9);
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.06);
+}
+
+html[data-mode='dark'][data-theme='win11'] .start-btn:hover,
+html[data-mode='dark'][data-theme='win11'] .start-btn.is-pressed,
+html[data-mode='dark'][data-theme='win11'] .task-item:hover,
+html[data-mode='dark'][data-theme='win11'] .task-item.is-pressed,
+html[data-mode='dark'][data-theme='win11'] .task-item:active:not(:disabled),
+html[data-mode='dark'][data-theme='win11'] .start-btn:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+html[data-mode='dark'][data-theme='win11'] .task-item::after {
+  background: #9d9d9d;
+}
+
+html[data-mode='dark'][data-theme='win11'] .task-item.is-pressed::after {
+  background: #4cc2ff;
+}
+
+html[data-mode='dark'][data-theme='win11'] .tray:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+html[data-mode='dark'][data-theme='win11'] .start-menu.start-win11 {
+  color: #fff;
+  background: rgba(36, 36, 36, 0.96);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+html[data-mode='dark'][data-theme='win11'] .s11-search {
+  background: #2d2d2d;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), inset 0 -1px 0 #9d9d9d;
+}
+
+html[data-mode='dark'][data-theme='win11'] .s11-search:focus {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), inset 0 -2px 0 #4cc2ff;
+}
+
+html[data-mode='dark'][data-theme='win11'] .s11-app:hover,
+html[data-mode='dark'][data-theme='win11'] .s11-app:focus-visible,
+html[data-mode='dark'][data-theme='win11'] .s11-power:hover {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+html[data-mode='dark'][data-theme='win11'] .s11-empty {
+  color: #c5c5c5;
+}
+
+html[data-mode='dark'][data-theme='win11'] .s11-foot {
+  border-top-color: rgba(255, 255, 255, 0.07);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+html[data-mode='dark'][data-theme='win11'] .s11-avatar {
+  background: #3a3a3a;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+html[data-mode='dark'][data-theme='win11'] .balloon {
+  color: #fff;
+  background: rgba(40, 40, 40, 0.96);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+html[data-mode='dark'][data-theme='win11'] .balloon span:not(.toast-app) {
+  color: #c5c5c5;
+}
+
+html[data-mode='dark'][data-theme='win11'] .menu-version {
+  color: #9d9d9d;
+}
+
+html[data-mode='dark'][data-shell='win11'] .check98 input:checked + .check98-box {
+  background: #4cc2ff;
+  box-shadow: inset 0 0 0 1px #4cc2ff;
+}
+
+html[data-mode='dark'][data-shell='win11'] .check98 input:checked + .check98-box::after {
+  border-color: #000;
+}
+
+/* ---------------------------------------------------------------- the little theme preview in Themes */
+
+.mini.is-dark .mini-win,
+.mini.is-dark .mini-btn,
+.mini.is-dark .mini-bar,
+.mini.is-dark .mini-start,
+.mini.is-dark .mini-x {
+  background: #3a3a3a;
+}
+
+.mini-win10.is-dark .mini-win,
+.mini-win10.is-dark .mini-title {
+  background: #2b2b2b;
+}
+
+.mini-win10.is-dark .mini-title-text,
+.mini-win11.is-dark .mini-title-text {
+  color: #fff;
+}
+
+.mini-win10.is-dark .mini-x,
+.mini-win11.is-dark .mini-x {
+  border-top-color: #fff;
+}
+
+.mini-win10.is-dark .mini-bar {
+  background: rgba(16, 16, 16, 0.95);
+}
+
+.mini-win11.is-dark .mini-win,
+.mini-win11.is-dark .mini-bar {
+  background: rgba(32, 32, 32, 0.92);
+}
+
+.mini-win11.is-dark .mini-btn {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mode98 {
+  margin-bottom: 4px;
+}

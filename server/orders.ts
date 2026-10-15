@@ -5,6 +5,7 @@ import { COINS, PAYOUTS, config, isChecksumAddress, type Coin, type PayoutCcy } 
 import { destinations } from './destinations.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
 import { FfError, budgetLeft, ff, type FfOrder } from './fixedfloat.js';
+import { logger } from './logs.js';
 import { readJson, writeJsonAtomic } from './store.js';
 
 /**
@@ -255,10 +256,12 @@ async function maybeContinue(r: OrderRecord, now: number): Promise<void> {
     await ff.emergency(r.id, r.token, 'EXCHANGE');
     r.auto = { forTx: tx, tries: 0, nextAt: 0, sentAt: Date.now(), error: null };
     r.ff = withChoice(r, 'EXCHANGE');
+    logger.info(`[order ${r.id}] FixedFloat flagged the payment (${(r.ff.emergency?.status ?? []).join(', ') || 'emergency'}): told it to continue the swap`);
   } catch (e) {
     // Keep trying (with backoff) for as long as the emergency lasts: a swap shouldn't stall for good.
     r.auto.error = friendlyError(e);
     r.auto.nextAt = Date.now() + backoff(r.auto.tries);
+    logger.warn(`[order ${r.id}] couldn't tell FixedFloat to continue (try ${r.auto.tries}): ${r.auto.error}`);
   } finally {
     inFlight.delete(r.id);
   }
@@ -284,12 +287,14 @@ async function maybeRefund(r: OrderRecord, now: number): Promise<void> {
   if (a.gaveUp || (a.sentAt && now - a.sentAt < 2 * M) || now < a.nextAt) return;
   if (!tx || amount === null || amount === undefined) {
     Object.assign(a, { gaveUp: true, error: "FixedFloat didn't say which transaction paid, so it can't go back automatically. Enter an address below." });
+    logger.warn(`[order ${r.id}] below the minimum, needs a refund address: ${a.error}`);
     markDirty();
     return;
   }
   if (!a.to && r.ownRefund) Object.assign(a, { to: r.ownRefund, source: 'own' }); // our own wallet paid: it goes back there
   if (!a.to && r.coin === 'XMR') {
     Object.assign(a, { gaveUp: true, error: "Monero doesn't show who paid, so it can't go back automatically. Enter a Monero address below." });
+    logger.warn(`[order ${r.id}] below the minimum, needs a refund address: ${a.error}`);
     markDirty();
     return;
   }
@@ -301,6 +306,7 @@ async function maybeRefund(r: OrderRecord, now: number): Promise<void> {
       const sender = await findSender(r.coin, tx, r.depositAddress, String(amount));
       if (!sender || !ADDRESS_FORMATS[r.coin](sender)) {
         Object.assign(a, { gaveUp: true, error: UNSAFE_SENDER });
+        logger.warn(`[order ${r.id}] below the minimum, and the sender isn't one plain wallet: needs a refund address`);
         return;
       }
       Object.assign(a, { to: sender, source: 'sender' });
@@ -310,10 +316,12 @@ async function maybeRefund(r: OrderRecord, now: number): Promise<void> {
     await ff.emergency(r.id, r.token, 'REFUND', a.to!);
     Object.assign(a, { tries: 0, nextAt: 0, sentAt: Date.now(), error: null });
     r.ff = withChoice(r, 'REFUND');
+    logger.info(`[order ${r.id}] below the minimum: refund of ${amount} ${r.coin} requested to ${a.to} (${a.source})`);
   } catch (e) {
     if (e instanceof FfError && e.code > 0) {
       // FixedFloat itself said no (e.g. it rejects the address): retrying won't change that.
       Object.assign(a, { gaveUp: true, error: `FixedFloat refused the automatic refund (${e.message.replace(/^FixedFloat: /, '')}). Enter an address below.` });
+      logger.warn(`[order ${r.id}] ${a.error}`);
       return;
     }
     // Temporary trouble (FixedFloat or a public endpoint): retry with backoff. After a few tries,
@@ -322,6 +330,7 @@ async function maybeRefund(r: OrderRecord, now: number): Promise<void> {
     a.error = a.tries >= 3 ? `Automatic refund hasn't worked yet: ${why}. It keeps trying, or enter an address below.` : `Retrying the automatic refund: ${why}`;
     a.handOff = a.tries >= 3;
     a.nextAt = Date.now() + backoff(a.tries);
+    logger.warn(`[order ${r.id}] automatic refund failed (try ${a.tries}): ${why}`);
   } finally {
     inFlight.delete(r.id);
   }
@@ -339,6 +348,7 @@ export async function refundOrder(r: OrderRecord, address: string): Promise<void
     inFlight.delete(r.id);
   }
   r.autoRefund = { forTx: depositTx(r), tries: 0, nextAt: 0, sentAt: Date.now(), error: null, to: address, source: 'manual', gaveUp: true };
+  logger.info(`[order ${r.id}] refund requested to ${address} (entered by hand)`);
   r.ff = withChoice(r, 'REFUND');
   r.nextPollAt = Date.now() + 5 * S;
   markDirty();
@@ -349,6 +359,7 @@ export async function refundOrder(r: OrderRecord, address: string): Promise<void
 
 export async function pollOrder(r: OrderRecord, now = Date.now()): Promise<void> {
   const before = JSON.stringify([r.ff, r.pollError]);
+  const [wasStatus, wasError] = [r.ff.status, r.pollError];
   try {
     r.ff = stripToken(await ff.order(r.id, r.token));
     r.pollError = null;
@@ -356,6 +367,12 @@ export async function pollOrder(r: OrderRecord, now = Date.now()): Promise<void>
     r.pollError = friendlyError(e);
   }
   if (JSON.stringify([r.ff, r.pollError]) !== before) markDirty();
+  if (r.ff.status !== wasStatus) {
+    const got = r.ff.from.tx?.amount ? `, received ${r.ff.from.tx.amount} ${r.coin}` : '';
+    const sent = r.ff.to.tx?.amount ? `, paid out ${r.ff.to.tx.amount} ${r.toCcy}` : '';
+    logger.info(`[order ${r.id}] FixedFloat: ${wasStatus} → ${r.ff.status}${got}${sent}`);
+  }
+  if (r.pollError && r.pollError !== wasError) logger.warn(`[order ${r.id}] couldn't check with FixedFloat: ${r.pollError}`);
   r.polledAt = now;
   await maybeContinue(r, now);
   await maybeRefund(r, now);
@@ -404,6 +421,7 @@ export async function watchChain(now = Date.now()): Promise<void> {
           const added = total - base;
           if (added <= 0n) return;
           r.seen = { at: now, amount: formatBase(r.coin, added) };
+          logger.info(`[order ${r.id}] payment spotted on-chain: ${r.seen.amount} ${r.coin}`);
           r.nextPollAt = now; // and ask FixedFloat straight away
           markDirty();
         } catch {
@@ -502,6 +520,17 @@ export interface Limits {
 
 const limitCache = new Map<string, { at: number; limits: Limits }>();
 const LIMITS_FRESH = 2 * M;
+const PRICE_FRESH = 30 * M;
+
+/** A coin's US dollar price from FixedFloat's latest quote for it (any pair, up to half an hour old), or null. */
+export function usdPrice(coin: Coin, now = Date.now()): number | null {
+  let best: { at: number; usd: number } | null = null;
+  for (const [key, v] of limitCache) {
+    if (!key.startsWith(`${coin}>`) || !v.limits.usdPerCoin || now - v.at > PRICE_FRESH) continue;
+    if (!best || v.at > best.at) best = { at: v.at, usd: v.limits.usdPerCoin };
+  }
+  return best?.usd ?? null;
+}
 
 /**
  * FixedFloat's current limits and rate for a pair. Throws a UserError if the pair is paused. `cached` allows an
@@ -579,6 +608,7 @@ export async function createOrder(
     ...(dest ? { destinationId: dest.id } : {}),
     ...(opts.transferId ? { transferId: opts.transferId } : {}),
   });
+  logger.info(`[order ${record.id}] new ${coin} address ${record.depositAddress}: pays ${expect.toCcy} to ${expect.label}${opts.transferId ? ` (transfer ${opts.transferId})` : ''}, minimum ${lim.min} ${coin}`);
   load().orders.push(record);
   markDirty();
   flush();
@@ -620,6 +650,7 @@ export async function openSwap(
     ownRefund: req.ownRefund,
     ...(req.destinationId ? { destinationId: req.destinationId } : {}),
   });
+  logger.info(`[order ${record.id}] ${req.amount} ${req.from} → ${req.expect.toCcy} for ${req.expect.label} (transfer ${req.transferId}): our wallet pays ${record.depositAddress}`);
   load().orders.push(record);
   markDirty();
   flush();
@@ -647,6 +678,7 @@ export function pairBusy(from: Coin, to: PayoutCcy, now = Date.now()): OrderReco
 /** Marks an order our wallet will never pay (so it doesn't hold up the pair). */
 export function abandon(r: OrderRecord): void {
   r.abandoned = true;
+  logger.info(`[order ${r.id}] dropped: our wallet won't pay it`);
   markDirty();
   flush();
 }

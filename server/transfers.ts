@@ -7,7 +7,8 @@ import { COINS, PAYOUTS, PRIVACY_DELAYS, config, type Coin } from './config.js';
 import { destinations } from './destinations.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
 import { FfError } from './fixedfloat.js';
-import { LimitError, abandon, createOrder, flush as flushOrders, limits, openSwap, orderView, orders, pairBusy, type Expect, type OrderRecord, type OrderView } from './orders.js';
+import { logger } from './logs.js';
+import { LimitError, abandon, createOrder, flush as flushOrders, limits, openSwap, orderView, orders, pairBusy, usdPrice, type Expect, type OrderRecord, type OrderView } from './orders.js';
 import { readJson, writeJsonAtomic } from './store.js';
 import { hotWallet, xmrWallet, type HotWallet, type RouteRef } from './wallets/index.js';
 import * as xmr from './wallets/xmr.js';
@@ -148,6 +149,7 @@ export const transfers = {
     dirty = false;
     busy = false;
     scanning = false;
+    pricedAt = 0;
   },
 };
 
@@ -166,6 +168,12 @@ const newJitter = () => (config.privacyTestDelayMin !== null ? crypto.randomInt(
 const refOf = (r: Route): RouteRef => ({ coin: r.coin, index: r.index, address: r.address });
 const shortTx = (h: string) => `${h.slice(0, 8)}…`;
 
+/** Adds to a transfer's own history, and to the server log. */
+function note(t: TransferRecord, text: string, now: number, level: 'info' | 'warn' = 'info'): void {
+  t.log.push({ at: now, text });
+  logger[level](`[transfer ${t.id}] ${text}`);
+}
+
 function advance(t: TransferRecord, state: TransferState, text: string, now: number): void {
   t.state = state;
   t.tries = 0;
@@ -173,11 +181,15 @@ function advance(t: TransferRecord, state: TransferState, text: string, now: num
   t.waitingFor = null;
   t.nextAt = now;
   t.log.push({ at: now, text });
+  logger.info(`[transfer ${t.id}] → ${state}: ${text}`);
   markDirty();
 }
 
 const later = (t: TransferRecord, now: number, ms: number, waitingFor: string | null = null) => {
-  if (t.waitingFor !== waitingFor) markDirty();
+  if (t.waitingFor !== waitingFor) {
+    markDirty();
+    if (waitingFor) logger.info(`[transfer ${t.id}] waiting for ${waitingFor}`);
+  }
   t.waitingFor = waitingFor;
   t.nextAt = now + ms;
 };
@@ -185,7 +197,7 @@ const later = (t: TransferRecord, now: number, ms: number, waitingFor: string | 
 function needAttention(t: TransferRecord, why: string, now: number): void {
   t.attention = why;
   t.nextAt = Number.MAX_SAFE_INTEGER;
-  t.log.push({ at: now, text: `Needs you: ${why}` });
+  note(t, `Needs you: ${why}`, now, 'warn');
   markDirty();
 }
 
@@ -219,6 +231,7 @@ async function broadcast(w: HotWallet, send: Send, now: number): Promise<void> {
     }
   }
   send.broadcastAt = now;
+  logger.info(`hot wallet sent ${send.amount || 'everything'} (fee ${send.fee || '?'}) to ${send.to}${send.orderId ? ` for order ${send.orderId}` : ''}: ${send.txids.join(', ')}`);
   persist();
 }
 
@@ -467,7 +480,7 @@ async function swap2(t: TransferRecord, now: number): Promise<void> {
   if (v.stage === 'done') return finish(t, v, now);
   if (v.stage === 'refunded') {
     // It came back to our own subaddress: swap it again when the owner says so.
-    t.log.push({ at: now, text: `FixedFloat sent the XMR back (order ${o.id})` });
+    note(t, `FixedFloat sent the XMR back (order ${o.id})`, now);
     t.leg2 = undefined;
     t.sweep = undefined;
     t.state = 'wait';
@@ -503,6 +516,7 @@ export async function stepTransfer(t: TransferRecord, now = Date.now()): Promise
     t.error = why;
     t.nextAt = now + backoff(t.tries);
     markDirty();
+    logger.warn({ err: e }, `[transfer ${t.id}] ${t.state} failed (try ${t.tries}), retrying in ${Math.round(backoff(t.tries) / S)} s`);
     // FixedFloat itself refusing (bad address, pair disabled…) won't fix itself; neither will a step failing for an hour.
     const final = e instanceof FfError && e.code > 0 && (t.state === 'open1' || t.state === 'open2');
     if (final || t.tries >= GIVE_UP_TRIES) needAttention(t, why, now);
@@ -542,7 +556,7 @@ export async function rescueLeftovers(now = Date.now()): Promise<void> {
       const n = blank(t.coin, true, t.delayHours || PRIVACY_DELAYS[0], t.destinationId, t.destination, t.routeId, 'xmr-in', now);
       n.vault = { index: sub.index, address: sub.address, amount: xmr.formatXmr(b.total), confirmations: 0, unlockedAt: null };
       n.received = null;
-      n.log.push({ at: now, text: `${xmr.formatXmr(b.total)} XMR found left behind by transfer ${t.id}` });
+      note(n, `${xmr.formatXmr(b.total)} XMR found left behind by transfer ${t.id}`, now);
       all.push(n);
       inUse.add(sub.index);
       markDirty();
@@ -577,7 +591,7 @@ export async function scanRoutes(now = Date.now()): Promise<void> {
         const t = blank(route.coin, route.mode === 'privacy', route.delayHours, route.destinationId, route.destination, route.id, 'collect', now);
         t.received = fmt(route.coin, s.seen);
         t.inbound = { txids: s.txids, confirmations: s.confirmations, required: s.required, spendable: fmt(route.coin, s.spendable) };
-        t.log.push({ at: now, text: `Payment seen at "${route.label}": ${t.received} ${route.coin}` });
+        note(t, `Payment seen at "${route.label}": ${t.received} ${route.coin}`, now);
         load().transfers.push(t);
         markDirty();
       } catch {
@@ -642,7 +656,7 @@ export async function createPrivacyTransfer(coin: Coin, delayHours: number, dest
   t.vault = { index: v.index, address: v.address, amount: null, confirmations: 0, unlockedAt: null };
   const o = await createOrder(coin, { now, expect: { toCcy: 'XMR', toAddress: v.address, label: 'Monero vault' }, transferId: t.id });
   t.leg1 = o.id;
-  t.log.push({ at: now, text: `Privacy Enhanced: FixedFloat order ${o.id} pays ${COINS[coin].name} → Monero, then USDT to ${dest.label} after ${delayHours} h` });
+  note(t, `Privacy Enhanced: FixedFloat order ${o.id} pays ${COINS[coin].name} → Monero, then USDT to ${dest.label} after ${delayHours} h`, now);
   load().transfers.push(t);
   persist();
   return t;
@@ -661,7 +675,7 @@ export function releaseNow(id: string, now = Date.now()): TransferRecord {
   t.delayHours = 0;
   if (t.releaseAt !== null) t.releaseAt = Math.min(t.releaseAt, now);
   t.jitterMs = 0;
-  t.log.push({ at: now, text: 'Released early' });
+  note(t, 'Released early', now);
   t.nextAt = now;
   persist();
   return t;
@@ -674,7 +688,7 @@ export function changeDelay(id: string, delayHours: number, now = Date.now()): T
   if (!t.privacy || !['swap1', 'collect', 'open1', 'send1', 'xmr-in', 'churn', 'wait'].includes(t.state)) throw new UserError('This transfer is past its wait.');
   t.delayHours = delayHours;
   if (t.vault?.unlockedAt) t.releaseAt = t.vault.unlockedAt + delayMs(t) + t.jitterMs;
-  t.log.push({ at: now, text: `Delay changed to ${delayHours} h` });
+  note(t, `Delay changed to ${delayHours} h`, now);
   t.nextAt = now;
   persist();
   return t;
@@ -688,7 +702,7 @@ export function retry(id: string, now = Date.now()): TransferRecord {
   t.error = null;
   t.tries = 0;
   t.nextAt = now;
-  t.log.push({ at: now, text: 'Retrying' });
+  note(t, 'Retrying', now);
   persist();
   return t;
 }
@@ -713,8 +727,34 @@ export async function stepDue(now = Date.now()): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------- dollar values
+
+/** States where the transfer's money sits in our Monero vault. */
+const IN_VAULT: TransferState[] = ['xmr-in', 'churn', 'wait', 'open2', 'send2', 'swap2'];
+const held = (t: TransferRecord): { coin: Coin; amount: string | null } =>
+  t.vault?.amount && IN_VAULT.includes(t.state) ? { coin: 'XMR', amount: t.vault.amount } : { coin: t.coin, amount: t.received };
+
+/** Roughly what a transfer is worth in US dollars right now: the USDT it paid, the Monero it holds, or what came in. */
+function usdValue(t: TransferRecord, now: number): number | null {
+  if (t.state === 'done' && t.usdt) return Number(t.usdt);
+  const { coin, amount } = held(t);
+  const n = Number(amount);
+  const price = usdPrice(coin, now);
+  return price && n > 0 ? Math.round(n * price * 100) / 100 : null;
+}
+
+let pricedAt = 0;
+/** Keeps prices fresh for the transfers still in progress (the desktop shows their dollar value). Every few minutes at most. */
+export async function refreshPrices(now = Date.now()): Promise<void> {
+  if (now - pricedAt < 5 * M) return;
+  pricedAt = now;
+  const coins = new Set(load().transfers.filter((t) => t.state !== 'done' && t.state !== 'refunded' && (t.received || t.vault?.amount)).map((t) => held(t).coin));
+  for (const coin of coins) await limits(coin, 'USDT', { now, cached: true }).catch(() => {});
+}
+
 export function startTransfers(log: FastifyBaseLogger): () => void {
   const timer = setInterval(() => {
+    refreshPrices().catch(() => {});
     scanRoutes().catch((e) => log.warn({ err: e }, 'route scan failed'));
     rescueLeftovers().catch((e) => log.warn({ err: e }, 'leftover check failed'));
     stepDue().catch((e) => log.warn({ err: e }, 'transfer step failed'));
@@ -872,6 +912,7 @@ export function transferView(t: TransferRecord, now = Date.now()) {
     /** The XMR has reached our vault subaddress (it then unlocks over 10 blocks). */
     xmrArrived: Boolean(t.vault?.seenAt) || ['churn', 'wait', 'open2', 'send2', 'swap2', 'done'].includes(t.state),
     xmrConfirmations: t.vault?.confirmations ?? 0,
+    usdValue: usdValue(t, now),
     steps: stepsOf(t, leg1, leg2, route, now),
     attention: t.attention,
     error: t.error,

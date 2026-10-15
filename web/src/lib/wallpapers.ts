@@ -4,7 +4,12 @@ export interface Wallpaper {
   id: string;
   name: string;
   css: string;
+  /** Its own dark-mode version (others are dimmed). */
+  dark?: string;
 }
+
+/** The wallpaper as the desktop shows it: in dark mode its own dark version, or dimmed. */
+export const wallpaperCss = (w: Wallpaper, dark: boolean) => (!dark ? w.css : (w.dark ?? `linear-gradient(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.45)), ${w.css}`));
 
 const svgUrl = (svg: string) => `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 const VIEW = 'viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice"';
@@ -77,7 +82,7 @@ function hero10(): string {
 
 // ---------------------------------------------------------------- Windows 11: the bloom
 
-function bloom11(): string {
+function bloom11(dark = false): string {
   const cx = 930;
   const cy = 560;
   // [angle, length, width, layer]: deep petals first, lighter ones on top.
@@ -102,10 +107,14 @@ function bloom11(): string {
     `<path transform="translate(${cx} ${cy}) rotate(${a})" d="M0,0 C${len * 0.28},${-w} ${len * 0.8},${-w * 0.7} ${len},0 C${len * 0.8},${w * 0.7} ${len * 0.28},${w} 0,0Z" fill="url(#p${layer})" opacity="${layer ? 0.82 : 0.95}"/>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" ${VIEW}>
 <defs>
-<radialGradient id="bg" cx=".58" cy=".56" r=".85"><stop offset="0" stop-color="#e9f3ff"/><stop offset=".55" stop-color="#b8d6f8"/><stop offset="1" stop-color="#8db8ee"/></radialGradient>
+<radialGradient id="bg" cx=".58" cy=".56" r=".85">${
+    dark
+      ? '<stop offset="0" stop-color="#1d2f4d"/><stop offset=".55" stop-color="#0d1a2f"/><stop offset="1" stop-color="#060c18"/>'
+      : '<stop offset="0" stop-color="#e9f3ff"/><stop offset=".55" stop-color="#b8d6f8"/><stop offset="1" stop-color="#8db8ee"/>'
+  }</radialGradient>
 <linearGradient id="p0" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="470" y2="0"><stop offset="0" stop-color="#062a86"/><stop offset=".55" stop-color="#1f63d6"/><stop offset="1" stop-color="#6fb9ff"/></linearGradient>
 <linearGradient id="p1" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="350" y2="0"><stop offset="0" stop-color="#1a4fc0"/><stop offset=".6" stop-color="#3f8ff0"/><stop offset="1" stop-color="#a9dcff"/></linearGradient>
-<radialGradient id="core" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#cfe8ff" stop-opacity=".9"/><stop offset="1" stop-color="#cfe8ff" stop-opacity="0"/></radialGradient>
+<radialGradient id="core" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#cfe8ff" stop-opacity="${dark ? 0.55 : 0.9}"/><stop offset="1" stop-color="#cfe8ff" stop-opacity="0"/></radialGradient>
 <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="30"/></filter>
 </defs>
 <rect width="1600" height="1000" fill="url(#bg)"/>
@@ -116,10 +125,15 @@ ${petals.map(petal).join('')}
 }
 
 export const WALLPAPERS: Wallpaper[] = [
-  { id: 'teal', name: '(None) Teal', css: 'radial-gradient(ellipse at 50% 40%, rgba(255,255,255,0.07), transparent 60%), #008080' },
+  {
+    id: 'teal',
+    name: '(None) Teal',
+    css: 'radial-gradient(ellipse at 50% 40%, rgba(255,255,255,0.07), transparent 60%), #008080',
+    dark: 'radial-gradient(ellipse at 50% 40%, rgba(255,255,255,0.05), transparent 60%), #0b3b3b',
+  },
   { id: 'clouds', name: 'Windows 95 Sky', css: `${svgUrl(cloud95())} center / cover no-repeat, #4c8ae0` },
-  { id: 'hero10', name: 'Windows 10 Light', css: `${svgUrl(hero10())} center / cover no-repeat, #062f6e` },
-  { id: 'bloom11', name: 'Windows 11 Bloom', css: `${svgUrl(bloom11())} center / cover no-repeat, #b8d6f8` },
+  { id: 'hero10', name: 'Windows 10 Light', css: `${svgUrl(hero10())} center / cover no-repeat, #062f6e`, dark: `${svgUrl(hero10())} center / cover no-repeat, #062f6e` },
+  { id: 'bloom11', name: 'Windows 11 Bloom', css: `${svgUrl(bloom11())} center / cover no-repeat, #b8d6f8`, dark: `${svgUrl(bloom11(true))} center / cover no-repeat, #0d1a2f` },
   {
     id: 'hill',
     name: 'Green Hill',
@@ -161,7 +175,7 @@ export const WALLPAPERS: Wallpaper[] = [
   },
   { id: 'tiles', name: 'Tiles', css: 'repeating-conic-gradient(#7b7bb8 0% 25%, #6262a3 0% 50%) 0 0 / 48px 48px' },
   { id: 'plum', name: 'Plum', css: '#5a2d5a' },
-  { id: 'black', name: 'Black', css: '#000000' },
+  { id: 'black', name: 'Black', css: '#000000', dark: '#000000' },
 ];
 
 const KEY = 'wc.wallpaper';

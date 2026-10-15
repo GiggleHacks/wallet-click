@@ -25,7 +25,7 @@ initWallet(process.env.WALLET_KEY, MNEMONIC);
 const { buildApp } = await import('../server/app.js');
 const { setTransport } = await import('../server/fixedfloat.js');
 const { orders, pollDue } = await import('../server/orders.js');
-const { transfers, stepTransfer, scanRoutes, createPrivacyTransfer } = await import('../server/transfers.js');
+const { transfers, stepTransfer, scanRoutes, createPrivacyTransfer, refreshPrices } = await import('../server/transfers.js');
 const { addresses } = await import('../server/addresses.js');
 const { setXmrFetch } = await import('../server/wallets/xmr.js');
 const { setChainFetch } = await import('../server/chain.js');
@@ -296,6 +296,10 @@ describe('Privacy Enhanced (fresh address)', () => {
     expect(t.state).toBe('wait');
     expect(t.releaseAt! - t.vault!.unlockedAt!).toBeGreaterThanOrEqual(24 * H);
     expect(t.releaseAt! - t.vault!.unlockedAt!).toBeLessThanOrEqual(24 * H + 30 * 60_000);
+
+    // Its dollar value (for the countdown on the desktop): the Monero held, at FixedFloat's current price.
+    await refreshPrices(unlockedAt);
+    expect((await get(`/api/transfers/${view.id}`)).json().usdValue).toBeCloseTo(0.3 * 541.7, 2);
 
     // Still waiting an hour before the release time, even once the churn unlocked.
     wallet.unlock(2);

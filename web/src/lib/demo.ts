@@ -134,6 +134,7 @@ function demoTransfer(flavor: Flavor, leg1: Order, payoutAddress: string): Trans
     xmr: null,
     xmrArrived: false,
     xmrConfirmations: 0,
+    usdValue: null,
     steps: stepsAt(flavor, 'in', { in: 'Waiting for the payment' }),
     attention: null,
     error: null,
@@ -253,7 +254,7 @@ export function useDemo(payoutAddress: string, hooks: Hooks) {
         // 2. Paid: the transfer window takes over and plays everything.
         at(3600, () => {
           setLeg({ stage: 'received', status: 'PENDING', received: s.amount, seenAt: Date.now() });
-          hooksRef.current.onJourney(set({ stage: 'received', received: s.amount, steps: steps('in', { in: `${s.amount} BTC received` }) }));
+          hooksRef.current.onJourney(set({ stage: 'received', received: s.amount, usdValue: 126.1, steps: steps('in', { in: `${s.amount} BTC received` }) }));
         });
         for (let c = 1; c <= s.req; c++) at(1000, () => (setLeg({ confirmations: c }), set({})));
         // 3. FixedFloat swaps it.
@@ -263,7 +264,7 @@ export function useDemo(payoutAddress: string, hooks: Hooks) {
         });
       } else {
         // 1. You send from your phone to your saved address: it lands, rings, and the transfer window opens.
-        at(1200, () => hooksRef.current.onJourney(set({ stage: 'received', received: s.amount, steps: steps('in', { in: `${s.amount} BTC, 0 of 1 confirmations` }) })));
+        at(1200, () => hooksRef.current.onJourney(set({ stage: 'received', received: s.amount, usdValue: 126.1, steps: steps('in', { in: `${s.amount} BTC, 0 of 1 confirmations` }) })));
         // 2. Confirmed: the hot wallet forwards exactly that to a fresh FixedFloat order.
         at(2600, () => set({ state: 'send1', steps: steps('forward', { in: `${s.amount} BTC`, forward: 'FixedFloat order DEMO' }) }));
         // 3. FixedFloat swaps it.
@@ -292,7 +293,7 @@ export function useDemo(payoutAddress: string, hooks: Hooks) {
         setLeg({ stage: 'done', status: 'DONE', usdt: xmr, usdtFinal: true });
         set({ state: 'xmr-in', stage: 'holding', steps: steps('vault', { swap1: `${xmr} XMR` }) });
       });
-      at(1900, () => set({ xmrArrived: true, xmr, xmrConfirmations: 0, steps: steps('vault', { vault: `${xmr} XMR` }) }));
+      at(1900, () => set({ xmrArrived: true, xmr, usdValue: 120.85, xmrConfirmations: 0, steps: steps('vault', { vault: `${xmr} XMR` }) }));
       for (let c = 1; c <= 10; c++) at(c === 1 ? 700 : 170, () => set({ xmrConfirmations: c }));
       // 5. The shuffle to a fresh spot.
       at(500, () => set({ state: 'churn', unlockedAt: Date.now(), steps: steps('churn') }));

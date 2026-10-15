@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 
 /**
  * Four desktop themes. Each changes the whole look: fonts, colours, window chrome, controls,
@@ -81,11 +81,53 @@ export function saveTheme(id: ThemeId): void {
   }
 }
 
-/** Puts the theme on <html> so the stylesheets can switch everything at once. */
-export function applyThemeAttr(theme: Theme): void {
+/** Light, dark, or whatever the phone/computer is set to ('auto', the default). */
+export type Mode = 'auto' | 'light' | 'dark';
+const MODE_KEY = 'wc.mode';
+
+export function savedMode(): Mode {
+  try {
+    const m = localStorage.getItem(MODE_KEY);
+    return m === 'light' || m === 'dark' ? m : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+export function saveMode(mode: Mode): void {
+  try {
+    localStorage.setItem(MODE_KEY, mode);
+  } catch {
+    /* private mode: just won't be remembered */
+  }
+}
+
+const darkQuery = () => (typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null);
+
+/** Whether a mode means dark right now ('auto' follows the device). */
+export const isDark = (mode: Mode): boolean => mode === 'dark' || (mode === 'auto' && Boolean(darkQuery()?.matches));
+
+/** Follows the device's light/dark setting live while the mode is 'auto'. */
+export function useDark(mode: Mode): boolean {
+  const [dark, setDark] = useState(() => isDark(mode));
+  useEffect(() => {
+    setDark(isDark(mode));
+    const q = darkQuery();
+    if (mode !== 'auto' || !q) return;
+    const onChange = () => setDark(q.matches);
+    q.addEventListener?.('change', onChange);
+    return () => q.removeEventListener?.('change', onChange);
+  }, [mode]);
+  return dark;
+}
+
+/** Puts the theme (and light/dark) on <html> so the stylesheets can switch everything at once. */
+export function applyThemeAttr(theme: Theme, dark = isDark(savedMode())): void {
   document.documentElement.dataset.theme = theme.id;
   document.documentElement.dataset.shell = theme.shell;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.shell === 'classic' ? '#008080' : theme.shell === 'win10' ? '#101010' : '#f3f3f3');
+  document.documentElement.dataset.mode = dark ? 'dark' : 'light';
+  const color = dark ? (theme.shell === 'win11' ? '#202020' : theme.shell === 'win10' ? '#101010' : '#1f2b2b') : theme.shell === 'classic' ? '#008080' : theme.shell === 'win10' ? '#101010' : '#f3f3f3';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
 }
 
 export const ThemeContext = createContext<Theme>(themeById(DEFAULT_THEME));

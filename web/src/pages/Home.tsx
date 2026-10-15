@@ -1,7 +1,10 @@
 import { motion } from 'motion/react';
-import { AppMark, BookIcon, CoinIcon, HouseIcon, PlayIcon, ShieldIcon, UsdtIcon } from '../components/art';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useState } from 'react';
+import { AppMark, BookIcon, CoinIcon, EyeIcon, HouseIcon, PlayIcon, ShieldIcon, UsdtIcon } from '../components/art';
 import { transferStatus } from '../components/JourneyDialog';
 import { Window } from '../components/Win98';
+import { getPref, setPref } from '../lib/prefs';
 import { shortAddr, timeAgo, trimAmount, usdt } from '../lib/format';
 import type { Coin, Destination, Meta, Order, Stage, Transfer } from '../types';
 
@@ -33,7 +36,37 @@ interface Row {
   open(): void;
 }
 
+const LIST_MIN = 150;
+const LIST_MAX = 430;
+
+/** On a computer the list is as tall as fits (up to LIST_MAX), so the window never runs under the taskbar. */
+function useFitAboveTaskbar(ref: React.RefObject<HTMLDivElement | null>) {
+  const fit = () => {
+    const el = ref.current;
+    const win = el?.closest('.win');
+    const bar = document.querySelector('.taskbar');
+    if (!el || !win || !bar) return;
+    if (window.innerWidth <= 560) {
+      el.style.maxHeight = ''; // phones scroll the page instead
+      return;
+    }
+    const list = el.getBoundingClientRect();
+    const below = win.getBoundingClientRect().bottom - list.bottom;
+    // Above the taskbar, and inside the workspace's bottom padding (so the page itself doesn't scroll).
+    const pad = parseFloat(getComputedStyle(win.closest('.workspace') ?? document.body).paddingBottom) || 0;
+    const room = Math.min(bar.getBoundingClientRect().top - 10, window.innerHeight - pad) - below - list.top;
+    el.style.maxHeight = `${Math.round(Math.max(LIST_MIN, Math.min(LIST_MAX, room)))}px`;
+  };
+  useLayoutEffect(fit);
+  useEffect(() => {
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  });
+}
+
 function OrderList({ orders, transfers, onOpen, onOpenTransfer }: { orders: Order[]; transfers: Transfer[]; onOpen(o: Order): void; onOpenTransfer(t: Transfer): void }) {
+  const box = useRef<HTMLDivElement>(null);
+  useFitAboveTaskbar(box);
   const rows: Row[] = [
     ...orders.map((o) => ({
       key: o.id,
@@ -60,7 +93,7 @@ function OrderList({ orders, transfers, onOpen, onOpenTransfer }: { orders: Orde
       open: () => onOpenTransfer(t),
     })),
   ].sort((a, b) => b.createdAt - a.createdAt);
-  const visible = rows.filter((o) => o.stage !== 'expired').slice(0, 12);
+  const visible = rows.filter((o) => o.stage !== 'expired').slice(0, 100);
   const hidden = rows.filter((o) => o.stage === 'expired').length;
   if (!visible.length) {
     return (
@@ -71,7 +104,7 @@ function OrderList({ orders, transfers, onOpen, onOpenTransfer }: { orders: Orde
     );
   }
   return (
-    <div className="listview">
+    <div className="listview" ref={box}>
       <table>
         <thead>
           <tr>
@@ -136,6 +169,11 @@ interface Props {
 }
 
 export function Home({ meta, orders, transfers, onOpenTransfer, onPrivacy, onAddresses, destinations, destinationId, onDestination, onAddressBook, creating, offline, pressing, onCreate, onOpen, onDemo }: Props) {
+  const [hideAddr, setHideAddr] = useState(() => getPref('hideAddr'));
+  const toggleHideAddr = () => {
+    setPref('hideAddr', !hideAddr);
+    setHideAddr(!hideAddr);
+  };
   const dest = destinations.find((d) => d.id === destinationId) ?? destinations[0];
   const payoutAddress = dest?.address ?? meta?.payout.address;
   const active =
@@ -194,7 +232,7 @@ export function Home({ meta, orders, transfers, onOpenTransfer, onPrivacy, onAdd
           <HouseIcon size={30} />
           <span>
             <b>My Addresses…</b>
-            <small>Permanent addresses for your phone</small>
+            <small>Save once, pay any time</small>
           </span>
         </button>
       </div>
@@ -214,7 +252,21 @@ export function Home({ meta, orders, transfers, onOpenTransfer, onPrivacy, onAdd
         ) : (
           <b>{dest?.label ?? meta?.payout.label ?? 'Coinbase'}</b>
         )}
-        {payoutAddress && <code title={payoutAddress}>{shortAddr(payoutAddress)}</code>}
+        {payoutAddress && (
+          <>
+            <code title={hideAddr ? undefined : payoutAddress}>{hideAddr ? '••••…••••' : shortAddr(payoutAddress)}</code>
+            <button
+              type="button"
+              className="btn98 btn-icon"
+              onClick={toggleHideAddr}
+              aria-pressed={hideAddr}
+              title={hideAddr ? 'Show address' : 'Hide address'}
+              aria-label={hideAddr ? 'Show address' : 'Hide address'}
+            >
+              <EyeIcon size={16} off={hideAddr} />
+            </button>
+          </>
+        )}
         <button type="button" className="btn98 btn-icon" onClick={onAddressBook} title="Address Book" aria-label="Address Book">
           <BookIcon size={16} />
         </button>

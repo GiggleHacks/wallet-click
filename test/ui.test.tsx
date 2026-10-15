@@ -7,7 +7,7 @@ import { APP_VERSION } from '../web/src/version';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const sounds = vi.hoisted(() => ({ ding: 0, swap: 0, send: 0, tada: 0, error: 0, vaultLock: 0, shuffle: 0, vaultOpen: 0 }));
+const sounds = vi.hoisted(() => ({ ding: 0, swap: 0, send: 0, tada: 0, error: 0, vaultLock: 0, shuffle: 0, vaultOpen: 0, boom: 0 }));
 vi.mock('../web/src/lib/sound', () => {
   const count = (k: keyof typeof sounds) => () => void sounds[k]++;
   return {
@@ -24,6 +24,8 @@ vi.mock('../web/src/lib/sound', () => {
       vaultLock: count('vaultLock'),
       shuffle: count('shuffle'),
       vaultOpen: count('vaultOpen'),
+      tick() {},
+      boom: count('boom'),
     },
     audioState: () => 'ready',
     primeAudio() {},
@@ -76,6 +78,11 @@ let loginBody: unknown = null;
 let serverOrders: Order[] = [];
 let serverTransfers: Transfer[] = [];
 let transferBody: unknown = null;
+const serverLog = [
+  { id: 1, run: 1, count: 1, at: Date.now() - 60_000, first: Date.now() - 60_000, level: 'info', msg: '[order K7Q2XZ] FixedFloat: NEW → PENDING, received 0.0015 BTC' },
+  { id: 2, run: 2, count: 3, at: Date.now() - 30_000, first: Date.now() - 50_000, level: 'warn', msg: "[order K7Q2XZ] couldn't check with FixedFloat: timeout" },
+  { id: 3, run: 3, count: 1, at: Date.now() - 10_000, first: Date.now() - 10_000, level: 'error', msg: 'POST /api/orders → 502 (812 ms)', detail: 'at createOrder (orders.js:12)' },
+];
 const calls: string[] = [];
 
 const VAULT_LEG: Order = { ...baseOrder, id: 'PRIV01', coin: 'ETH', coinName: 'Ethereum', network: 'Ethereum mainnet', address: '0x1111111111111111111111111111111111111111', toCcy: 'XMR', transferId: 't_ui' };
@@ -124,6 +131,7 @@ function route(method: string, path: string, body: unknown): [number, unknown] {
     return [200, { ok: true }];
   }
   if (path === '/api/meta') return [200, meta];
+  if (path.startsWith('/api/logs')) return [200, { lines: path.endsWith('after=0') ? serverLog : [], startedAt: Date.now() - 3_600_000 }];
   if (path === '/api/orders' && method === 'GET') return [200, { orders: serverOrders, transfers: serverTransfers }];
   if (path === '/api/transfers' && method === 'POST') {
     transferBody = body;
@@ -209,6 +217,21 @@ describe('Wallet Click UI', () => {
     expect(button('Ethereum')).toBeTruthy();
     expect(text()).toContain('USDT');
     expect(text()).toContain('0x7E57…7E57');
+  });
+
+  it('can hide the payout address preview for privacy, and remembers the choice', async () => {
+    status = { ...status, authed: true };
+    localStorage.removeItem('wc.hideAddr');
+    await mount();
+    await waitFor(() => text().includes('0x7E57…7E57'), 'address preview');
+    await click(host.querySelector('button[aria-label="Hide address"]'), 'Hide address');
+    expect(text()).not.toContain('0x7E57');
+    expect(host.querySelector('.payout-line code')?.getAttribute('title')).toBeNull();
+    expect(localStorage.getItem('wc.hideAddr')).toBe('1');
+    await click(host.querySelector('button[aria-label="Show address"]'), 'Show address');
+    expect(text()).toContain('0x7E57…7E57');
+    expect(localStorage.getItem('wc.hideAddr')).toBe('0');
+    localStorage.removeItem('wc.hideAddr');
   });
 
   it('shows a fresh address with a QR code, then plays the whole swap when the payment lands', async () => {
@@ -350,10 +373,12 @@ describe('Wallet Click UI', () => {
     expect(host.querySelector('.churn-hop')).toBeTruthy();
     await waitFor(() => text().includes('Time-lapse'), 'time-lapse wait', 10_000);
     expect(text()).toMatch(/Holding 0\.2231 XMR for another/);
+    expect(host.querySelector('.bomb-icon.is-ticking')?.textContent).toContain('≈ $120.85');
     expect(host.querySelector('.vault-ring.is-wait')).toBeTruthy();
     await waitFor(() => text().includes('Done!'), 'privacy demo done', 30_000);
     expect(text()).toContain('118.42 USDT');
-    expect(sounds).toMatchObject({ ding: 1, swap: 2, send: 2, vaultLock: 1, shuffle: 1, vaultOpen: 1, tada: 1, error: 0 });
+    expect(sounds).toMatchObject({ ding: 1, swap: 2, send: 2, vaultLock: 1, shuffle: 1, vaultOpen: 1, tada: 1, error: 0, boom: 1 });
+    await waitFor(() => !host.querySelector('.bomb-icon'), 'bomb gone once the money has landed', 3000);
     expect(calls.filter((c) => c.startsWith('POST')).length).toBe(before); // nothing was created
   }, 90_000);
 
@@ -394,5 +419,111 @@ describe('Wallet Click UI', () => {
     await waitFor(() => text().includes('Pinned'), 'Windows 11 Start menu');
     expect(host.querySelector('.s11-search')).toBeTruthy();
     localStorage.clear();
+  });
+
+  it('applies a theme the moment you click it, and Cancel puts the old one back', async () => {
+    status = { ...status, authed: true };
+    localStorage.clear();
+    await mount();
+    await click(desktopIcon('Themes'), 'Themes');
+    await waitFor(() => !!option('Windows 10'), 'theme list');
+    expect(button('Apply')).toBeUndefined(); // nothing to apply: it's instant
+    await click(option('Windows 10'), 'Windows 10');
+    expect(document.documentElement.dataset.theme).toBe('win10'); // no OK needed
+    expect(localStorage.getItem('wc.theme')).toBe('win10');
+    await click(option('Windows 95'), 'Windows 95');
+    expect(document.documentElement.dataset.theme).toBe('win95');
+    await click(button('Cancel'), 'Cancel');
+    expect(document.documentElement.dataset.theme).toBe('win98');
+    expect(localStorage.getItem('wc.theme')).toBe('win98');
+    expect((host.querySelector('.desktop') as HTMLElement).dataset.wallpaper).toBe('teal');
+    localStorage.clear();
+  });
+
+  it('has a dark mode for every theme: Light, Dark or Match device (the default)', async () => {
+    status = { ...status, authed: true };
+    localStorage.clear();
+    await mount();
+    expect(document.documentElement.dataset.mode).toBe('light'); // Match device, and the (fake) device is light
+    await click(desktopIcon('Themes'), 'Themes');
+    await waitFor(() => text().includes('Appearance'), 'appearance choice');
+    expect(text()).toContain('light right now');
+    const radio = (label: string) => [...host.querySelectorAll('.mode98 [role="radio"]')].find((b) => b.textContent === label);
+    expect(radio('Match device')?.getAttribute('aria-checked')).toBe('true');
+    await click(radio('Dark'), 'Dark');
+    expect(document.documentElement.dataset.mode).toBe('dark');
+    expect(localStorage.getItem('wc.mode')).toBe('dark');
+    // Each theme keeps it.
+    for (const t of ['Windows 95', 'Windows 10', 'Windows 11', 'Windows 98']) {
+      await click(option(t), t);
+      expect(document.documentElement.dataset.mode).toBe('dark');
+    }
+    await click(button('OK'), 'OK');
+    expect(document.documentElement.dataset.theme).toBe('win98');
+    expect(localStorage.getItem('wc.mode')).toBe('dark');
+    localStorage.clear();
+  });
+
+  it('puts a long Privacy wait on the desktop as a countdown bomb with its dollar value, and it goes BOOM at zero', async () => {
+    status = { ...status, authed: true };
+    serverOrders = [];
+    const waiting = (over: Partial<Transfer>) => privacyTransfer({ state: 'wait', stage: 'holding', received: '0.05', xmr: '0.2231', usdValue: 118.42, ...over });
+    serverTransfers = [
+      waiting({ id: 't_long', delayHours: 24, releaseAt: Date.now() + 5 * 3_600_000 + 7 * 60_000 }),
+      waiting({ id: 't_soon', delayHours: 4, releaseAt: Date.now() + 1500, usdValue: 233.04 }),
+      privacyTransfer({ id: 't_done', state: 'done', stage: 'done', delayHours: 24, usdt: '99.10' }),
+      privacyTransfer({ id: 't_unpaid', delayHours: 24 }), // nothing paid in yet: no bomb
+    ];
+    Object.assign(sounds, { boom: 0 });
+    await mount();
+    await waitFor(() => host.querySelectorAll('.bomb-icon').length === 2, 'two bombs');
+    const long = [...host.querySelectorAll('.bomb-icon')].find((b) => b.textContent?.includes('118.42')) as HTMLElement;
+    expect(long.querySelector('.bomb-timer')?.textContent).toMatch(/^05:0[67]:\d\d$/);
+    expect(long.textContent).toContain('→ Coinbase');
+    expect(long.querySelector('.bomb-spark')).toBeTruthy(); // the fuse is lit
+
+    // The short one runs out: BOOM, then a USDT coin while it swaps.
+    await waitFor(() => !!host.querySelector('.bomb-icon.is-boom'), 'boom', 5000);
+    expect(sounds.boom).toBe(1);
+    const blown = host.querySelector('.bomb-icon.is-boom') as HTMLElement;
+    expect(blown.textContent).toContain('00:00:00');
+    expect(blown.textContent).toContain('Swapping…');
+    expect(blown.textContent).toContain('≈ $233.04');
+
+    // Clicking a bomb opens its transfer.
+    await click(long, 'bomb');
+    await waitFor(() => text().includes('Holding 0.2231 XMR'), 'transfer window');
+    serverTransfers = [];
+  }, 20_000);
+
+  it('shows the server log and this browser’s errors in a Logs window', async () => {
+    status = { ...status, authed: true };
+    serverOrders = [];
+    serverTransfers = [];
+    await mount();
+    await waitFor(() => !!desktopIcon('Logs'), 'Logs icon');
+    await click(desktopIcon('Logs'), 'Logs');
+    await waitFor(() => text().includes('NEW → PENDING'), 'server log lines');
+    expect(text()).toContain("couldn't check with FixedFloat: timeout×3"); // a repeat is one line with a count
+    expect(text()).toMatch(/browser\s*GET \/api\/destinations → 404/); // what failed in this browser
+    const seg = (label: string) => [...host.querySelectorAll('.win-logs .seg-btn')].find((b) => b.textContent === label);
+    await click(seg('Errors'), 'Errors');
+    expect(text()).not.toContain('NEW → PENDING');
+    expect(text()).toContain('POST /api/orders → 502');
+    // An error's stack opens with a click.
+    await click(host.querySelector('.log-row.has-detail') ?? undefined, 'error row');
+    expect(text()).toContain('at createOrder (orders.js:12)');
+    await click(button('Close'), 'close');
+    await waitFor(() => !host.querySelector('.win-logs'), 'Logs closed', 3000);
+  });
+
+  it('lists many recent transfers (not just the last twelve), in a box that scrolls', async () => {
+    status = { ...status, authed: true };
+    serverTransfers = [];
+    serverOrders = Array.from({ length: 30 }, (_, i) => ({ ...baseOrder, id: `ORD${i}`, stage: 'done' as const, received: '0.001', usdt: '80.00', createdAt: Date.now() - i * 3_600_000 }));
+    await mount();
+    await waitFor(() => host.querySelectorAll('.listview tbody tr').length > 0, 'transfer list');
+    expect(host.querySelectorAll('.listview tbody tr')).toHaveLength(30);
+    serverOrders = [];
   });
 });

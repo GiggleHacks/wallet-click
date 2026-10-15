@@ -1,6 +1,6 @@
 {
   "name": "wallet-click",
-  "version": "1.4.0",
+  "version": "1.6.0",
   "description": "Get paid in BTC, ETH or XMR at a fresh or permanent address; FixedFloat swaps it to USDT (optionally through Monero) and sends it to Coinbase",
   "scripts": {
     "dev": "concurrently -k -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
@@ -23,6 +23,7 @@
     "@scure/btc-signer": "^2.0.1",
     "fastify": "^5.12.5",
     "motion": "^14.1.0",
+    "pino": "^10.4.0",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

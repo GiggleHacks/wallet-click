@@ -1,5 +1,5 @@
-type PrefKey = 'sound' | 'remember';
-const DEFAULTS: Record<PrefKey, boolean> = { sound: true, remember: true };
+type PrefKey = 'sound' | 'remember' | 'hideAddr';
+const DEFAULTS: Record<PrefKey, boolean> = { sound: true, remember: true, hideAddr: false };
 
 export function getPref(key: PrefKey): boolean {
   try {

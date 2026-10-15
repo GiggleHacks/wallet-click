@@ -308,7 +308,12 @@ function progressOf(t: Transfer, shown: Phase, now: number, elapsed: number): nu
   }
 }
 
-const MARK: Record<TransferStep['status'], string> = { done: '✔', active: '►', pending: '○', failed: '!' };
+/** A tiny fast-forward sign for the time-lapse (an SVG: emoji render in another font, or in colour on phones). */
+const FastForward = () => (
+  <svg viewBox="0 0 16 12" width="16" height="12" aria-hidden="true">
+    <path d="M1 1l6.5 5L1 11zM8 1l6.5 5L8 11z" fill="currentColor" />
+  </svg>
+);
 
 function Steps({ steps, releaseAt }: { steps: TransferStep[]; releaseAt: number | null }) {
   return (
@@ -317,9 +322,7 @@ function Steps({ steps, releaseAt }: { steps: TransferStep[]; releaseAt: number 
         .map((s) => (s.key === 'wait' && !s.detail && releaseAt ? { ...s, detail: `until ${new Date(releaseAt).toLocaleString()}` } : s))
         .map((s) => (
           <li key={s.key} className={`step is-${s.status}`}>
-            <span className="step-mark" aria-hidden="true">
-              {MARK[s.status]}
-            </span>
+            <span className="step-mark" aria-hidden="true" />
             <span className="step-text">
               <span className="step-label">{s.label}</span>
               {s.detail && <span className="step-detail"> · {s.detail}</span>}
@@ -511,7 +514,11 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
         <div className="lines">
           {main && <p className="line-main">{main}</p>}
           {sub && <p className="line-sub">{sub}</p>}
-          {shown === 'waiting' && timeLapse && <p className="line-sub timelapse">⏩ Time-lapse: a day in a few seconds.</p>}
+          {shown === 'waiting' && timeLapse && (
+            <p className="line-sub timelapse">
+              <FastForward /> Time-lapse: a day in a few seconds.
+            </p>
+          )}
           {!finished && t.waitingFor && shown !== 'waiting' && <p className="line-sub">Waiting for {t.waitingFor}…</p>}
           {t.error && !t.attention && <p className="line-sub">Retrying: {t.error}</p>}
         </div>

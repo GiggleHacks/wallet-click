@@ -249,6 +249,15 @@ export const sfx = {
     whoosh(0.22, 0.42, 160, 900, 0.06);
     tone(196, 0.24, 0.5, { type: 'triangle', gain: 0.08, slideTo: 392 });
   },
+  /** A countdown's last seconds. */
+  tick: () => tone(2400, 0, 0.025, { type: 'square', gain: 0.02, lowpass: 4200 }),
+  /** The countdown ran out: a cartoon explosion (a falling rumble and a deep thump), then coins. */
+  boom: () => {
+    whoosh(0, 1.1, 1400, 70, 0.3);
+    tone(96, 0, 0.8, { type: 'triangle', gain: 0.32, slideTo: 30 });
+    tone(52, 0.03, 1, { gain: 0.28, slideTo: 26 });
+    coins(0.75, 0.045);
+  },
 };
 
 /** Browsers only allow audio after a user gesture; warm the context on the first tap. */

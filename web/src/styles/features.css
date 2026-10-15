@@ -31,6 +31,10 @@
   margin-left: 0;
 }
 
+.payout-line code + .btn-icon + .btn-icon {
+  margin-left: 0;
+}
+
 .extra-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -54,7 +58,7 @@
 .extra-btn small {
   display: block;
   font-size: 12px;
-  color: #333;
+  color: var(--text-dim);
 }
 
 .cell-coin .tag {
@@ -227,7 +231,7 @@ html[data-theme='win11'] .extra-btn small {
   list-style: none;
   margin: 8px 0 0;
   padding: 6px 8px;
-  background: #fff;
+  background: var(--field);
   box-shadow: var(--sunken);
 }
 
@@ -246,7 +250,7 @@ html[data-theme='win11'] .extra-btn small {
 }
 
 .step.is-done .step-mark {
-  color: #107c10;
+  color: var(--ok);
 }
 
 .step.is-active {
@@ -258,21 +262,21 @@ html[data-theme='win11'] .extra-btn small {
 }
 
 .step.is-pending {
-  color: #6d6d6d;
+  color: var(--text-faint);
 }
 
 .step.is-failed .step-mark,
 .step.is-failed {
-  color: #a00000;
+  color: var(--error);
 }
 
 .step-detail {
   font-weight: 400;
-  color: #3a3a3a;
+  color: var(--text-dim);
 }
 
 .stage-holding {
-  background: #e8e0ff;
+  background: var(--holding);
 }
 
 /* ---------------------------------------------------------------- my addresses */
@@ -443,7 +447,7 @@ html[data-theme='win11'] .extra-btn small {
 
 .vault-ring-track {
   fill: none;
-  stroke: rgba(0, 0, 0, 0.14);
+  stroke: var(--ring-track);
   stroke-width: 3.5;
 }
 
@@ -580,7 +584,7 @@ html[data-theme='win11'] .extra-btn small {
 .pick-btn small {
   display: block;
   font-size: 11px;
-  color: #333;
+  color: var(--text-dim);
 }
 
 .pick-btn .stack-badge {
@@ -597,4 +601,408 @@ html[data-theme='win11'] .pick-btn small {
   .pick-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------------------------------------------------------------- layout and type fixes */
+
+/* A station is as wide as its widest part (icon or label), so translateX(-50%) really centres it. */
+.station {
+  width: max-content;
+}
+
+/* The slider's end labels stay inside it (the middle ones sit right under their stop). */
+.delay-tick:first-child {
+  transform: none;
+}
+
+.delay-tick:last-child {
+  transform: translateX(-100%);
+}
+
+/* A button in a bold row stays a normal button. */
+.wait-row .btn98 {
+  font-weight: 400;
+}
+
+/* Step marks are drawn, not typed: symbol characters come from other fonts (or as emoji on phones). */
+.step-mark {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  font-size: 0;
+}
+
+.step-mark::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+
+.step.is-done .step-mark::before {
+  width: 4px;
+  height: 8px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg);
+}
+
+.step.is-active .step-mark::before {
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 5px 0 5px 8px;
+  border-color: transparent transparent transparent currentColor;
+}
+
+.step.is-pending .step-mark::before {
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+
+.step.is-failed .step-mark::before {
+  width: 3px;
+  height: 10px;
+  background: linear-gradient(currentColor 0 65%, transparent 65% 80%, currentColor 80%);
+}
+
+.timelapse svg {
+  vertical-align: -2px;
+}
+
+/* Windows 10 and 11 emphasise with Segoe's semibold, not bold. */
+html[data-shell='win10'] b,
+html[data-shell='win10'] strong,
+html[data-shell='win11'] b,
+html[data-shell='win11'] strong,
+html[data-shell='win10'] .book-name,
+html[data-shell='win11'] .book-name {
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  /* The theme and wallpaper lists show everything (the wallpapers scroll). */
+  .win-display .listbox {
+    height: auto;
+    max-height: 46vh;
+  }
+
+  /* A darker backdrop behind dialogs, so the window underneath doesn't read as overlapping text. */
+  html[data-theme] .modal-layer {
+    background: rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* The time-lapse note: the theme's accent text colour (readable in light and dark). */
+.timelapse {
+  color: var(--accent-text);
+}
+
+/* Windows 11 buttons barely change when pressed: a chosen option gets the accent outline. */
+html[data-shell='win11'] .seg-btn.is-pressed {
+  box-shadow: inset 0 0 0 2px var(--navy);
+}
+
+/* Windows 10 live tiles: icon centred, name and subtitle along the bottom-left. */
+html[data-theme='win10'] .coin-btn .coin-name,
+html[data-theme='win10'] .coin-btn .coin-sub {
+  align-self: stretch;
+  text-align: left;
+}
+
+/* ---------------------------------------------------------------- countdown bombs (long Privacy waits) */
+
+.bomb-icon {
+  gap: 2px;
+  margin-top: 4px;
+}
+
+/* A red LED countdown strapped on top. */
+.bomb-timer {
+  display: block;
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: #140000;
+  box-shadow:
+    inset 0 0 0 1px #000,
+    0 0 0 1px #6a6a6a,
+    0 2px 3px rgba(0, 0, 0, 0.55);
+  color: #ff3b2f;
+  font: 700 12px/15px var(--mono);
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 4px rgba(255, 50, 40, 0.9);
+}
+
+/* Not counting yet (the Monero is still unlocking), or stopped. */
+.bomb-icon.is-armed .bomb-timer,
+.bomb-icon.is-attention .bomb-timer,
+.bomb-icon.is-swapping .bomb-timer {
+  color: #9a2a22;
+  text-shadow: none;
+}
+
+.bomb-art {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-top: -3px; /* the wires reach up into the timer */
+  font-style: normal;
+}
+
+.bomb-art i {
+  display: block;
+  line-height: 0;
+}
+
+.bomb-icon span small {
+  display: block;
+  font-size: 11px;
+  opacity: 0.92;
+}
+
+.bomb-icon.is-attention span small {
+  font-weight: 700;
+}
+
+.bomb-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spark 0.22s steps(2) infinite;
+}
+
+/* The last minute: it shakes. */
+.bomb-icon.is-critical .bomb-art {
+  animation: bomb-shake 0.3s linear infinite;
+}
+
+.bomb-icon.is-critical .bomb-timer {
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes spark {
+  0% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.65) rotate(25deg);
+    opacity: 0.75;
+  }
+}
+
+@keyframes bomb-shake {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate(-1.5px, 0.5px) rotate(-4deg);
+  }
+  75% {
+    transform: translate(1.5px, -0.5px) rotate(4deg);
+  }
+}
+
+/* Phones: the soonest bomb sits in the taskbar instead. */
+.tray-bomb {
+  display: none;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: 3px;
+  color: inherit;
+  font: inherit;
+}
+
+.tray-bomb-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tray-bomb-text b {
+  color: #e0201a;
+  font: 700 11px/1.1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tray-bomb-text small {
+  font-size: 10px;
+}
+
+.tray-bomb sup {
+  align-self: start;
+  font-size: 9px;
+}
+
+.tray-bomb.is-boom {
+  animation: blink 0.25s steps(1) 8;
+}
+
+@media (max-width: 560px) {
+  .tray-bomb {
+    display: grid;
+  }
+}
+
+/* ---------------------------------------------------------------- Logs */
+
+.win-logs {
+  width: min(780px, 100%);
+}
+
+.logs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 6px;
+}
+
+.logs-bar .seg98 {
+  margin: 0;
+}
+
+.logs-bar .seg-btn {
+  min-width: 0;
+  padding-inline: 12px;
+}
+
+.logs-bar > .btn98 {
+  margin-left: auto;
+}
+
+.log-list {
+  height: min(440px, 56vh);
+  margin: 0;
+  padding: 2px 0;
+  overflow: auto;
+  list-style: none;
+  background: var(--field);
+  color: var(--text);
+  box-shadow: var(--sunken);
+  font: 12px/1.4 var(--mono);
+}
+
+.log-row {
+  display: grid;
+  grid-template-columns: auto 14px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  padding: 1px 6px;
+}
+
+.log-row:nth-child(even) {
+  background: rgba(127, 127, 127, 0.07);
+}
+
+.log-row time {
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.log-row svg {
+  margin-top: 2px;
+}
+
+.log-msg {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.log-row.is-error .log-msg {
+  color: var(--error);
+}
+
+.log-row.has-detail {
+  cursor: pointer;
+}
+
+.log-src,
+.log-count {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 14px;
+  vertical-align: 1px;
+}
+
+.log-src {
+  margin-right: 6px;
+  box-shadow: inset 0 0 0 1px currentColor;
+  opacity: 0.75;
+}
+
+.log-count {
+  margin-left: 6px;
+  background: var(--navy);
+  color: #fff;
+}
+
+.log-detail {
+  margin: 2px 0 2px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+.log-empty {
+  padding: 18px 12px;
+  color: var(--text-dim);
+  font-family: var(--font);
+  text-align: center;
+}
+
+@media (max-width: 560px) {
+  .log-list {
+    height: 58vh;
+    font-size: 11px;
+  }
+
+  .log-row {
+    grid-template-columns: auto 12px minmax(0, 1fr);
+    gap: 4px;
+    padding-inline: 4px;
+  }
+}
+
+/* Recent transfers: up to ~15 rows tall, scrolling under fixed headings (on a computer, Home.tsx trims it so the
+   window ends above the taskbar). */
+.win-home .listview {
+  max-height: min(430px, 52vh);
+}
+
+@media (max-width: 560px) {
+  /* Long statuses ("Waiting 23 h 11 min") wrap rather than push the table off the screen. */
+  .listview td:nth-child(4) {
+    white-space: normal;
+  }
+
+  /* Windows 11 centres the taskbar buttons; with a countdown in the tray they move left to make room. */
+  html[data-theme='win11'] .taskbar:has(.tray-bomb) {
+    justify-content: flex-start;
+  }
+}
+
+.log-tally {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Windows 11 windows are see-through glass; a wall of log text needs a solid page behind it. */
+html[data-theme='win11'] .log-list {
+  background: #fbfbfb;
+}
+
+html[data-mode='dark'][data-theme='win11'] .log-list {
+  background: #1d1d1d;
 }

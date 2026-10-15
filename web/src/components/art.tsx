@@ -73,10 +73,13 @@ export function CoinbaseIcon(p: IconProps) {
 export function XmrIcon(p: IconProps) {
   return (
     <Svg {...p} label="Monero">
-      <Rim fill="#ff6600" edge="#b34700" />
-      {/* The grey band across the bottom of the coin, then the white "M". */}
-      <path d="M1.86 21h28.28A15 15 0 0 1 1.86 21z" fill="#4c4c4c" />
-      <path d="M8 21V10.5l8 8 8-8V21h-3.4v-6.3L16 19.3l-4.6-4.6V21z" fill="#fff" />
+      {/* The official symbol, scaled into the 30px coin: a white disc, the orange top with the "M" cut out of it
+          (its feet run out to the rim), and the grey base with the V notch under the M. */}
+      <circle cx="16" cy="16.6" r="15" fill="#b34700" />
+      <circle cx="16" cy="16" r="15" fill="#fff" />
+      <path d="M16 1A15 15 0 0 0 1.76 20.74H6.25V8.12L16 17.87l9.75-9.75v12.62h4.49A15 15 0 0 0 16 1z" fill="#ff6600" />
+      <path d="M3.18 23.79a15 15 0 0 0 25.64 0H22.5v-7.94L16 22.35l-6.5-6.5v7.94z" fill="#4c4c4c" />
+      <path d="M5.5 10.5A12.5 12.5 0 0 1 22 4.6" fill="none" stroke="#fff" strokeOpacity=".45" strokeWidth="1.6" strokeLinecap="round" />
     </Svg>
   );
 }
@@ -113,6 +116,16 @@ export function VaultIcon({ size = 32 }: IconProps) {
 }
 
 /** The address book: a little card file. */
+export function EyeIcon({ size = 16, off = false }: IconProps & { off?: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 8s2.6-4.5 7-4.5S15 8 15 8s-2.6 4.5-7 4.5S1 8 1 8z" />
+      <circle cx="8" cy="8" r="2" />
+      {off && <path d="M2.5 13.5l11-11" />}
+    </svg>
+  );
+}
+
 export function BookIcon({ size = 32 }: IconProps) {
   return (
     <svg viewBox="0 0 32 32" width={size} height={size} role="img" aria-label="Address Book">
@@ -179,7 +192,7 @@ export function SwapMachine({ size = 56, spinning = false }: IconProps & { spinn
 export function Hourglass({ size = 20 }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" width={size} height={size} className="hourglass" aria-hidden="true">
-      <path d="M3 1h10v1.6H12c0 2.6-1.4 4.2-3 5.4 1.6 1.2 3 2.8 3 5.4h1V15H3v-1.6h1c0-2.6 1.4-4.2 3-5.4-1.6-1.2-3-2.8-3-5.4H3z" fill="#000" />
+      <path d="M3 1h10v1.6H12c0 2.6-1.4 4.2-3 5.4 1.6 1.2 3 2.8 3 5.4h1V15H3v-1.6h1c0-2.6 1.4-4.2 3-5.4-1.6-1.2-3-2.8-3-5.4H3z" fill="currentColor" />
       <path d="M5.4 2.6h5.2c0 2-1.1 3.4-2.6 4.4-1.5-1-2.6-2.4-2.6-4.4z" fill="#fff" />
       <path d="M5.4 13.4c0-1.6 1-2.8 2.6-3.9 1.6 1.1 2.6 2.3 2.6 3.9z" fill="#c8a24a" />
       <path d="M6.6 4.2h2.8c-.3.8-.8 1.4-1.4 1.9-.6-.5-1.1-1.1-1.4-1.9z" fill="#c8a24a" />
@@ -347,6 +360,89 @@ export function PowerIcon({ size = 16 }: IconProps) {
     <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
       <path d="M8 1.5v6" />
       <path d="M4.6 3.6a5.5 5.5 0 1 0 6.8 0" />
+    </svg>
+  );
+}
+
+/** A cartoon bomb: round, black, with a fuse (sparking when `lit`) and two wires up to the timer above it. */
+export function BombIcon({ size = 48, lit = false }: IconProps & { lit?: boolean }) {
+  return (
+    <svg viewBox="0 0 48 48" width={size} height={size} className={`bomb-svg ${lit ? 'is-lit' : ''}`} aria-hidden="true">
+      <path d="M17 0c0 6-4 8-3 14" fill="none" stroke="#d42020" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M23 0c1 5 4 7 2 12" fill="none" stroke="#1f5fd6" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="21" cy="30.6" r="15.5" fill="#000" opacity=".3" />
+      <circle cx="21" cy="30" r="15.5" fill="#262626" />
+      <path d="M33.4 21.6A15.5 15.5 0 0 1 9.6 41a17 17 0 0 0 23.8-19.4z" fill="#000" opacity=".45" />
+      <ellipse cx="14.6" cy="23.4" rx="4.6" ry="2.8" transform="rotate(-38 14.6 23.4)" fill="#fff" opacity=".42" />
+      <circle cx="11.6" cy="28.4" r="1.1" fill="#fff" opacity=".35" />
+      <rect x="27.5" y="11.5" width="9" height="7" rx="1.2" transform="rotate(42 32 15)" fill="#8a8a8a" stroke="#3a3a3a" strokeWidth="1" />
+      <path d="M33.8 11.4c2.4-3.4 5.6-4 7.4-2.2 1.4 1.4 1.2 3.4 2.8 4" fill="none" stroke="#c9a46a" strokeWidth="1.8" strokeLinecap="round" />
+      {lit && (
+        <g transform="translate(44 13)">
+          <g className="bomb-spark">
+            <path d="M0-6 1.4-1.8 6-2 2.2.6 4.4 5 0 2.4-4.4 5-2.2.6-6-2-1.4-1.8z" fill="#ffd23a" />
+            <circle r="2" fill="#fff6c0" />
+          </g>
+        </g>
+      )}
+    </svg>
+  );
+}
+
+/** The comic-book "BOOM!" when a countdown runs out. */
+export function BoomBurst({ size = 48 }: IconProps) {
+  const spikes = Array.from({ length: 24 }, (_, i) => {
+    const r = i % 2 ? 11 : 23;
+    const a = (i / 24) * Math.PI * 2;
+    return `${(24 + Math.cos(a) * r).toFixed(1)},${(24 + Math.sin(a) * r * 0.86).toFixed(1)}`;
+  }).join(' ');
+  return (
+    <svg viewBox="0 0 48 48" width={size} height={size} className="boom-svg" role="img" aria-label="Boom">
+      <polygon points={spikes} fill="#ffd23a" stroke="#d42020" strokeWidth="1.6" strokeLinejoin="round" />
+      <circle cx="24" cy="24" r="10.5" fill="#ff7a1a" />
+      <text x="24" y="28" textAnchor="middle" fontSize="11" fontWeight="900" fill="#fff" stroke="#8a1010" strokeWidth=".8" paintOrder="stroke" fontFamily="Impact, 'Arial Black', sans-serif">
+        BOOM!
+      </text>
+    </svg>
+  );
+}
+
+/** Desktop icon: a text file with a blue title band and lines (the Logs window). */
+export function LogIcon({ size = 32 }: IconProps) {
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden="true">
+      <path d="M6 2h15l6 6v22H6z" fill="#fff" stroke="#404040" strokeWidth="1" />
+      <path d="M21 2v6h6" fill="#d4d0c8" stroke="#404040" strokeWidth="1" />
+      <rect x="8.5" y="5" width="10" height="3" fill="#000080" />
+      {[11, 14, 17, 20, 23, 26].map((y, i) => (
+        <rect key={y} x="8.5" y={y} width={[15, 12, 16, 9, 14, 11][i]} height="1.4" fill={i === 3 ? '#d42020' : '#5a5a5a'} />
+      ))}
+    </svg>
+  );
+}
+
+/** A log line's level: blue "i", yellow warning, red cross. */
+export function LevelIcon({ level, size = 14 }: IconProps & { level: 'debug' | 'info' | 'warn' | 'error' }) {
+  return (
+    <svg viewBox="0 0 16 16" width={size} height={size} role="img" aria-label={level === 'error' ? 'Error' : level === 'warn' ? 'Warning' : 'Info'}>
+      {level === 'error' ? (
+        <>
+          <circle cx="8" cy="8" r="7" fill="#d42020" stroke="#7a0000" />
+          <path d="m5.2 5.2 5.6 5.6m0-5.6-5.6 5.6" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+        </>
+      ) : level === 'warn' ? (
+        <>
+          <path d="M8 1.2 15.2 14.4H.8z" fill="#ffd23a" stroke="#000" strokeWidth=".9" strokeLinejoin="round" />
+          <rect x="7.2" y="5.4" width="1.6" height="5" fill="#000" />
+          <rect x="7.2" y="11.4" width="1.6" height="1.6" fill="#000" />
+        </>
+      ) : (
+        <>
+          <circle cx="8" cy="8" r="7" fill="#2a6fd6" stroke="#0b3a8a" />
+          <rect x="7.1" y="7" width="1.8" height="5" fill="#fff" />
+          <circle cx="8" cy="4.6" r="1.1" fill="#fff" />
+        </>
+      )}
     </svg>
   );
 }

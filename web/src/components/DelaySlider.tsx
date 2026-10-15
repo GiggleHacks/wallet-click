@@ -21,7 +21,7 @@ export function DelaySlider({ value, delays, onChange, disabled }: { value: numb
             key={d}
             type="button"
             className={`delay-tick ${d === value ? 'is-on' : ''}`}
-            style={{ left: `calc(8px + (100% - 16px) * ${n / Math.max(1, delays.length - 1)})` }}
+            style={n === 0 ? { left: 0 } : { left: `calc(8px + (100% - 16px) * ${n / Math.max(1, delays.length - 1)})` }}
             onClick={() => onChange(d)}
             disabled={disabled}
           >
