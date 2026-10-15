@@ -49,6 +49,7 @@ export function Receive({ order, demo, offline, creating, onNew, onBack, onShowP
 
   const left = order.expiresAt ? order.expiresAt - now : null;
   const waiting = order.stage === 'waiting' || order.stage === 'expired';
+  const payout = order.payoutLabel ?? 'Coinbase';
 
   async function copy() {
     if (await copyText(order.address)) {
@@ -103,16 +104,19 @@ export function Receive({ order, demo, offline, creating, onNew, onBack, onShowP
             <li>
               Minimum <b>{trimAmount(order.min)} {order.coin}</b>
               {order.minUsd ? ` (≈ $${order.minUsd.toFixed(2)})` : ''}
-              {order.max ? `, maximum ${trimAmount(order.max)} ${order.coin}` : ''}. Less than the minimum is sent back to the sender.
+              {order.max ? `, maximum ${trimAmount(order.max)} ${order.coin}` : ''}.{' '}
+              {order.coin === 'XMR'
+                ? "Less than the minimum can't be swapped; Monero hides who paid, so you'd give a refund address."
+                : 'Less than the minimum is sent back to the sender.'}
             </li>
-            <li>Arrives as USDT in your Coinbase.</li>
+            <li>{order.toCcy === 'XMR' ? 'Becomes Monero first, then USDT (Privacy Enhanced).' : `Arrives as USDT in ${payout}.`}</li>
             <li>
               {left !== null && left > 0 ? (
                 <>
-                  Pay within <b>{clock(left)}</b>. Late payments still go through for {order.watchDays} days.
+                  Pay within <b>{clock(left)}</b>. FixedFloat still takes a late payment up to 24 hours after the address was made.
                 </>
               ) : (
-                `The 30-minute window has passed. A payment in the next ${order.watchDays} days still goes through, but a new address is better.`
+                'The 30-minute window has passed. A payment within 24 hours of making this address still goes through at the market rate, but a new address is better.'
               )}
             </li>
           </ul>
@@ -131,7 +135,7 @@ export function Receive({ order, demo, offline, creating, onNew, onBack, onShowP
             <CoinIcon coin={order.coin} size={18} />
             <span>
               {order.stage === 'done'
-                ? `Done: ${order.usdt ? `${usdt(order.usdt)} USDT` : 'USDT'} sent to Coinbase.`
+                ? `Done: ${order.usdt ? `${usdt(order.usdt)} USDT` : 'USDT'} sent to ${payout}.`
                 : `${STAGE_LABEL[order.stage]}${order.received ? `: ${trimAmount(order.received)} ${order.coin}` : ''}`}
             </span>
             <button type="button" className="btn98" onClick={onShowProgress}>

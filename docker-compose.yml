@@ -7,12 +7,15 @@ services:
     env_file:
       - path: .env
         required: false
-    ports:
-      # Localhost only. Put it on your tailnet with `tailscale serve --bg --https=8443 http://127.0.0.1:8787`,
-      # or on the public internet (still behind the password) with `tailscale funnel --bg --https=8443 http://127.0.0.1:8787`.
-      # Never write "8787:8787": Docker would publish it on the VPS's public IP and bypass ufw.
-      # Change WC_PORT in .env if 8787 is already used on the host.
-      - "127.0.0.1:${WC_PORT:-8787}:8787"
+    # Host networking, so the container can reach the VPS's monero-wallet-rpc on 127.0.0.1:18083
+    # (never bind wallet-rpc to the Docker bridge: other containers could reach a wallet that can spend).
+    # The server itself still listens on localhost only: HOST=127.0.0.1, port WC_PORT (default 8787).
+    # Put it on your tailnet with `tailscale serve --bg --https=8443 http://127.0.0.1:8787`,
+    # or on the public internet (still behind the password) with `tailscale funnel` instead.
+    network_mode: host
+    environment:
+      HOST: 127.0.0.1
+      PORT: ${WC_PORT:-8787}
     volumes:
       - wc-data:/app/data
 

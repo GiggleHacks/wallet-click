@@ -44,9 +44,29 @@ export const COINS = {
     blockMinutes: 0.2,
     explorerTx: (h: string) => `https://etherscan.io/tx/${h}`,
   },
+  XMR: {
+    code: 'XMR',
+    name: 'Monero',
+    network: 'Monero',
+    probeAmount: 0.1,
+    blockMinutes: 2,
+    explorerTx: (h: string) => `https://xmrchain.net/tx/${h}`,
+  },
 } as const;
 export type Coin = keyof typeof COINS;
 export const COIN_IDS = Object.keys(COINS) as Coin[];
+
+/** What a FixedFloat order can pay out: USDT (ERC-20) to a saved destination, or XMR to one of our own subaddresses. */
+export const PAYOUTS = {
+  USDT: { network: 'ETH', label: 'USDT on Ethereum', explorerTx: (h: string) => `https://etherscan.io/tx/${h}` },
+  XMR: { network: 'XMR', label: 'Monero', explorerTx: (h: string) => `https://xmrchain.net/tx/${h}` },
+} as const;
+export type PayoutCcy = keyof typeof PAYOUTS;
+
+/** Privacy Enhanced: how long the Monero waits between the two swaps. */
+export const PRIVACY_DELAYS = [4, 12, 24, 42] as const;
+
+const num = (v: string | undefined) => (v && Number.isFinite(Number(v)) ? Number(v) : null);
 
 export const config = {
   host: env.HOST ?? '127.0.0.1',
@@ -83,4 +103,19 @@ export const config = {
     network: 'Ethereum (ERC-20)',
     explorerTx: (h: string) => `https://etherscan.io/tx/${h}`,
   },
+
+  /** The VPS's monero-wallet-rpc. Unset = Monero wallet features (Privacy Enhanced, permanent XMR addresses) are off. */
+  monero: {
+    rpcUrl: env.MONERO_RPC_URL?.trim() || null,
+    user: env.MONERO_RPC_USER || null,
+    password: env.MONERO_RPC_PASSWORD || null,
+    /** The wallet account Wallet Click keeps to itself (created on first use). Never account 0. */
+    accountLabel: env.MONERO_ACCOUNT_LABEL?.trim() || 'wallet-click',
+  },
+
+  /** Unlocks data/wallet.enc (the BTC/ETH hot wallet seed). Unset = permanent BTC/ETH addresses are off. */
+  walletKey: env.WALLET_KEY || null,
+
+  /** Testing only: Privacy Enhanced waits this many minutes instead of the chosen hours. */
+  privacyTestDelayMin: num(env.PRIVACY_TEST_DELAY_MIN),
 };

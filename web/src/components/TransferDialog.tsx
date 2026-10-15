@@ -51,7 +51,7 @@ const X = { coin: 13, swap: 50, coinbase: 87 };
  * Coins travelling straight down a lane at a steady speed. Each runner is as wide as the lane and slides
  * by its own width (translateX 100%): a pure GPU transform, so it stays smooth at full frame rate.
  */
-function Flyers({ from, to, children, count = 4, duration = 1.6 }: { from: number; to: number; children: ReactNode; count?: number; duration?: number }) {
+export function Flyers({ from, to, children, count = 4, duration = 1.6 }: { from: number; to: number; children: ReactNode; count?: number; duration?: number }) {
   return (
     <div className="lane" style={{ left: `${from}%`, width: `${to - from}%` }}>
       {Array.from({ length: count }, (_, i) => (
@@ -92,7 +92,7 @@ function Sparkles({ side, count = 6 }: { side: 'back' | 'front'; count?: number 
 }
 
 /** A one-shot burst (ring + flying dots). Give it a new key to play it again. */
-function Burst({ color, center }: { color: string; center?: boolean }) {
+export function Burst({ color, center }: { color: string; center?: boolean }) {
   return (
     <div className={`burst ${center ? 'is-center' : ''}`} style={{ '--burst': color } as CSSProperties}>
       <span className="burst-ring" />
@@ -103,7 +103,7 @@ function Burst({ color, center }: { color: string; center?: boolean }) {
   );
 }
 
-function Station({ x, label, children, pulse, dim, working }: { x: number; label: string; children: ReactNode; pulse?: boolean; dim?: boolean; working?: boolean }) {
+export function Station({ x, label, children, pulse, dim, working }: { x: number; label: string; children: ReactNode; pulse?: boolean; dim?: boolean; working?: boolean }) {
   return (
     <div className={`station ${dim ? 'is-dim' : ''} ${working ? 'is-working' : ''}`} style={{ left: `${x}%` }}>
       <motion.div className="station-icon" animate={pulse ? { scale: [1, 1.15, 1] } : { scale: 1 }} transition={{ duration: 0.45, ease: 'easeOut' }}>
@@ -115,6 +115,10 @@ function Station({ x, label, children, pulse, dim, working }: { x: number; label
 }
 
 type Fx = { key: number; kind: 'in' | 'out' | 'done' };
+
+/** Where the USDT goes: "Coinbase" unless another destination was picked. */
+export const payoutName = (order: Order) => order.payoutLabel ?? 'Coinbase';
+const isCoinbase = (order: Order) => !order.destinationId || order.destinationId === 'coinbase';
 
 export function TransferStrip({ order, shown }: { order: Order; shown: Stage }) {
   const theme = useTheme();
@@ -157,8 +161,8 @@ export function TransferStrip({ order, shown }: { order: Order; shown: Stage }) 
         {fx?.kind === 'in' && <span key={fx.key} className="swap-flash" />}
         {fx?.kind === 'out' && <Burst key={fx.key} color="#26a17b" />}
       </Station>
-      <Station x={X.coinbase} label="Coinbase" pulse={done}>
-        <CoinbaseIcon size={44} />
+      <Station x={X.coinbase} label={payoutName(order)} pulse={done}>
+        {isCoinbase(order) ? <CoinbaseIcon size={44} /> : <UsdtIcon size={44} />}
         {fx?.kind === 'done' && <Burst key={fx.key} color="#0052ff" center />}
         {done && (
           <motion.span className="station-badge" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 420, damping: 16 }}>
@@ -217,7 +221,7 @@ function etaFor(shown: Stage, order: Order, elapsedMs: number): string | null {
   }
 }
 
-function RefundForm({ order, onUpdate }: { order: Order; onUpdate(o: Order): void }) {
+export function RefundForm({ order, onUpdate }: { order: Order; onUpdate(o: Order): void }) {
   const [address, setAddress] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -292,19 +296,19 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
       return (
         <>
           <p className="line-main">
-            Sending <b>{order.usdt ? `≈ ${usdt(order.usdt)} USDT` : 'USDT'}</b> to Coinbase…
+            Sending <b>{order.usdt ? `≈ ${usdt(order.usdt)} USDT` : 'USDT'}</b> to {payoutName(order)}…
           </p>
-          <p className="line-sub">To {order.payoutAddress ? shortAddr(order.payoutAddress) : 'your Coinbase'} on Ethereum.</p>
+          <p className="line-sub">To {order.payoutAddress ? shortAddr(order.payoutAddress) : payoutName(order)} on Ethereum.</p>
         </>
       );
     case 'done':
       return (
         <>
           <p className="line-main">
-            Done! <b>{order.usdt ? `${usdt(order.usdt)} USDT` : 'USDT'}</b> sent to Coinbase.
+            Done! <b>{order.usdt ? `${usdt(order.usdt)} USDT` : 'USDT'}</b> sent to {payoutName(order)}.
           </p>
           <p className="line-sub">
-            {paid} in, USDT out to {order.payoutAddress ? shortAddr(order.payoutAddress) : 'Coinbase'}.{' '}
+            {paid} in, USDT out to {order.payoutAddress ? shortAddr(order.payoutAddress) : payoutName(order)}.{' '}
             {order.payoutTxUrl && (
               <a href={order.payoutTxUrl} target="_blank" rel="noreferrer">
                 View payout
@@ -324,7 +328,14 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
             {order.refundTo ? (
               <>
                 {order.refundTx ? 'To' : 'Going to'} {shortAddr(order.refundTo)}
-                {order.refundSource === 'sender' ? ', the wallet it came from' : order.refundSource === 'manual' ? ', the address you entered' : ''}.{' '}
+                {order.refundSource === 'sender'
+                  ? ', the wallet it came from'
+                  : order.refundSource === 'manual'
+                    ? ', the address you entered'
+                    : order.refundSource === 'own'
+                      ? ', your own wallet'
+                      : ''}
+                .{' '}
               </>
             ) : null}
             FixedFloat returns it minus the network fee.{' '}
@@ -431,7 +442,7 @@ export function TransferDialog({ order, autoplay, onClose, onUpdate }: DialogPro
       <Window title={title} icon={<AppMark />} onClose={onClose} className="win-dialog" role="dialog">
         {modern && (
           <p className="modern-head">
-            Swapping {order.received ? `${trimAmount(order.received)} ${order.coin}` : order.coinName} from <b>{order.coinName}</b> to <b>Coinbase</b>
+            Swapping {order.received ? `${trimAmount(order.received)} ${order.coin}` : order.coinName} from <b>{order.coinName}</b> to <b>{payoutName(order)}</b>
           </p>
         )}
         <TransferStrip order={order} shown={shown} />

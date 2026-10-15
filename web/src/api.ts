@@ -1,4 +1,4 @@
-import type { Coin, Meta, Order, Status } from './types';
+import type { Coin, Destination, Meta, Order, Quote, Route, Status, Transfer } from './types';
 
 export class ApiError extends Error {
   constructor(
@@ -33,7 +33,18 @@ export const api = {
   login: (password: string, remember: boolean) => request<{ ok: true }>('POST', '/api/login', { password, remember }),
   logout: () => request<{ ok: true }>('POST', '/api/logout', {}),
   meta: () => request<Meta>('GET', '/api/meta'),
-  orders: () => request<{ orders: Order[] }>('GET', '/api/orders'),
-  createOrder: (coin: Coin) => request<Order>('POST', '/api/orders', { coin }),
+  orders: () => request<{ orders: Order[]; transfers?: Transfer[] }>('GET', '/api/orders'),
+  createOrder: (coin: Coin, destinationId?: string) => request<Order>('POST', '/api/orders', destinationId && destinationId !== 'coinbase' ? { coin, destinationId } : { coin }),
   refund: (id: string, address: string, password: string) => request<Order>('POST', `/api/orders/${id}/refund`, { address, password }),
+  destinations: () => request<{ destinations: Destination[] }>('GET', '/api/destinations'),
+  addDestination: (label: string, address: string, password: string) => request<{ destinations: Destination[] }>('POST', '/api/destinations', { label, address, password }),
+  removeDestination: (id: string, password: string) => request<{ destinations: Destination[] }>('POST', `/api/destinations/${id}/delete`, { password }),
+  createPrivacy: (coin: Coin, delayHours: number, destinationId: string) => request<Transfer>('POST', '/api/transfers', { coin, delayHours, destinationId }),
+  release: (id: string) => request<Transfer>('POST', `/api/transfers/${id}/release`, {}),
+  changeDelay: (id: string, delayHours: number) => request<Transfer>('POST', `/api/transfers/${id}/delay`, { delayHours }),
+  retry: (id: string) => request<Transfer>('POST', `/api/transfers/${id}/retry`, {}),
+  addresses: () => request<{ addresses: Route[]; available: Record<Coin | 'privacy', boolean> }>('GET', '/api/addresses'),
+  createAddress: (body: { coin: Coin; mode: 'direct' | 'privacy'; delayHours: number | null; destinationId: string; label: string }) => request<Route>('POST', '/api/addresses', body),
+  updateAddress: (id: string, patch: { label?: string; delayHours?: number; archived?: boolean }) => request<Route>('POST', `/api/addresses/${id}`, patch),
+  quote: (coin: Coin, usd: number, mode: 'direct' | 'privacy') => request<Quote>('GET', `/api/quote?coin=${coin}&usd=${usd}&mode=${mode}`),
 };

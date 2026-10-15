@@ -1,14 +1,16 @@
 import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 import { ChainUnavailable, depositTotal, findSender, formatBase } from './chain.js';
-import { COINS, config, isChecksumAddress, type Coin } from './config.js';
+import { COINS, PAYOUTS, config, isChecksumAddress, type Coin, type PayoutCcy } from './config.js';
+import { destinations } from './destinations.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
 import { FfError, budgetLeft, ff, type FfOrder } from './fixedfloat.js';
 import { readJson, writeJsonAtomic } from './store.js';
 
 /**
- * One FixedFloat float order per click. FixedFloat hands out a fresh deposit address per order,
- * swaps whatever arrives into USDT and pays it out to the Coinbase address, which only the server sets.
+ * One FixedFloat float order per click (or per step of a transfer). FixedFloat hands out a fresh deposit
+ * address per order, swaps whatever arrives and pays it out to an address only the server sets: USDT to a
+ * saved destination (Coinbase by default), or XMR to one of our own Monero subaddresses.
  */
 
 export type Stage = 'waiting' | 'received' | 'swapping' | 'sending' | 'done' | 'refunded' | 'expired' | 'attention';
@@ -26,8 +28,8 @@ export interface Answer {
 export interface RefundAnswer extends Answer {
   /** Where the refund goes. */
   to: string | null;
-  /** 'sender' = worked out automatically, 'manual' = typed by the owner. */
-  source: 'sender' | 'manual' | null;
+  /** 'sender' = worked out automatically, 'manual' = typed by the owner, 'own' = back to our own wallet. */
+  source: 'sender' | 'manual' | 'own' | null;
   /** Automatic refund isn't possible for this payment: the owner has to give an address. */
   gaveUp: boolean;
   /** Automatic refund keeps failing for now: show the owner the form too (retries continue). */
@@ -61,6 +63,17 @@ export interface OrderRecord {
   chainBase?: string;
   /** When to look at the deposit address on-chain again (runtime only). */
   chainNextAt?: number;
+  /** What FixedFloat must pay out ('USDT' on Ethereum or 'XMR'), where to, and the name shown for it. Checked at creation. */
+  toCcy: PayoutCcy;
+  toAddress: string;
+  toLabel: string;
+  destinationId?: string;
+  /** Set when this order is one step of a transfer (Privacy Enhanced or a permanent address). */
+  transferId?: string;
+  /** Our own wallet pays this order: a refund goes straight back to this address of ours. */
+  ownRefund?: string;
+  /** Our wallet never paid this order and never will (it went stale first, or a crash orphaned it). */
+  abandoned?: boolean;
 }
 
 interface OrdersFile {
@@ -88,6 +101,10 @@ function load(): OrdersFile {
     const now = Date.now();
     for (const r of cache.orders) {
       r.auto = { ...r.auto, forTx: r.auto?.forTx ?? null }; // older records predate forTx
+      // Older records predate destinations: they all paid USDT to Coinbase.
+      r.toCcy ??= 'USDT';
+      r.toAddress ??= r.ff.to?.address ?? config.payout.address;
+      r.toLabel ??= config.payout.label;
       // Poll times are runtime state: after a restart, look at everything again soon (spread out),
       // including orders an older version had stopped watching too early.
       if (r.nextPollAt !== STOPPED || nextPollDelay(r, now) !== null) r.nextPollAt = Math.min(r.nextPollAt, now + Math.random() * 20 * S);
@@ -121,9 +138,9 @@ export function flush(): void {
 export const orders = {
   all: (): OrderRecord[] => load().orders,
   get: (id: string): OrderRecord | null => load().orders.find((o) => o.id === id) ?? null,
-  /** Every unfinished order plus the newest ones, newest first: what the browser gets. */
+  /** Every unfinished order plus the newest ones, newest first: what the browser gets. Steps of a transfer are shown with the transfer. */
   forBrowser(limit = 40): OrderRecord[] {
-    const all = load().orders;
+    const all = load().orders.filter((r) => !r.transferId);
     const now = Date.now();
     const recent = all.slice(-limit);
     const live = all.filter((r) => (!isFinished(r, now) && r.ff.status !== 'NEW' && r.ff.status !== 'EXPIRED') || seenCounts(r, now));
@@ -135,6 +152,7 @@ export const orders = {
     dirty = false;
     recentCreates.length = 0;
     inFlight.clear();
+    limitCache.clear();
   },
 };
 
@@ -246,9 +264,11 @@ async function maybeContinue(r: OrderRecord, now: number): Promise<void> {
   }
 }
 
-const ADDRESS_FORMATS: Record<Coin, (a: string) => boolean> = {
+export const ADDRESS_FORMATS: Record<Coin, (a: string) => boolean> = {
   BTC: (a) => /^(bc1[02-9ac-hj-np-z]{11,71}|[13][1-9A-HJ-NP-Za-km-z]{25,34})$/.test(a),
   ETH: (a) => /^0x[0-9a-fA-F]{40}$/.test(a) && (a === a.toLowerCase() || a.slice(2) === a.slice(2).toUpperCase() || isChecksumAddress(a)),
+  // Standard (4…) and subaddresses (8…) are 95 characters, integrated addresses (4…) 106.
+  XMR: (a) => /^[48][1-9A-HJ-NP-Za-km-z]{94}$|^4[1-9A-HJ-NP-Za-km-z]{105}$/.test(a),
 };
 
 const UNSAFE_SENDER =
@@ -264,6 +284,12 @@ async function maybeRefund(r: OrderRecord, now: number): Promise<void> {
   if (a.gaveUp || (a.sentAt && now - a.sentAt < 2 * M) || now < a.nextAt) return;
   if (!tx || amount === null || amount === undefined) {
     Object.assign(a, { gaveUp: true, error: "FixedFloat didn't say which transaction paid, so it can't go back automatically. Enter an address below." });
+    markDirty();
+    return;
+  }
+  if (!a.to && r.ownRefund) Object.assign(a, { to: r.ownRefund, source: 'own' }); // our own wallet paid: it goes back there
+  if (!a.to && r.coin === 'XMR') {
+    Object.assign(a, { gaveUp: true, error: "Monero doesn't show who paid, so it can't go back automatically. Enter a Monero address below." });
     markDirty();
     return;
   }
@@ -352,7 +378,7 @@ export async function watchChain(now = Date.now()): Promise<void> {
   try {
     const due = load()
       .orders.filter((r) => {
-        if (r.seen || r.reusedAddress || (r.chainNextAt ?? 0) > now) return false;
+        if (r.coin === 'XMR' || r.seen || r.reusedAddress || (r.chainNextAt ?? 0) > now) return false;
         if (r.ff.status === 'NEW') return now - r.createdAt < WATCH_DAYS * D;
         return r.ff.status === 'EXPIRED' && now - r.createdAt < WATCH_DAYS * D;
       })
@@ -422,23 +448,39 @@ export function startPoller(log: FastifyBaseLogger): () => void {
 
 // ---------------------------------------------------------------- creating
 
-const PRICE_ERRORS: Record<string, (coin: string) => string> = {
+const PRICE_ERRORS: Record<string, (from: string, to: string) => string> = {
   MAINTENANCE_FROM: (c) => `FixedFloat has ${c} deposits paused for maintenance. Try again later.`,
   OFFLINE_FROM: (c) => `FixedFloat isn't accepting ${c} right now. Try again later.`,
   RESERVE_FROM: (c) => `FixedFloat can't take ${c} right now (reserves). Try again later.`,
-  MAINTENANCE_TO: () => 'FixedFloat has USDT payouts paused for maintenance. Try again later.',
-  OFFLINE_TO: () => "FixedFloat isn't paying out USDT right now. Try again later.",
-  RESERVE_TO: () => 'FixedFloat is short on USDT right now. Try again later.',
+  MAINTENANCE_TO: (_, t) => `FixedFloat has ${t} payouts paused for maintenance. Try again later.`,
+  OFFLINE_TO: (_, t) => `FixedFloat isn't paying out ${t} right now. Try again later.`,
+  RESERVE_TO: (_, t) => `FixedFloat is short on ${t} right now. Try again later.`,
 };
 
-/** Refuses any order that doesn't pay USDT on Ethereum to the configured Coinbase address. */
-export function checkCreated(o: FfOrder, coin: Coin): void {
+/** What an order must pay out, and where. */
+export interface Expect {
+  toCcy: PayoutCcy;
+  toAddress: string;
+  /** How the owner knows this address ("Coinbase", "Monero vault"). */
+  label: string;
+}
+
+const COINBASE_EXPECT = (): Expect => ({ toCcy: 'USDT', toAddress: config.payout.address, label: config.payout.label });
+
+/** Refuses any order that doesn't pay exactly what we asked for: the right coin in, the right payout, to exactly our address. */
+export function checkCreated(o: FfOrder, coin: Coin, expect: Expect = COINBASE_EXPECT()): void {
   const problems: string[] = [];
+  const want = PAYOUTS[expect.toCcy];
   if (!o.token) problems.push('it came without an access token');
   if (!o.from?.address) problems.push('it has no deposit address');
   if (o.from?.code !== COINS[coin].code) problems.push(`it expects ${o.from?.code} instead of ${COINS[coin].code}`);
-  if (o.to?.code !== config.payout.ccy || (o.to?.network && o.to.network !== 'ETH')) problems.push(`it pays out ${o.to?.code} on ${o.to?.network} instead of USDT on Ethereum`);
-  if (String(o.to?.address ?? '').toLowerCase() !== config.payout.address.toLowerCase()) problems.push('its payout address is not your Coinbase address');
+  // FixedFloat codes name the network too ("USDT" is ERC-20; Tron is "USDTTRC"), so the code is the main check.
+  if (o.to?.code !== expect.toCcy || (expect.toCcy === 'USDT' && o.to?.network && o.to.network !== want.network)) {
+    problems.push(`it pays out ${o.to?.code} on ${o.to?.network} instead of ${want.label}`);
+  }
+  const paidTo = String(o.to?.address ?? '');
+  const same = expect.toCcy === 'USDT' ? paidTo.toLowerCase() === expect.toAddress.toLowerCase() : paidTo === expect.toAddress;
+  if (!same) problems.push(`its payout address is not your ${expect.label} address`);
   if (o.type !== 'float') problems.push('it is not a float-rate order');
   if (problems.length) throw new Error(`Refusing FixedFloat order ${o.id ?? ''}: ${problems.join('; ')}.`);
 }
@@ -448,48 +490,165 @@ export const CREATES_PER_MINUTE = 3;
 
 const ceilTo = (x: number, decimals: number) => Math.ceil(x * 10 ** decimals - 1e-9) / 10 ** decimals;
 
-export async function createOrder(coin: Coin, now = Date.now()): Promise<OrderRecord> {
-  const c = COINS[coin];
-  while (recentCreates.length && now - recentCreates[0] > M) recentCreates.shift();
-  if (recentCreates.length >= CREATES_PER_MINUTE) throw new HttpError(429, 'Easy there: three new addresses a minute at most. Try again in a few seconds.');
+export interface Limits {
+  min: number;
+  max: number;
+  /** USD value of one coin. */
+  usdPerCoin: number | null;
+  /** Roughly how much comes out per coin in (FixedFloat's fee included). */
+  outPerCoin: number | null;
+  precision: number;
+}
 
-  // Ask for the current limits first. LIMIT_* errors only describe the probe amount, so they don't matter.
-  const price = await ff.price(c.code, config.payout.ccy, c.probeAmount);
+const limitCache = new Map<string, { at: number; limits: Limits }>();
+const LIMITS_FRESH = 2 * M;
+
+/**
+ * FixedFloat's current limits and rate for a pair. Throws a UserError if the pair is paused. `cached` allows an
+ * answer up to two minutes old (estimates, waiting for a minimum); anything that creates an order asks afresh.
+ */
+export async function limits(from: Coin, to: PayoutCcy, opts: { now?: number; cached?: boolean } = {}): Promise<Limits> {
+  const now = opts.now ?? Date.now();
+  const key = `${from}>${to}`;
+  const hit = limitCache.get(key);
+  if (opts.cached && hit && now - hit.at < LIMITS_FRESH) return hit.limits;
+  // LIMIT_* errors only describe the probe amount, so they don't matter here.
+  const price = await ff.price(COINS[from].code, to, COINS[from].probeAmount);
   const blocking = (price.errors ?? []).filter((e) => !e.startsWith('LIMIT_'));
-  if (blocking.length) throw new UserError(PRICE_ERRORS[blocking[0]]?.(c.name) ?? `FixedFloat can't do this swap right now (${blocking.join(', ')}).`);
+  if (blocking.length) {
+    throw new UserError(PRICE_ERRORS[blocking[0]]?.(COINS[from].name, PAYOUTS[to].label) ?? `FixedFloat can't do this swap right now (${blocking.join(', ')}).`);
+  }
   const min = Number(price.from.min);
   const max = Number(price.from.max);
   if (!(min > 0) || !(max > min)) throw new UserError('FixedFloat did not return usable limits. Try again shortly.');
-  const usdPerCoin = Number(price.from.usd) / Number(price.from.amount);
+  const per = (v: unknown) => {
+    const n = Number(v) / Number(price.from.amount);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const result: Limits = { min, max, usdPerCoin: per(price.from.usd), outPerCoin: per(price.to.amount), precision: Math.min(price.from.precision ?? 8, 8) };
+  limitCache.set(key, { at: now, limits: result });
+  return result;
+}
 
-  // Float orders swap whatever actually arrives; the order amount is only nominal. Odd amounts and late
-  // payments come back as EMERGENCY, which the poller answers with "continue".
-  const nominal = ceilTo(Math.min(min * 3, max), Math.min(price.from.precision ?? 8, 8));
-  recentCreates.push(now);
-  const created = await ff.create(c.code, config.payout.ccy, nominal, config.payout.address);
-  checkCreated(created, coin);
-
+function newRecord(created: FfOrder, coin: Coin, expect: Expect, lim: Limits, now: number, extra: Partial<OrderRecord>): OrderRecord {
   const depositAddress = created.from.address;
-  const record: OrderRecord = {
+  return {
     id: created.id,
     token: created.token!,
     coin,
     depositAddress,
     createdAt: now,
-    min: String(price.from.min),
-    max: String(price.from.max),
-    minUsd: Number.isFinite(usdPerCoin) ? Math.round(min * usdPerCoin * 100) / 100 : null,
+    min: String(lim.min),
+    max: String(lim.max),
+    minUsd: lim.usdPerCoin ? Math.round(lim.min * lim.usdPerCoin * 100) / 100 : null,
     reusedAddress: load().orders.some((o) => o.depositAddress.toLowerCase() === depositAddress.toLowerCase()),
     ff: stripToken(created),
     polledAt: now,
     nextPollAt: now + 10 * S,
     pollError: null,
     auto: freshAnswer(null),
+    toCcy: expect.toCcy,
+    toAddress: expect.toAddress,
+    toLabel: expect.label,
+    ...extra,
   };
+}
+
+/**
+ * A fresh address for someone to pay (the coin buttons, and the first swap of a new-address Privacy transfer).
+ * Float orders swap whatever actually arrives; the order amount is only nominal. Odd amounts and late
+ * payments come back as EMERGENCY, which the poller answers with "continue".
+ */
+export async function createOrder(
+  coin: Coin,
+  opts: { now?: number; destinationId?: string; expect?: Expect; transferId?: string } = {},
+): Promise<OrderRecord> {
+  const now = opts.now ?? Date.now();
+  while (recentCreates.length && now - recentCreates[0] > M) recentCreates.shift();
+  if (recentCreates.length >= CREATES_PER_MINUTE) throw new HttpError(429, 'Easy there: three new addresses a minute at most. Try again in a few seconds.');
+
+  const dest = opts.expect ? null : destinations.need(opts.destinationId);
+  const expect: Expect = opts.expect ?? { toCcy: 'USDT', toAddress: dest!.address, label: dest!.label };
+  const lim = await limits(coin, expect.toCcy, { now });
+  const nominal = ceilTo(Math.min(lim.min * 3, lim.max), lim.precision);
+  recentCreates.push(now);
+  const created = await ff.create(COINS[coin].code, expect.toCcy, nominal, expect.toAddress);
+  checkCreated(created, coin, expect);
+
+  const record = newRecord(created, coin, expect, lim, now, {
+    ...(dest ? { destinationId: dest.id } : {}),
+    ...(opts.transferId ? { transferId: opts.transferId } : {}),
+  });
   load().orders.push(record);
   markDirty();
   flush();
   return record;
+}
+
+/** The amount is outside FixedFloat's limits for this pair right now. */
+export class LimitError extends UserError {
+  constructor(
+    message: string,
+    public min: number,
+    public max: number,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * An order our own wallet pays straight away, for exactly `amount` (one step of a transfer). The caller sends
+ * the coins to the returned order's deposit address, and only there. Refunds come back to `ownRefund`.
+ */
+export async function openSwap(
+  req: { from: Coin; amount: number; expect: Expect; transferId: string; ownRefund: string; destinationId?: string },
+  now = Date.now(),
+): Promise<OrderRecord> {
+  const lim = await limits(req.from, req.expect.toCcy, { now });
+  if (req.amount < lim.min) throw new LimitError(`Below FixedFloat's minimum of ${lim.min} ${req.from}.`, lim.min, lim.max);
+  if (req.amount > lim.max) throw new LimitError(`Above FixedFloat's maximum of ${lim.max} ${req.from}.`, lim.min, lim.max);
+  // An earlier, never-paid order of this transfer (a crash between creating it and saving the transfer) must not block the pair.
+  for (const r of load().orders) if (r.transferId === req.transferId && r.ownRefund && r.ff.status === 'NEW' && !r.abandoned) abandon(r);
+  const created = await ff.create(COINS[req.from].code, req.expect.toCcy, req.amount, req.expect.toAddress);
+  checkCreated(created, req.from, req.expect);
+  // Our wallet only ever pays an address FixedFloat hasn't used before: paying an old one could reopen someone else's order.
+  if (load().orders.some((o) => o.depositAddress.toLowerCase() === created.from.address.toLowerCase())) {
+    throw new Error(`FixedFloat order ${created.id} reuses an old deposit address; making another one.`);
+  }
+  const record = newRecord(created, req.from, req.expect, lim, now, {
+    transferId: req.transferId,
+    ownRefund: req.ownRefund,
+    ...(req.destinationId ? { destinationId: req.destinationId } : {}),
+  });
+  load().orders.push(record);
+  markDirty();
+  flush();
+  return record;
+}
+
+/**
+ * FixedFloat's rules (ToS 2.20): no new order may be paid in the same direction until the previous one is
+ * complete. Returns the order still in the way, if any. Orders stuck for days don't block forever.
+ */
+export function pairBusy(from: Coin, to: PayoutCcy, now = Date.now()): OrderRecord | null {
+  return (
+    load().orders.find((r) => {
+      if (r.coin !== from || r.toCcy !== to || r.abandoned || now - r.createdAt > 3 * D) return false;
+      const s = r.ff.status;
+      if (s === 'PENDING' || s === 'EXCHANGE' || s === 'WITHDRAW') return true;
+      if (s === 'EMERGENCY') return r.ff.emergency?.choice !== 'REFUND';
+      // Paid, but FixedFloat hasn't seen it yet: by our own wallet, or spotted on-chain.
+      if (s === 'NEW' || s === 'EXPIRED') return (r.ownRefund !== undefined && now - r.createdAt < 24 * H) || seenCounts(r, now);
+      return false;
+    }) ?? null
+  );
+}
+
+/** Marks an order our wallet will never pay (so it doesn't hold up the pair). */
+export function abandon(r: OrderRecord): void {
+  r.abandoned = true;
+  markDirty();
+  flush();
 }
 
 /** Saves on shutdown. */
@@ -550,8 +709,13 @@ export function orderView(r: OrderRecord, now = Date.now()) {
     usdt,
     usdtFinal: Boolean(toTx?.id),
     payoutTx: toTx?.id ?? null,
-    payoutTxUrl: toTx?.id ? config.payout.explorerTx(toTx.id) : null,
-    payoutAddress: config.payout.address,
+    payoutTxUrl: toTx?.id ? PAYOUTS[r.toCcy].explorerTx(toTx.id) : null,
+    payoutAddress: r.toAddress,
+    /** What comes out ('USDT' or 'XMR') and the name of where it goes ("Coinbase"). */
+    toCcy: r.toCcy,
+    payoutLabel: r.toLabel,
+    destinationId: r.destinationId ?? null,
+    transferId: r.transferId ?? null,
     refundTx: o.back?.tx?.id ?? null,
     refundTxUrl: o.back?.tx?.id ? c.explorerTx(o.back.tx.id) : null,
     refundTo: str(o.back?.address) ?? refund?.to ?? null,

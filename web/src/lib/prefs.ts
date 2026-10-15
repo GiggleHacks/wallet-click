@@ -18,3 +18,20 @@ export function setPref(key: PrefKey, value: boolean): void {
   }
   window.dispatchEvent(new Event('wc:prefs'));
 }
+
+/** A remembered choice (e.g. the destination picked on the home window). */
+export function getChoice(key: string): string | null {
+  try {
+    return localStorage.getItem(`wc.${key}`);
+  } catch {
+    return null;
+  }
+}
+
+export function setChoice(key: string, value: string): void {
+  try {
+    localStorage.setItem(`wc.${key}`, value);
+  } catch {
+    /* private mode: the choice just won't persist */
+  }
+}

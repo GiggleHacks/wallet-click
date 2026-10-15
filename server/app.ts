@@ -9,11 +9,15 @@ import { config } from './config.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
 import { FfError } from './fixedfloat.js';
 import { registerAuth } from './routes/auth.js';
+import { registerDestinations } from './routes/destinations.js';
 import { registerOrders } from './routes/orders.js';
+import { registerTransfers } from './routes/transfers.js';
 import { registerSecurity } from './security.js';
+import { setupHotWallets } from './wallets/setup.js';
 
 export async function buildApp(opts: { logger?: boolean } = {}) {
   if (config.appPassword) await adoptPassword(config.appPassword);
+  setupHotWallets();
 
   const app = Fastify({
     logger: opts.logger === false ? false : { level: process.env.LOG_LEVEL ?? 'info' },
@@ -32,6 +36,8 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   registerSecurity(app);
   registerAuth(app);
   registerOrders(app);
+  registerDestinations(app);
+  registerTransfers(app);
 
   app.setErrorHandler((err, req, reply) => {
     const status = (err as { statusCode?: number }).statusCode;

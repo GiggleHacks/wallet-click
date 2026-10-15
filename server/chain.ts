@@ -12,6 +12,8 @@ import { config, type Coin } from './config.js';
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 let fetchFn: Fetch = (url, init) => fetch(url, init);
+/** The fetch used for every public blockchain endpoint (tests swap it for fakes). */
+export const chainFetch: Fetch = (url, init) => fetchFn(url, init);
 /** Tests swap the network for fakes. */
 export function setChainFetch(f: Fetch | null): void {
   fetchFn = f ?? ((url, init) => fetch(url, init));
@@ -25,7 +27,7 @@ export class ChainUnavailable extends Error {}
 
 const timeout = () => AbortSignal.timeout(12_000);
 
-async function rpcAt<T>(url: string, method: string, params: unknown[]): Promise<T> {
+export async function rpcAt<T>(url: string, method: string, params: unknown[]): Promise<T> {
   const res = await fetchFn(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -39,7 +41,7 @@ async function rpcAt<T>(url: string, method: string, params: unknown[]): Promise
 }
 
 /** First RPC that answers. */
-async function rpc<T>(method: string, params: unknown[]): Promise<T> {
+export async function rpc<T>(method: string, params: unknown[]): Promise<T> {
   let last: unknown;
   for (const url of config.chains.ethRpcUrls) {
     try {
@@ -68,7 +70,7 @@ export function toBase(v: string, decimals: number): bigint | null {
   return BigInt(m[1] + frac);
 }
 
-const DECIMALS: Record<Coin, number> = { BTC: 8, ETH: 18 };
+export const DECIMALS: Record<Coin, number> = { BTC: 8, ETH: 18, XMR: 12 };
 
 // ---------------------------------------------------------------- who paid
 
@@ -131,6 +133,7 @@ async function btcSender(txid: string, deposit: string, amount: string): Promise
 
 /** The wallet that paid, if that can be known safely; null if not; throws ChainUnavailable to retry. */
 export async function findSender(coin: Coin, txid: string, deposit: string, amount: string): Promise<string | null> {
+  if (coin === 'XMR') return null; // Monero hides who paid
   return coin === 'ETH' ? ethSender(txid, deposit, amount) : btcSender(txid, deposit, amount);
 }
 
@@ -141,6 +144,7 @@ export async function findSender(coin: Coin, txid: string, deposit: string, amou
  * (For ETH that's the pending balance; for BTC the funded total, which includes the mempool.)
  */
 export async function depositTotal(coin: Coin, address: string): Promise<bigint> {
+  if (coin === 'XMR') throw new ChainUnavailable("Monero payments to someone else's address can't be seen");
   if (coin === 'ETH') return BigInt(await rpc<string>('eth_getBalance', [address, 'pending']));
   const res = await fetchFn(`${config.chains.btcApis[0]}/address/${address}`, { signal: timeout() });
   if (!res.ok) throw new ChainUnavailable(`mempool.space answered ${res.status}`);

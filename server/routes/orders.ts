@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { COIN_IDS, COINS, config, type Coin } from '../config.js';
+import { COIN_IDS, COINS, PRIVACY_DELAYS, config, type Coin } from '../config.js';
 import { HttpError } from '../errors.js';
 import { createOrder, orderView, orders, refundOrder } from '../orders.js';
+import { transferView, transfers } from '../transfers.js';
+import { walletState } from '../wallets/seed.js';
 import { VERSION } from '../version.js';
 import { requirePassword } from './auth.js';
 
@@ -17,17 +19,23 @@ export function registerOrders(app: FastifyInstance): void {
     payout: { address: config.payout.address, label: config.payout.label, ccy: config.payout.ccy, network: config.payout.network },
     coins: Object.fromEntries(COIN_IDS.map((id) => [id, { name: COINS[id].name, network: COINS[id].network }])),
     swapConfigured: Boolean(config.ff.apiKey && config.ff.apiSecret),
+    features: { monero: Boolean(config.monero.rpcUrl), wallet: walletState().ready, seedBackupPending: walletState().backupPending, walletError: walletState().error },
+    privacy: { delays: PRIVACY_DELAYS, testDelayMin: config.privacyTestDelayMin },
     version: VERSION,
   }));
 
-  // Only the coin comes from the browser. The payout address is fixed on the server.
+  // The browser names the coin and, optionally, a destination from the address book. Never an address.
   app.post('/api/orders', async (req) => {
-    const { coin } = z.object({ coin: z.enum(COIN_IDS as [Coin, ...Coin[]]) }).parse(req.body);
-    return orderView(await createOrder(coin));
+    const { coin, destinationId } = z
+      .object({ coin: z.enum(COIN_IDS as [Coin, ...Coin[]]), destinationId: z.string().max(40).optional() })
+      .parse(req.body);
+    return orderView(await createOrder(coin, { destinationId }));
   });
 
+  // Orders and transfers together: the browser polls this every two seconds.
   app.get('/api/orders', async () => ({
     orders: orders.forBrowser().map((o) => orderView(o)),
+    transfers: transfers.forBrowser().map((t) => transferView(t)),
   }));
 
   app.get<{ Params: { id: string } }>('/api/orders/:id', async (req) => orderView(needOrder(req.params.id)));

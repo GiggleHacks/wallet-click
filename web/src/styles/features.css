@@ -1,0 +1,341 @@
+/* Wallet Click: Monero, destinations, Privacy Enhanced and permanent addresses. Built on the theme variables,
+   so every theme restyles these too. */
+
+/* ---------------------------------------------------------------- home */
+
+.coin-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.select98 {
+  width: auto;
+  min-width: 120px;
+  max-width: 100%;
+  padding: 2px 4px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.btn-icon {
+  min-width: 0;
+  min-height: 0;
+  padding: 3px 5px;
+}
+
+.payout-line .select98 {
+  flex: 0 1 auto;
+}
+
+.payout-line code + .btn-icon {
+  margin-left: 0;
+}
+
+.extra-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.extra-btn {
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.extra-btn b {
+  display: block;
+  font-size: 14px;
+}
+
+.extra-btn small {
+  display: block;
+  font-size: 12px;
+  color: #333;
+}
+
+.cell-coin .tag {
+  margin-left: 4px;
+  vertical-align: -3px;
+}
+
+/* Windows 10 live tile for Monero. */
+html[data-theme='win10'] .coin-btn[data-coin='XMR'],
+html[data-theme='win10'] .coin-btn[data-coin='XMR']:hover:not(:disabled),
+html[data-theme='win10'] .coin-btn[data-coin='XMR']:active:not(:disabled),
+html[data-theme='win10'] .coin-btn[data-coin='XMR'].is-pressed {
+  background: #c45000;
+}
+
+html[data-theme='win10'] .extra-btn small,
+html[data-theme='win11'] .extra-btn small {
+  color: #555;
+}
+
+/* ---------------------------------------------------------------- address book */
+
+.win-book {
+  width: min(480px, 100%);
+}
+
+.book-intro {
+  margin: 0 0 8px;
+}
+
+.book-list {
+  height: auto;
+  max-height: 168px;
+}
+
+.book-list li {
+  padding: 4px 6px;
+}
+
+.book-name {
+  font-weight: 700;
+}
+
+.book-addr {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.book-detail {
+  margin-top: 10px;
+}
+
+.book-detail .address-box {
+  cursor: text;
+}
+
+.book-form {
+  margin-top: 10px;
+}
+
+@media (max-width: 560px) {
+  .coin-grid {
+    gap: 8px;
+  }
+  .coin-btn {
+    min-height: 108px;
+    padding: 10px 4px;
+  }
+  .coin-sub {
+    font-size: 11px;
+  }
+  .extra-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+/* ---------------------------------------------------------------- segmented choices and the delay slider */
+
+.seg98 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 8px;
+}
+
+.seg-btn {
+  flex: 1 1 0;
+  gap: 6px;
+  min-width: 120px;
+}
+
+.delay98 {
+  margin: 4px 0 6px;
+}
+
+.delay-range {
+  width: 100%;
+  margin: 4px 0;
+  accent-color: var(--navy);
+  cursor: pointer;
+}
+
+.delay-ticks {
+  position: relative;
+  height: 20px;
+}
+
+/* Each label sits right under its stop on the slider (the thumb is about 16px wide). */
+.delay-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.delay-tick.is-on {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------- Privacy Enhanced */
+
+.win-privacy {
+  width: min(470px, 100%);
+}
+
+.privacy-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.privacy-head p {
+  margin: 0;
+}
+
+.win-privacy .line-sub svg {
+  vertical-align: -2px;
+}
+
+/* ---------------------------------------------------------------- a transfer's journey */
+
+.win-journey {
+  width: min(560px, 100%);
+}
+
+.journey-strip.is-five .station-label {
+  font-size: 11px;
+}
+
+.stack-icon {
+  position: relative;
+  display: inline-flex;
+}
+
+.stack-badge {
+  position: absolute;
+  right: -10px;
+  bottom: -4px;
+}
+
+.steps98 {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  background: #fff;
+  box-shadow: var(--sunken);
+}
+
+.step {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+  line-height: 1.35;
+}
+
+.step-mark {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.step.is-done .step-mark {
+  color: #107c10;
+}
+
+.step.is-active {
+  font-weight: 700;
+}
+
+.step.is-active .step-mark {
+  color: var(--navy);
+}
+
+.step.is-pending {
+  color: #6d6d6d;
+}
+
+.step.is-failed .step-mark,
+.step.is-failed {
+  color: #a00000;
+}
+
+.step-detail {
+  font-weight: 400;
+  color: #3a3a3a;
+}
+
+.stage-holding {
+  background: #e8e0ff;
+}
+
+/* ---------------------------------------------------------------- my addresses */
+
+.win-addresses {
+  width: min(560px, 100%);
+}
+
+.route-detail {
+  margin-top: 10px;
+}
+
+.route-delay {
+  margin-top: 8px;
+}
+
+.send98 {
+  margin-top: 12px;
+}
+
+.send-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.send-row .input98 {
+  width: 120px;
+}
+
+.send-quote {
+  margin: 8px 0 4px;
+}
+
+.send-pay {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.send-pay .qr {
+  flex: none;
+  padding: 4px;
+  background: #fff;
+  color: #000;
+}
+
+.pay-link {
+  display: inline-flex;
+  text-decoration: none;
+  color: inherit;
+}
+
+@media (max-width: 560px) {
+  .journey-strip.is-five .station-label {
+    display: none;
+  }
+  .journey-strip.is-five .station-icon {
+    transform: scale(0.82);
+  }
+  .send-pay {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

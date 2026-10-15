@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Order } from '../web/src/types';
+import type { Order, Transfer } from '../web/src/types';
 import { APP_VERSION } from '../web/src/version';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -61,7 +61,48 @@ const baseOrder: Order = {
 let status = { ready: true, authed: false, lockedUntil: 0, retryAfterMs: 0, triesLeft: 5 };
 let loginBody: unknown = null;
 let serverOrders: Order[] = [];
+let serverTransfers: Transfer[] = [];
+let transferBody: unknown = null;
 const calls: string[] = [];
+
+const VAULT_LEG: Order = { ...baseOrder, id: 'PRIV01', coin: 'ETH', coinName: 'Ethereum', network: 'Ethereum mainnet', address: '0x1111111111111111111111111111111111111111', toCcy: 'XMR', transferId: 't_ui' };
+const privacyTransfer = (over: Partial<Transfer> = {}): Transfer => ({
+  id: 't_ui',
+  createdAt: Date.now(),
+  coin: 'ETH',
+  coinName: 'Ethereum',
+  privacy: true,
+  delayHours: 12,
+  routeId: null,
+  routeLabel: null,
+  destinationId: 'coinbase',
+  destinationLabel: 'Coinbase',
+  destinationAddress: PAYOUT,
+  state: 'swap1',
+  stage: 'waiting',
+  received: null,
+  usdt: null,
+  payoutTxUrl: null,
+  releaseAt: null,
+  unlockedAt: null,
+  xmr: null,
+  steps: [
+    { key: 'in', label: 'Ethereum payment', status: 'active', detail: 'Waiting for the payment', link: null },
+    { key: 'swap1', label: 'Swap to Monero', status: 'pending', detail: null, link: null },
+    { key: 'wait', label: 'Wait 12 hours', status: 'pending', detail: null, link: null },
+  ],
+  attention: null,
+  error: null,
+  waitingFor: null,
+  canRelease: true,
+  canChangeDelay: true,
+  canRetry: false,
+  leg1: VAULT_LEG,
+  leg2: null,
+  log: [],
+  updatedAt: Date.now(),
+  ...over,
+});
 
 function route(method: string, path: string, body: unknown): [number, unknown] {
   if (path === '/api/status') return [200, status];
@@ -70,7 +111,12 @@ function route(method: string, path: string, body: unknown): [number, unknown] {
     return [200, { ok: true }];
   }
   if (path === '/api/meta') return [200, meta];
-  if (path === '/api/orders' && method === 'GET') return [200, { orders: serverOrders }];
+  if (path === '/api/orders' && method === 'GET') return [200, { orders: serverOrders, transfers: serverTransfers }];
+  if (path === '/api/transfers' && method === 'POST') {
+    transferBody = body;
+    serverTransfers = [privacyTransfer()];
+    return [200, serverTransfers[0]];
+  }
   if (path === '/api/orders' && method === 'POST') {
     expect(body).toEqual({ coin: 'BTC' }); // the browser only ever names the coin
     serverOrders = [baseOrder];
@@ -182,6 +228,46 @@ describe('Wallet Click UI', () => {
     expect(text()).toContain('208.31 USDT');
     expect(sounds).toMatchObject({ ding: 1, swap: 1, send: 1, tada: 1, error: 0 });
     expect(host.querySelector('a[href="https://etherscan.io/tx/0xout"]')).toBeTruthy();
+  });
+
+  it('makes a Privacy Enhanced address, then shows the Monero wait with its countdown', async () => {
+    status = { ...status, authed: true };
+    serverOrders = [];
+    serverTransfers = [];
+    await mount();
+    await waitFor(() => !!button('Privacy Enhanced…'), 'privacy button');
+    await click(button('Privacy Enhanced…'), 'Privacy Enhanced');
+    await waitFor(() => text().includes('about $110 or more'), 'privacy dialog');
+    const inDialog = (label: string) => [...host.querySelectorAll('.win-privacy button')].find((b) => b.textContent?.includes(label));
+    await click(inDialog('Ethereum'), 'Ethereum');
+    await click(inDialog('12 h'), '12 h');
+    expect(text()).toContain('Wait in Monero: 12 hours');
+    await click(inDialog('Get address'), 'Get address');
+    expect(transferBody).toEqual({ coin: 'ETH', delayHours: 12, destinationId: 'coinbase' }); // never an address
+    await waitFor(() => text().includes(VAULT_LEG.address), 'receive window for the first swap');
+    expect(text()).toContain('Becomes Monero first');
+
+    // The payment went through and the Monero is waiting: the transfer window opens with the countdown.
+    const releaseAt = Date.now() + 11 * 3_600_000;
+    serverTransfers = [
+      privacyTransfer({
+        state: 'wait',
+        stage: 'holding',
+        received: '0.05',
+        xmr: '0.2231',
+        releaseAt,
+        steps: [
+          { key: 'in', label: 'Ethereum payment', status: 'done', detail: '0.05 ETH received', link: null },
+          { key: 'swap1', label: 'Swap to Monero', status: 'done', detail: null, link: null },
+          { key: 'wait', label: 'Wait 12 hours', status: 'active', detail: null, link: null },
+        ],
+      }),
+    ];
+    await waitFor(() => text().includes('Holding 0.2231 XMR'), 'journey window', 8000);
+    expect(text()).toMatch(/for another 1[01] h/);
+    expect(button('Release now')).toBeTruthy();
+    expect(button('Change wait…')).toBeTruthy();
+    serverTransfers = [];
   });
 
   it('plays the "How it works" demo end to end without touching the server', async () => {

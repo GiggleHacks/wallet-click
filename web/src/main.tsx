@@ -1,6 +1,7 @@
 import '@fontsource-variable/noto-sans';
 import './styles/win98.css';
 import './styles/themes.css';
+import './styles/features.css';
 import { MotionConfig } from 'motion/react';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

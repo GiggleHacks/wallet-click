@@ -14,7 +14,9 @@ export const DEMO_ADDRESS = 'DEMO-not-a-real-address';
 const SCRIPT: Record<Coin, { amount: string; usdt: string; req: number; min: string; minUsd: number }> = {
   ETH: { amount: '0.05', usdt: '126.84', req: 4, min: '0.005', minUsd: 12.72 },
   BTC: { amount: '0.0015', usdt: '125.37', req: 2, min: '0.0001243', minUsd: 10.42 },
+  XMR: { amount: '0.23', usdt: '124.18', req: 20, min: '0.0184', minUsd: 9.97 },
 };
+const NAMES: Record<Coin, [string, string, number]> = { BTC: ['Bitcoin', 'Bitcoin', 10], ETH: ['Ethereum', 'Ethereum mainnet', 0.2], XMR: ['Monero', 'Monero', 2] };
 
 function demoOrder(coin: Coin): Order {
   const s = SCRIPT[coin];
@@ -22,8 +24,8 @@ function demoOrder(coin: Coin): Order {
   return {
     id: DEMO_ID,
     coin,
-    coinName: coin === 'BTC' ? 'Bitcoin' : 'Ethereum',
-    network: coin === 'BTC' ? 'Bitcoin' : 'Ethereum mainnet',
+    coinName: NAMES[coin][0],
+    network: NAMES[coin][1],
     address: DEMO_ADDRESS,
     createdAt: now,
     stage: 'waiting',
@@ -37,7 +39,7 @@ function demoOrder(coin: Coin): Order {
     seenAt: null,
     confirmations: 0,
     requiredConfirmations: s.req,
-    blockMinutes: coin === 'BTC' ? 10 : 0.2,
+    blockMinutes: NAMES[coin][2],
     depositTx: null,
     depositTxUrl: null,
     usdt: null,

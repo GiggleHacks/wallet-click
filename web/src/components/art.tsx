@@ -70,7 +70,76 @@ export function CoinbaseIcon(p: IconProps) {
   );
 }
 
-export const CoinIcon = ({ coin, ...p }: IconProps & { coin: Coin }) => (coin === 'BTC' ? <BtcIcon {...p} /> : <EthIcon {...p} />);
+export function XmrIcon(p: IconProps) {
+  return (
+    <Svg {...p} label="Monero">
+      <Rim fill="#ff6600" edge="#b34700" />
+      {/* The grey band across the bottom of the coin, then the white "M". */}
+      <path d="M1.86 21h28.28A15 15 0 0 1 1.86 21z" fill="#4c4c4c" />
+      <path d="M8 21V10.5l8 8 8-8V21h-3.4v-6.3L16 19.3l-4.6-4.6V21z" fill="#fff" />
+    </Svg>
+  );
+}
+
+export const CoinIcon = ({ coin, ...p }: IconProps & { coin: Coin }) =>
+  coin === 'BTC' ? <BtcIcon {...p} /> : coin === 'XMR' ? <XmrIcon {...p} /> : <EthIcon {...p} />;
+
+/** Privacy Enhanced: a shield with a keyhole. */
+export function ShieldIcon({ size = 32 }: IconProps) {
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} role="img" aria-label="Privacy Enhanced">
+      <path d="M16 2.5 4.5 6.8v8.4c0 7.2 4.9 12.3 11.5 14.3 6.6-2 11.5-7.1 11.5-14.3V6.8z" fill="#3a2a6e" />
+      <path d="M16 4.3 6.3 8v7.2c0 6.1 4 10.5 9.7 12.4z" fill="#6a52c4" />
+      <path d="M16 4.3 25.7 8v7.2c0 6.1-4 10.5-9.7 12.4z" fill="#5240a8" />
+      <circle cx="16" cy="13.6" r="2.9" fill="#ffd23a" />
+      <path d="M14.6 15.4h2.8l.9 6.2h-4.6z" fill="#ffd23a" />
+    </svg>
+  );
+}
+
+/** The Monero "vault" where Privacy Enhanced funds wait between the two swaps. */
+export function VaultIcon({ size = 32 }: IconProps) {
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} role="img" aria-label="Monero vault">
+      <rect x="3" y="4" width="26" height="23" rx="2" fill="#5b5b5b" />
+      <rect x="4.5" y="5.5" width="23" height="20" rx="1.2" fill="#8a8a8a" />
+      <circle cx="16" cy="15.5" r="6.6" fill="#ff6600" stroke="#4c4c4c" strokeWidth="1.4" />
+      <path d="M16 9.6v11.8M10.1 15.5h11.8M11.8 11.3l8.4 8.4M20.2 11.3l-8.4 8.4" stroke="#fff" strokeWidth="1.3" />
+      <circle cx="16" cy="15.5" r="2.2" fill="#4c4c4c" />
+      <rect x="6" y="27" width="4" height="2.4" fill="#3a3a3a" />
+      <rect x="22" y="27" width="4" height="2.4" fill="#3a3a3a" />
+    </svg>
+  );
+}
+
+/** The address book: a little card file. */
+export function BookIcon({ size = 32 }: IconProps) {
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} role="img" aria-label="Address Book">
+      <rect x="5" y="3" width="21" height="26" rx="1.5" fill="#1d5aa8" />
+      <rect x="7.5" y="3" width="18.5" height="26" fill="#2f7bd8" />
+      <rect x="10.5" y="7" width="12.5" height="6" fill="#fff" />
+      <path d="M12 9h9.5M12 11h6" stroke="#2f7bd8" strokeWidth="1" />
+      <rect x="25" y="8" width="3" height="4" fill="#ffd23a" />
+      <rect x="25" y="14" width="3" height="4" fill="#ff6a3a" />
+      <rect x="25" y="20" width="3" height="4" fill="#4bc46a" />
+      <path d="M5 6h3M5 10h3M5 14h3M5 18h3M5 22h3M5 26h3" stroke="#0d3a73" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+/** A permanent address: a house with a coin slot. */
+export function HouseIcon({ size = 32 }: IconProps) {
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} role="img" aria-label="My Addresses">
+      <path d="M16 3 2.5 15h3.5v14h20V15h3.5z" fill="#c74d2c" />
+      <path d="M6 15 16 6l10 9v14H6z" fill="#f0e2c0" />
+      <rect x="13" y="19" width="6" height="10" fill="#7a4a24" />
+      <rect x="9" y="17" width="14" height="2.4" rx="1" fill="#333" />
+      <circle cx="16" cy="12.2" r="2.6" fill="#ffc83a" stroke="#805300" strokeWidth=".8" />
+    </svg>
+  );
+}
 
 /** The swap station, drawn like the Win98 "My Computer" icon: a beige CRT on a desktop case, swap arrows on screen. */
 export function SwapMachine({ size = 56, spinning = false }: IconProps & { spinning?: boolean }) {

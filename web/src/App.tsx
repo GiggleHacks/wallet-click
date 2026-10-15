@@ -1,7 +1,8 @@
 import { AnimatePresence } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
-import { AppMark, CoinIcon, DisplayIcon, PlayIcon, WarnIcon } from './components/art';
+import { AppMark, BookIcon, CoinIcon, DisplayIcon, HouseIcon, PlayIcon, ShieldIcon, WarnIcon } from './components/art';
+import { JourneyDialog } from './components/JourneyDialog';
 import { DisplayProperties } from './components/DisplayProperties';
 import { Taskbar, type Balloon, type TaskItem } from './components/Taskbar';
 import { TransferDialog } from './components/TransferDialog';
@@ -9,14 +10,18 @@ import { VersionTag } from './components/VersionTag';
 import { DragBounds, ModalLayer, Window } from './components/Win98';
 import { DEMO_ID, useDemo } from './lib/demo';
 import { trimAmount, usdt } from './lib/format';
+import { getChoice, setChoice } from './lib/prefs';
 import { applyThemeAttr, saveTheme, savedTheme, ThemeContext, type Theme } from './lib/themes';
 import { savedWallpaper, saveWallpaper, wallpaperById, type Wallpaper } from './lib/wallpapers';
 import { setSoundTheme, sfx } from './lib/sound';
+import { AddressBook } from './pages/AddressBook';
+import { Addresses } from './pages/Addresses';
+import { PrivacyDialog } from './pages/PrivacyDialog';
 import { Home } from './pages/Home';
 import { Lock } from './pages/Lock';
 import { Receive } from './pages/Receive';
 import { APP_VERSION } from './version';
-import type { Coin, Meta, Order, Stage, Status } from './types';
+import type { Coin, Destination, Meta, Order, Stage, Status, Transfer, TransferStage } from './types';
 
 const POLL_MS = 2000;
 
@@ -57,12 +62,23 @@ function MessageBox({ title, text, onOk }: { title: string; text: string; onOk()
 
 type View = { name: 'home' } | { name: 'receive'; id: string };
 
-function DesktopIcons({ onDemo, onDisplay }: { onDemo(): void; onDisplay(): void }) {
+const DELAYS = [4, 12, 24, 42];
+const LIVE: TransferStage[] = ['received', 'swapping', 'holding', 'sending'];
+
+function DesktopIcons({ onDemo, onDisplay, onAddressBook, onAddresses }: { onDemo(): void; onDisplay(): void; onAddressBook(): void; onAddresses(): void }) {
   return (
     <nav className="desk-icons" aria-label="Desktop">
       <button type="button" className="desk-icon" onClick={onDemo}>
         <PlayIcon size={32} />
         <span>How it works</span>
+      </button>
+      <button type="button" className="desk-icon" onClick={onAddresses}>
+        <HouseIcon size={32} />
+        <span>My Addresses</span>
+      </button>
+      <button type="button" className="desk-icon" onClick={onAddressBook}>
+        <BookIcon size={32} />
+        <span>Address Book</span>
       </button>
       <button type="button" className="desk-icon" onClick={onDisplay}>
         <DisplayIcon size={32} />
@@ -88,13 +104,27 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
   const [balloon, setBalloon] = useState<Balloon | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [display, setDisplay] = useState(false);
+  const [book, setBook] = useState(false);
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [journey, setJourney] = useState<string | null>(null);
+  const [privacy, setPrivacy] = useState(false);
+  const [myAddresses, setMyAddresses] = useState(false);
   const [offline, setOffline] = useState(false);
+  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [destinationId, setDestinationId] = useState(() => getChoice('destination') ?? 'coinbase');
+  const pickDestination = (id: string) => {
+    setDestinationId(id);
+    setChoice('destination', id);
+  };
   const demoCoin = useRef<Coin>('ETH');
 
   const stages = useRef(new Map<string, Stage>());
+  const tStages = useRef(new Map<string, TransferStage>());
   const loaded = useRef(false);
   const dialogRef = useRef(dialog);
   dialogRef.current = dialog;
+  const journeyRef = useRef(journey);
+  journeyRef.current = journey;
 
   useEffect(() => {
     api
@@ -107,13 +137,42 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
         }
       })
       .catch(() => {});
+    api
+      .destinations()
+      .then((d) => setDestinations(d.destinations))
+      .catch(() => {});
   }, []);
+  // A removed destination falls back to Coinbase.
+  const destination = destinations.find((d) => d.id === destinationId)?.id ?? 'coinbase';
 
   const notify = (title: string, text: string, onClick?: () => void) => setBalloon({ id: Date.now(), title, text, onClick });
 
-  /** Polls every order and reacts to stage changes, whichever screen is open. */
+  /** Polls every order and transfer and reacts to stage changes, whichever screen is open. */
   const refresh = useCallback(async () => {
-    const { orders: list } = await api.orders();
+    const { orders: list, transfers: tList = [] } = await api.orders();
+    for (const t of tList) {
+      const prev = tStages.current.get(t.id);
+      tStages.current.set(t.id, t.stage);
+      if (!loaded.current || prev === t.stage) continue;
+      const showing = journeyRef.current === t.id;
+      const open = () => setJourney(t.id);
+      if ((prev === undefined || prev === 'waiting' || prev === 'expired') && LIVE.includes(t.stage)) {
+        // Money arrived (at a permanent address, or a Privacy Enhanced address): ring and show its journey.
+        demoRef.current?.stop();
+        sfx.ding();
+        flashTitle(`Payment detected: ${trimAmount(t.received)} ${t.coin}`);
+        if (!showing && !dialogRef.current) setJourney(t.id);
+      } else if (t.stage === 'done') {
+        sfx.tada();
+        if (!showing) notify(`USDT sent to ${t.destinationLabel}`, t.usdt ? `${usdt(t.usdt)} USDT from ${trimAmount(t.received)} ${t.coin}.` : 'Transfer finished.', open);
+      } else if (t.stage === 'attention') {
+        sfx.error();
+        if (!showing) notify('A transfer needs you', t.attention ?? 'Click to see why.', open);
+      } else if (t.stage === 'holding' && !showing) {
+        notify('Holding in Monero', `${t.xmr ? `${trimAmount(t.xmr)} XMR` : 'The Monero'} waits about ${t.delayHours} h, then goes to ${t.destinationLabel} as USDT.`, open);
+      }
+    }
+    setTransfers(tList);
     for (const o of list) {
       const prev = stages.current.get(o.id);
       stages.current.set(o.id, o.stage);
@@ -134,7 +193,7 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
         }
       } else if (!showing && o.stage === 'done') {
         sfx.tada();
-        notify('USDT sent to Coinbase', o.usdt ? `${usdt(o.usdt)} USDT from ${trimAmount(o.received)} ${o.coin}.` : `${o.coinName} swap finished.`, open);
+        notify(`USDT sent to ${o.payoutLabel ?? 'Coinbase'}`, o.usdt ? `${usdt(o.usdt)} USDT from ${trimAmount(o.received)} ${o.coin}.` : `${o.coinName} swap finished.`, open);
       } else if (!showing && o.stage === 'attention') {
         sfx.error();
         const flags = o.emergency?.flags ?? [];
@@ -195,7 +254,7 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
     setCreating(coin);
     document.body.classList.add('busy');
     try {
-      const o = await api.createOrder(coin);
+      const o = await api.createOrder(coin, destination);
       stages.current.set(o.id, o.stage);
       setOrders((prev) => [o, ...prev.filter((x) => x.id !== o.id)]);
       setDialog(null);
@@ -225,7 +284,19 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
     api.logout().finally(onLocked);
   };
 
-  const findOrder = (id: string) => (id === DEMO_ID ? (demo.order ?? undefined) : orders.find((o) => o.id === id));
+  const legs = transfers.flatMap((t) => [t.leg1, t.leg2].filter((o): o is Order => Boolean(o)));
+  const findOrder = (id: string) => (id === DEMO_ID ? (demo.order ?? undefined) : (orders.find((o) => o.id === id) ?? legs.find((o) => o.id === id)));
+  const journeyT = journey ? transfers.find((t) => t.id === journey) : undefined;
+  const delays = meta?.privacy?.delays ?? DELAYS;
+  const updateTransfer = (t: Transfer) => {
+    tStages.current.set(t.id, t.stage);
+    setTransfers((prev) => prev.map((x) => (x.id === t.id ? t : x)));
+  };
+  const openTransfer = (t: Transfer) => {
+    sfx.open();
+    if (t.leg1 && !t.routeId && t.leg1.stage === 'waiting') setView({ name: 'receive', id: t.leg1.id });
+    else setJourney(t.id);
+  };
   const current = view.name === 'receive' ? findOrder(view.id) : undefined;
   const dialogOrder = dialog ? findOrder(dialog.id) : undefined;
   const isDemo = current?.id === DEMO_ID;
@@ -242,6 +313,7 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
   ];
   if (current) items.push({ key: 'recv', label: `Receive ${current.coinName}`, icon: <CoinIcon coin={current.coin} size={16} />, active: !dialogOrder, onClick: () => setDialog(null) });
   if (dialogOrder) items.push({ key: 'dlg', label: 'Swapping…', icon: <AppMark />, active: true, onClick: () => {} });
+  if (journeyT) items.push({ key: 'journey', label: journeyT.privacy ? 'Privacy transfer' : 'Transfer', icon: journeyT.privacy ? <ShieldIcon size={16} /> : <AppMark />, active: true, onClick: () => {} });
 
   return (
     <>
@@ -254,20 +326,76 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
               demo={isDemo}
               offline={offline}
               creating={creating !== null}
-              onNew={() => (isDemo ? playDemo(current.coin) : void create(current.coin))}
+              onNew={() => (isDemo ? playDemo(current.coin) : current.transferId ? setPrivacy(true) : void create(current.coin))}
               onBack={goHome}
-              onShowProgress={() => setDialog({ id: current.id, auto: false })}
+              onShowProgress={() => (current.transferId ? setJourney(current.transferId) : setDialog({ id: current.id, auto: false }))}
             />
           ) : (
-            <Home key="home" meta={meta} orders={orders} creating={creating} offline={offline} pressing={demo.pressing} onCreate={(c) => void create(c)} onOpen={openOrder} onDemo={() => playDemo()} />
+            <Home
+              key="home"
+              meta={meta}
+              orders={orders}
+              transfers={transfers}
+              onOpenTransfer={openTransfer}
+              onPrivacy={() => setPrivacy(true)}
+              onAddresses={() => setMyAddresses(true)}
+              destinations={destinations}
+              destinationId={destination}
+              onDestination={pickDestination}
+              onAddressBook={() => setBook(true)}
+              creating={creating}
+              offline={offline}
+              pressing={demo.pressing}
+              onCreate={(c) => void create(c)}
+              onOpen={openOrder}
+              onDemo={() => playDemo()}
+            />
           )}
         </AnimatePresence>
       </main>
-      <DesktopIcons onDemo={() => playDemo()} onDisplay={() => setDisplay(true)} />
+      <DesktopIcons onDemo={() => playDemo()} onDisplay={() => setDisplay(true)} onAddressBook={() => setBook(true)} onAddresses={() => setMyAddresses(true)} />
       <AnimatePresence>
         {dialogOrder && <TransferDialog key={dialogOrder.id} order={dialogOrder} autoplay={dialog?.auto} onClose={closeDialog} onUpdate={updateOrder} />}
       </AnimatePresence>
       <AnimatePresence>{display && <DisplayProperties theme={theme} wallpaper={wallpaper} onApply={onLook} onClose={() => setDisplay(false)} />}</AnimatePresence>
+      <AnimatePresence>{book && <AddressBook destinations={destinations} onChange={setDestinations} onClose={() => setBook(false)} />}</AnimatePresence>
+      <AnimatePresence>
+        {journeyT && (
+          <JourneyDialog
+            key={journeyT.id}
+            transfer={journeyT}
+            delays={delays}
+            onClose={() => setJourney(null)}
+            onUpdate={updateTransfer}
+            onOpenOrder={(o) => {
+              setJourney(null);
+              setView({ name: 'receive', id: o.id });
+            }}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {privacy && (
+          <PrivacyDialog
+            delays={delays}
+            destinations={destinations}
+            destinationId={destination}
+            unavailable={meta?.features?.monero === false}
+            testDelayMin={meta?.privacy?.testDelayMin ?? null}
+            onClose={() => setPrivacy(false)}
+            onCreated={(t) => {
+              tStages.current.set(t.id, t.stage);
+              setTransfers((prev) => [t, ...prev.filter((x) => x.id !== t.id)]);
+              setPrivacy(false);
+              setDialog(null);
+              if (t.leg1) setView({ name: 'receive', id: t.leg1.id });
+            }}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {myAddresses && <Addresses delays={delays} destinations={destinations} seedBackupPending={meta?.features?.seedBackupPending} onClose={() => setMyAddresses(false)} />}
+      </AnimatePresence>
       {message && <MessageBox title="Wallet Click" text={message} onOk={() => setMessage(null)} />}
       <Taskbar
         items={items}
@@ -276,6 +404,9 @@ function Main({ onLocked, theme, wallpaper, onLook }: MainProps) {
         onCreate={(c) => void create(c)}
         onDemo={() => playDemo()}
         onDisplay={() => setDisplay(true)}
+        onAddressBook={() => setBook(true)}
+        onPrivacy={() => setPrivacy(true)}
+        onAddresses={() => setMyAddresses(true)}
         onLock={lock}
       />
     </>

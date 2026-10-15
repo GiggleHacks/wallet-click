@@ -1,6 +1,14 @@
+import { sha256 } from '@noble/hashes/sha2.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
+import * as btc from '@scure/btc-signer';
 import type { Transport } from '../server/fixedfloat.js';
 
+/** A valid (bech32 P2WSH) Bitcoin address that nobody controls, different for every seed. */
+export const btcAddress = (seed: number | string) => btc.Address(btc.NETWORK).encode({ type: 'wsh', hash: sha256(utf8ToBytes(`wc-test-${seed}`)) });
+
 export const PAYOUT = '0x7E577e577e577E577e577E577E577E577e577E57';
+/** A well-formed (fake) Monero subaddress: 8 + 94 base58 characters. */
+export const xmrAddress = (seed: number | string, lead = '8') => `${lead}${String(seed).replace(/[^1-9A-HJ-NP-Za-km-z]/g, '').padEnd(94, 'x').slice(0, 94)}`;
 
 export interface FfCall {
   method: string;
@@ -35,11 +43,14 @@ let seq = 0;
 /** A FixedFloat order shaped like the real API's answer (captured from a live ETH order). */
 export function ffOrder(over: {
   id?: string;
-  coin?: 'ETH' | 'BTC';
+  coin?: 'ETH' | 'BTC' | 'XMR';
   status?: string;
   address?: string;
   payout?: string;
   toCode?: string;
+  toNetwork?: string;
+  toAmount?: string;
+  type?: string;
   fromTx?: Record<string, unknown>;
   toTx?: Record<string, unknown>;
   emergency?: { status: string[]; choice: string; repeat: string };
@@ -51,7 +62,7 @@ export function ffOrder(over: {
   return {
     id: over.id ?? `ORD${seq}`,
     token: `tok-${seq}-SECRET`,
-    type: 'float',
+    type: over.type ?? 'float',
     email: '',
     status: over.status ?? 'NEW',
     time: { reg: now, start: null, finish: null, update: now, expiration: now + 1800, left: 1800 },
@@ -59,22 +70,22 @@ export function ffOrder(over: {
       code: coin,
       coin,
       network: coin,
-      name: coin === 'ETH' ? 'Ethereum' : 'Bitcoin',
+      name: { ETH: 'Ethereum', BTC: 'Bitcoin', XMR: 'Monero' }[coin],
       alias: coin.toLowerCase(),
-      amount: over.fromAmount ?? (coin === 'ETH' ? '0.01500000' : '0.00037290'),
-      address: over.address ?? (coin === 'ETH' ? `0x${seq.toString(16).padStart(40, 'a')}` : `bc1qfake${seq}xxxxxxxxxxxxxxxxxxxxxxxxxxxx`),
+      amount: over.fromAmount ?? { ETH: '0.01500000', BTC: '0.00037290', XMR: '0.05600000' }[coin],
+      address: over.address ?? { ETH: `0x${seq.toString(16).padStart(40, 'a')}`, BTC: btcAddress(seq), XMR: xmrAddress(`FF${seq}`, '4') }[coin],
       tag: '',
-      reqConfirmations: coin === 'ETH' ? 4 : 2,
+      reqConfirmations: { ETH: 4, BTC: 2, XMR: 20 }[coin],
       maxConfirmations: 30,
       tx: tx(over.fromTx),
     },
     to: {
       code: over.toCode ?? 'USDT',
-      coin: 'USDT',
-      network: 'ETH',
-      name: 'Tether (ERC20)',
-      alias: 'usdt',
-      amount: '37.86900000',
+      coin: over.toCode === 'XMR' ? 'XMR' : 'USDT',
+      network: over.toNetwork ?? (over.toCode === 'XMR' ? 'XMR' : 'ETH'),
+      name: over.toCode === 'XMR' ? 'Monero' : 'Tether (ERC20)',
+      alias: over.toCode === 'XMR' ? 'xmr' : 'usdt',
+      amount: over.toAmount ?? '37.86900000',
       address: over.payout ?? PAYOUT,
       tag: '',
       tx: tx(over.toTx),
@@ -84,8 +95,19 @@ export function ffOrder(over: {
   };
 }
 
-export const priceAnswer = (coin: 'ETH' | 'BTC') => ({
-  from: { code: coin, network: coin, coin, amount: coin === 'ETH' ? 0.05 : 0.001, rate: 2530, precision: 8, min: coin === 'ETH' ? 0.005 : 0.0001243, max: 45, usd: coin === 'ETH' ? 127.16 : 83.86 },
-  to: { code: 'USDT', network: 'ETH', coin: 'USDT', amount: 126.5, rate: 0.0004, precision: 8, min: 10, max: 113866, usd: 126.5 },
-  errors: [],
-});
+const PRICES = {
+  ETH: { amount: 0.05, min: 0.005, usd: 127.16, out: 126.5 },
+  BTC: { amount: 0.001, min: 0.0001243, usd: 83.86, out: 83.4 },
+  XMR: { amount: 0.1, min: 0.0184, usd: 54.17, out: 53.9 },
+};
+/** FixedFloat's answer to `price` for the probe amount. Into XMR, the minimum is about $109 (as on the real exchange). */
+export const priceAnswer = (coin: 'ETH' | 'BTC' | 'XMR', to: 'USDT' | 'XMR' = 'USDT') => {
+  const p = PRICES[coin];
+  const min = to === 'XMR' ? Math.round((109 / (p.usd / p.amount)) * 1e8) / 1e8 : p.min;
+  const out = to === 'XMR' ? Math.round((p.usd / 541.68) * 1e8) / 1e8 : p.out;
+  return {
+    from: { code: coin, network: coin, coin, amount: p.amount, rate: out / p.amount, precision: 8, min, max: 45, usd: p.usd },
+    to: { code: to, network: to === 'XMR' ? 'XMR' : 'ETH', coin: to, amount: out, rate: p.amount / out, precision: 8, min: 10, max: 113866, usd: p.usd },
+    errors: [] as string[],
+  };
+};
