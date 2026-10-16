@@ -449,6 +449,20 @@ describe('following an order', () => {
     expect(await view(rec.id)).toMatchObject({ stage: 'done', received: '0.0213', usdt: '53.77', usdtFinal: true, payoutTxUrl: 'https://etherscan.io/tx/0xout' });
   });
 
+  it('works out roughly what the swap cost once it is done: dollar value in minus USDT out', async () => {
+    let status = 'EXCHANGE';
+    const { rec } = await createThenAnswer(() =>
+      ffOrder({ status, fromTx: { id: '0xin', amount: '0.0213', confirmations: 12 }, toTx: status === 'DONE' ? { id: '0xout', amount: '53.77' } : {} }),
+    );
+    await pollDue();
+    expect((await view(rec.id)).cost).toBeNull(); // not done yet
+    expect(rec.prices).toMatchObject({ from: 127.16 / 0.05, to: 1 }); // noted when the exchange started
+    status = 'DONE';
+    await again(rec);
+    // 0.0213 ETH at $2,543.20 = $54.17 in, 53.77 USDT out.
+    expect((await view(rec.id)).cost).toEqual({ usd: 0.4, pct: 0.7, inUsd: 54.17 });
+  });
+
   it('only shows a USDT estimate when the payment matches the order amount', async () => {
     const { rec } = await createThenAnswer(() => ffOrder({ status: 'PENDING', fromTx: { id: '0xin', amount: '0.0213' } }));
     await pollDue();

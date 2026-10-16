@@ -986,8 +986,9 @@ html[data-theme='win10'] .coin-btn .coin-sub {
     white-space: normal;
   }
 
-  /* Windows 11 centres the taskbar buttons; with a countdown in the tray they move left to make room. */
-  html[data-theme='win11'] .taskbar:has(.tray-bomb) {
+  /* Windows 11 centres the taskbar buttons; on a phone they sit on the left (its other setting), leaving room for
+     the tray (version, clock, a countdown). */
+  html[data-theme='win11'] .taskbar {
     justify-content: flex-start;
   }
 }
@@ -1013,4 +1014,17 @@ html[data-mode='dark'][data-theme='win11'] .log-list {
   font-variant-numeric: tabular-nums;
   opacity: 0.8;
   white-space: nowrap;
+}
+
+/* What a done swap cost, under the "Done!" line. */
+.line-cost {
+  margin: 2px 0 6px;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: help;
+}
+
+.line-drift {
+  display: block;
+  color: var(--text-faint);
 }

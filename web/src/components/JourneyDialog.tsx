@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { minutesText, shortAddr, trimAmount, usdt } from '../lib/format';
+import { COST_HELP, costText, driftText } from '../lib/cost';
 import { sfx } from '../lib/sound';
 import { useTheme } from '../lib/themes';
 import type { Order, Transfer, TransferStep } from '../types';
@@ -513,6 +514,12 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
         <JourneyStrip t={t} shown={shown} now={now} />
         <div className="lines">
           {main && <p className="line-main">{main}</p>}
+          {shown === 'done' && t.cost && (
+            <p className="line-cost" title={COST_HELP}>
+              {costText(t.cost)}
+              {driftText(t.cost) && <span className="line-drift">{driftText(t.cost)}</span>}
+            </p>
+          )}
           {sub && <p className="line-sub">{sub}</p>}
           {shown === 'waiting' && timeLapse && (
             <p className="line-sub timelapse">

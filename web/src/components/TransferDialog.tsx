@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { api } from '../api';
 import { minutesText, shortAddr, trimAmount, usdt } from '../lib/format';
+import { COST_HELP, costText } from '../lib/cost';
 import { sfx } from '../lib/sound';
 import { useTheme } from '../lib/themes';
 import type { Order, Stage } from '../types';
@@ -305,6 +306,11 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
           <p className="line-main">
             Done! <b>{order.usdt ? `${usdt(order.usdt)} USDT` : 'USDT'}</b> sent to {payoutName(order)}.
           </p>
+          {order.cost && (
+            <p className="line-cost" title={COST_HELP}>
+              {costText(order.cost)}
+            </p>
+          )}
           <p className="line-sub">
             {paid} in, USDT out to {order.payoutAddress ? shortAddr(order.payoutAddress) : payoutName(order)}.{' '}
             {order.payoutTxUrl && (

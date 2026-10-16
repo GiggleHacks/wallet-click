@@ -75,6 +75,8 @@ export interface OrderRecord {
   ownRefund?: string;
   /** Our wallet never paid this order and never will (it went stale first, or a crash orphaned it). */
   abandoned?: boolean;
+  /** Dollar prices of the coin in and the coin out when FixedFloat started the exchange: what the swap cost is worked out from. */
+  prices?: { from: number; to: number; at: number };
 }
 
 interface OrdersFile {
@@ -154,6 +156,7 @@ export const orders = {
     recentCreates.length = 0;
     inFlight.clear();
     limitCache.clear();
+    priceTriedAt.clear();
   },
 };
 
@@ -376,6 +379,7 @@ export async function pollOrder(r: OrderRecord, now = Date.now()): Promise<void>
   r.polledAt = now;
   await maybeContinue(r, now);
   await maybeRefund(r, now);
+  await notePrices(r, now);
   const delay = nextPollDelay(r, now);
   r.nextPollAt = delay === null ? STOPPED : now + delay;
 }
@@ -464,6 +468,34 @@ export function startPoller(log: FastifyBaseLogger): () => void {
   return () => clearInterval(timer);
 }
 
+// ---------------------------------------------------------------- what a swap cost
+
+const EXCHANGED = new Set(['EXCHANGE', 'WITHDRAW', 'DONE']);
+const priceTriedAt = new Map<string, number>();
+
+/** A float order's rate is set when FixedFloat starts the exchange: note both coins' dollar prices then (USDT = $1). */
+async function notePrices(r: OrderRecord, now: number): Promise<void> {
+  if (r.prices || !EXCHANGED.has(r.ff.status) || now - (priceTriedAt.get(r.id) ?? 0) < M) return;
+  priceTriedAt.set(r.id, now);
+  const usd = async (c: Coin | PayoutCcy) => (c === 'USDT' ? 1 : (usdPrice(c, now, 5 * M) ?? (await limits(c, 'USDT', { now, cached: true })).usdPerCoin));
+  try {
+    const [from, to] = [await usd(r.coin), await usd(r.toCcy)];
+    if (!from || !to) return;
+    r.prices = { from, to, at: now };
+    markDirty();
+  } catch {
+    // No price just now: try again in a minute (the cost only shows once there is one).
+  }
+}
+
+const cents = (v: number) => Math.round(v * 100) / 100;
+
+/** What a swap cost (FixedFloat's cut plus network fees), in dollars and as a share of what went in. */
+export function costOf(inUsd: number, usd: number): { usd: number; pct: number; inUsd: number } | null {
+  if (!(inUsd > 0) || !Number.isFinite(usd)) return null;
+  return { usd: cents(usd), pct: Math.round((usd / inUsd) * 1000) / 10, inUsd: cents(inUsd) };
+}
+
 // ---------------------------------------------------------------- creating
 
 const PRICE_ERRORS: Record<string, (from: string, to: string) => string> = {
@@ -523,10 +555,10 @@ const LIMITS_FRESH = 2 * M;
 const PRICE_FRESH = 30 * M;
 
 /** A coin's US dollar price from FixedFloat's latest quote for it (any pair, up to half an hour old), or null. */
-export function usdPrice(coin: Coin, now = Date.now()): number | null {
+export function usdPrice(coin: Coin, now = Date.now(), maxAge = PRICE_FRESH): number | null {
   let best: { at: number; usd: number } | null = null;
   for (const [key, v] of limitCache) {
-    if (!key.startsWith(`${coin}>`) || !v.limits.usdPerCoin || now - v.at > PRICE_FRESH) continue;
+    if (!key.startsWith(`${coin}>`) || !v.limits.usdPerCoin || now - v.at > maxAge) continue;
     if (!best || v.at > best.at) best = { at: v.at, usd: v.limits.usdPerCoin };
   }
   return best?.usd ?? null;
@@ -761,6 +793,8 @@ export function orderView(r: OrderRecord, now = Date.now()) {
     autoError: emergencyAction(o) === 'continue' ? r.auto.error : null,
     reusedAddress: r.reusedAddress,
     pollError: r.pollError,
+    /** Once it's done: roughly what the swap cost (dollar value in, at the exchange, minus what came out). */
+    cost: o.status === 'DONE' && toTx?.id && received && usdt && r.prices ? costOf(Number(received) * r.prices.from, Number(received) * r.prices.from - Number(usdt) * r.prices.to) : null,
     updatedAt: r.polledAt,
   };
 }

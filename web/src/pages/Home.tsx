@@ -5,7 +5,8 @@ import { transferStatus } from '../components/JourneyDialog';
 import { Window } from '../components/Win98';
 import { setPref, usePref } from '../lib/prefs';
 import { shortAddr, timeAgo, trimAmount, usdt } from '../lib/format';
-import type { Coin, Destination, Meta, Order, Stage, Transfer } from '../types';
+import { costText } from '../lib/cost';
+import type { Coin, Cost, Destination, Meta, Order, Stage, Transfer } from '../types';
 
 export const STAGE_LABEL: Record<Stage, string> = {
   waiting: 'Waiting',
@@ -28,6 +29,7 @@ interface Row {
   createdAt: number;
   paid: string | null;
   usdt: string | null;
+  cost: Cost | null;
   stage: string;
   label: string;
   privacy: boolean;
@@ -73,6 +75,7 @@ function OrderList({ orders, transfers, onOpen, onOpenTransfer }: { orders: Orde
       createdAt: o.createdAt,
       paid: o.received,
       usdt: o.usdt,
+      cost: o.cost ?? null,
       stage: o.stage,
       label: o.stage === 'refunded' && !o.refundTx ? 'Refund requested' : STAGE_LABEL[o.stage],
       privacy: false,
@@ -85,6 +88,7 @@ function OrderList({ orders, transfers, onOpen, onOpenTransfer }: { orders: Orde
       createdAt: t.createdAt,
       paid: t.received,
       usdt: t.usdt,
+      cost: t.cost ?? null,
       stage: t.stage === 'holding' ? 'received' : t.stage,
       label: transferStatus(t),
       privacy: t.privacy,
@@ -133,7 +137,7 @@ function OrderList({ orders, transfers, onOpen, onOpenTransfer }: { orders: Orde
                 </span>
               </td>
               <td>{o.paid ? trimAmount(o.paid) : '—'}</td>
-              <td>{o.usdt ? usdt(o.usdt) : '—'}</td>
+              <td title={o.cost ? costText(o.cost) : undefined}>{o.usdt ? usdt(o.usdt) : '—'}</td>
               <td>
                 <span className={`stage-pill stage-${o.stage}`}>{o.label}</span>
               </td>

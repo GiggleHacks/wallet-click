@@ -10,6 +10,7 @@ import { TransferDialog } from './components/TransferDialog';
 import { VersionTag } from './components/VersionTag';
 import { DragBounds, ModalLayer, Window } from './components/Win98';
 import { DEMO_ID, DEMO_TRANSFER, useDemo, type DemoKind } from './lib/demo';
+import { costText } from './lib/cost';
 import { trimAmount, usdt } from './lib/format';
 import { getChoice, setChoice, usePref } from './lib/prefs';
 import { applyThemeAttr, saveMode, savedMode, saveTheme, savedTheme, ThemeContext, useDark, type Mode, type Theme } from './lib/themes';
@@ -186,7 +187,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
         else sfx.ding();
       } else if (t.stage === 'done') {
         sfx.tada();
-        if (!showing) notify(`USDT sent to ${t.destinationLabel}`, t.usdt ? `${usdt(t.usdt)} USDT from ${trimAmount(t.received)} ${t.coin}.` : 'Transfer finished.', open);
+        if (!showing) notify(`USDT sent to ${t.destinationLabel}`, t.usdt ? `${usdt(t.usdt)} USDT from ${trimAmount(t.received)} ${t.coin}.${t.cost ? ` ${costText(t.cost)}.` : ''}` : 'Transfer finished.', open);
       } else if (t.stage === 'attention') {
         sfx.error();
         if (!showing) notify('A transfer needs you', t.attention ?? 'Click to see why.', open);
@@ -215,7 +216,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
         }
       } else if (!showing && o.stage === 'done') {
         sfx.tada();
-        notify(`USDT sent to ${o.payoutLabel ?? 'Coinbase'}`, o.usdt ? `${usdt(o.usdt)} USDT from ${trimAmount(o.received)} ${o.coin}.` : `${o.coinName} swap finished.`, open);
+        notify(`USDT sent to ${o.payoutLabel ?? 'Coinbase'}`, o.usdt ? `${usdt(o.usdt)} USDT from ${trimAmount(o.received)} ${o.coin}.${o.cost ? ` ${costText(o.cost)}.` : ''}` : `${o.coinName} swap finished.`, open);
       } else if (!showing && o.stage === 'attention') {
         sfx.error();
         const flags = o.emergency?.flags ?? [];

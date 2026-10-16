@@ -8,7 +8,7 @@ import { destinations } from './destinations.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
 import { FfError } from './fixedfloat.js';
 import { logger } from './logs.js';
-import { LimitError, abandon, createOrder, flush as flushOrders, limits, openSwap, orderView, orders, pairBusy, usdPrice, type Expect, type OrderRecord, type OrderView } from './orders.js';
+import { LimitError, abandon, costOf, createOrder, flush as flushOrders, limits, openSwap, orderView, orders, pairBusy, usdPrice, type Expect, type OrderRecord, type OrderView } from './orders.js';
 import { readJson, writeJsonAtomic } from './store.js';
 import { hotWallet, xmrWallet, type HotWallet, type RouteRef } from './wallets/index.js';
 import * as xmr from './wallets/xmr.js';
@@ -743,6 +743,32 @@ function usdValue(t: TransferRecord, now: number): number | null {
   return price && n > 0 ? Math.round(n * price * 100) / 100 : null;
 }
 
+/**
+ * What a finished transfer cost: FixedFloat's cut on each swap plus every network fee on the way (our forward,
+ * the Monero moves), as dollars and a share of what came in. For Privacy Enhanced, `drift` is how much the Monero
+ * price moved while it waited: not a cost, so it's kept apart.
+ */
+function transferCost(t: TransferRecord, leg1Rec: OrderRecord | null, leg2Rec: OrderRecord | null, leg2: OrderView | null) {
+  if (t.state !== 'done' || !t.usdt) return null;
+  const out = Number(t.usdt);
+  if (!t.privacy) {
+    const p = leg1Rec?.prices;
+    const inUsd = Number(t.received) * (p?.from ?? NaN);
+    return costOf(inUsd, inUsd - out);
+  }
+  const p1 = leg1Rec?.prices;
+  const p2 = leg2Rec?.prices;
+  const vault = Number(t.vault?.amount);
+  const sent = Number(leg2?.received ?? t.sweep?.amount);
+  if (!p2 || !(vault > 0) || !(sent > 0)) return null;
+  const moneroFees = (vault - sent) * p2.from + (sent * p2.from - out);
+  if (!t.received) return costOf(vault * p2.from, moneroFees); // Monero found left behind: it started in the vault
+  if (!p1) return null;
+  const inUsd = Number(t.received) * p1.from;
+  const c = costOf(inUsd, inUsd - vault * p1.to + moneroFees);
+  return c && { ...c, drift: Math.round(vault * (p2.from - p1.to) * 100) / 100 };
+}
+
 let pricedAt = 0;
 /** Keeps prices fresh for the transfers still in progress (the desktop shows their dollar value). Every few minutes at most. */
 export async function refreshPrices(now = Date.now()): Promise<void> {
@@ -913,6 +939,7 @@ export function transferView(t: TransferRecord, now = Date.now()) {
     xmrArrived: Boolean(t.vault?.seenAt) || ['churn', 'wait', 'open2', 'send2', 'swap2', 'done'].includes(t.state),
     xmrConfirmations: t.vault?.confirmations ?? 0,
     usdValue: usdValue(t, now),
+    cost: transferCost(t, leg1Rec, leg2Rec, leg2),
     steps: stepsOf(t, leg1, leg2, route, now),
     attention: t.attention,
     error: t.error,

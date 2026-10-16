@@ -329,6 +329,13 @@ describe('Privacy Enhanced (fresh address)', () => {
 
     const v = (await get(`/api/transfers/${view.id}`)).json();
     expect(v.steps.map((s: { status: string }) => s.status)).toEqual(['done', 'done', 'done', 'done', 'done', 'done', 'done']);
+
+    // What it cost: FixedFloat's cut on both swaps plus the Monero fees, at the prices when each swap ran.
+    const BTC = 83.86 / 0.001;
+    const XMR = 54.17 / 0.1;
+    const inUsd = Number(t.received) * BTC;
+    const fees = inUsd - 0.3 * XMR + (0.3 - 0.29994) * XMR + (0.29994 * XMR - 160.12);
+    expect(v.cost).toEqual({ usd: Math.round(fees * 100) / 100, pct: Math.round((fees / inUsd) * 1000) / 10, inUsd: Math.round(inUsd * 100) / 100, drift: 0 });
     expect(JSON.stringify(v)).not.toMatch(/META-SECRET|SECRET|token/);
   });
 

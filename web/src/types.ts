@@ -30,6 +30,15 @@ export interface Destination {
   builtIn?: boolean;
 }
 
+/** Roughly what a finished swap cost: FixedFloat's cut plus network fees, in dollars and as a share of what went in. */
+export interface Cost {
+  usd: number;
+  pct: number;
+  inUsd: number;
+  /** Privacy Enhanced: how much the Monero price moved while it waited (not a cost). */
+  drift?: number;
+}
+
 export interface Order {
   id: string;
   coin: Coin;
@@ -78,6 +87,7 @@ export interface Order {
   autoError: string | null;
   reusedAddress: boolean;
   pollError: string | null;
+  cost?: Cost | null;
   updatedAt: number;
 }
 
@@ -118,6 +128,7 @@ export interface Transfer {
   xmrConfirmations?: number;
   /** Roughly what it's worth in US dollars right now (the Monero held, or what was paid in). */
   usdValue?: number | null;
+  cost?: Cost | null;
   steps: TransferStep[];
   attention: string | null;
   error: string | null;

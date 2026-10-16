@@ -333,6 +333,7 @@ describe('Wallet Click UI', () => {
     expect(sounds.ding).toBe(1);
     await waitFor(() => text().includes('Done!'), 'demo done', 25_000);
     expect(text()).toContain('126.84 USDT');
+    expect(text()).toContain('Swap cost ≈ $1.37 (1.1%)'); // what it cost, at the end
     expect(sounds).toMatchObject({ ding: 1, swap: 1, send: 1, tada: 1, error: 0 });
     expect(calls.filter((c) => c.startsWith('POST')).length).toBe(before); // nothing was created
   }, 45_000);
@@ -383,6 +384,8 @@ describe('Wallet Click UI', () => {
     expect(host.querySelector('.vault-ring.is-wait')).toBeTruthy();
     await waitFor(() => text().includes('Done!'), 'privacy demo done', 30_000);
     expect(text()).toContain('118.42 USDT');
+    expect(text()).toContain('Swap cost ≈ $4.61 (3.7%)'); // fees only…
+    expect(text()).toContain('Monero price moved −$3.07 while waiting'); // …the price move shown apart
     expect(sounds).toMatchObject({ ding: 1, swap: 2, send: 2, vaultLock: 1, shuffle: 1, vaultOpen: 1, tada: 1, error: 0, boom: 1 });
     await waitFor(() => !host.querySelector('.bomb-icon'), 'bomb gone once the money has landed', 3000);
     expect(calls.filter((c) => c.startsWith('POST')).length).toBe(before); // nothing was created

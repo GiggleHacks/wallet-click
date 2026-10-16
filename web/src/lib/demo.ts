@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TimeLapse } from '../components/JourneyDialog';
-import type { Coin, Order, Transfer, TransferStep } from '../types';
+import type { Coin, Cost, Order, Transfer, TransferStep } from '../types';
 import { sfx } from './sound';
 
 /**
@@ -20,10 +20,10 @@ const ROUTE_LABEL: Record<Flavor, string> = { privacy: '', route: 'Phone → Coi
 /** Deliberately not a valid address, so nobody can pay it by scanning the demo QR code. */
 export const DEMO_ADDRESS = 'DEMO-not-a-real-address';
 
-const SCRIPT: Record<Coin, { amount: string; usdt: string; req: number; min: string; minUsd: number }> = {
-  ETH: { amount: '0.05', usdt: '126.84', req: 4, min: '0.005', minUsd: 12.72 },
-  BTC: { amount: '0.0015', usdt: '125.37', req: 2, min: '0.0001243', minUsd: 10.42 },
-  XMR: { amount: '0.23', usdt: '124.18', req: 20, min: '0.0184', minUsd: 9.97 },
+const SCRIPT: Record<Coin, { amount: string; usdt: string; req: number; min: string; minUsd: number; cost: Cost }> = {
+  ETH: { amount: '0.05', usdt: '126.84', req: 4, min: '0.005', minUsd: 12.72, cost: { usd: 1.37, pct: 1.1, inUsd: 128.21 } },
+  BTC: { amount: '0.0015', usdt: '125.37', req: 2, min: '0.0001243', minUsd: 10.42, cost: { usd: 1.33, pct: 1.0, inUsd: 126.7 } },
+  XMR: { amount: '0.23', usdt: '124.18', req: 20, min: '0.0184', minUsd: 9.97, cost: { usd: 1.3, pct: 1.0, inUsd: 125.48 } },
 };
 const NAMES: Record<Coin, [string, string, number]> = { BTC: ['Bitcoin', 'Bitcoin', 10], ETH: ['Ethereum', 'Ethereum mainnet', 0.2], XMR: ['Monero', 'Monero', 2] };
 
@@ -207,7 +207,7 @@ export function useDemo(payoutAddress: string, hooks: Hooks) {
       // 4. Swap, send, done.
       at(1200, () => set({ stage: 'swapping', status: 'EXCHANGE' }));
       at(3600, () => set({ stage: 'sending', status: 'WITHDRAW', usdt: s.usdt }));
-      at(3400, () => set({ stage: 'done', status: 'DONE', usdtFinal: true }));
+      at(3400, () => set({ stage: 'done', status: 'DONE', usdtFinal: true, cost: s.cost }));
     },
     [payoutAddress],
   );
@@ -283,7 +283,7 @@ export function useDemo(payoutAddress: string, hooks: Hooks) {
         });
         at(2800, () => {
           setLeg({ stage: 'done', status: 'DONE', usdtFinal: true });
-          set({ state: 'done', stage: 'done', usdt: out, steps: steps('all', { out: `${out} USDT` }) });
+          set({ state: 'done', stage: 'done', usdt: out, cost: { usd: 2.07, pct: 1.6, inUsd: 126.1 }, steps: steps('all', { out: `${out} USDT` }) });
         });
         return;
       }
@@ -308,7 +308,8 @@ export function useDemo(payoutAddress: string, hooks: Hooks) {
       at(LAPSE_MS + 300, () => set({ state: 'open2', steps: steps('swap2', { wait: 'Over' }) }));
       at(1600, () => set({ state: 'swap2', stage: 'swapping', leg2, steps: steps('swap2', { swap2: `FixedFloat order DEMO2: ${xmr} XMR` }) }));
       at(3000, () => set({ stage: 'sending', leg2: { ...leg2, stage: 'sending', status: 'WITHDRAW', usdt: out }, steps: steps('out', { swap2: `${xmr} XMR` }) }));
-      at(2800, () => set({ state: 'done', stage: 'done', usdt: out, leg2: { ...leg2, stage: 'done', status: 'DONE', usdt: out, usdtFinal: true }, steps: steps('all', { out: `${out} USDT` }) }));
+      // 126.10 in, 118.42 out: 4.61 of fees, and the Monero price fell 3.07 while it waited.
+      at(2800, () => set({ state: 'done', stage: 'done', usdt: out, cost: { usd: 4.61, pct: 3.7, inUsd: 126.1, drift: -3.07 }, leg2: { ...leg2, stage: 'done', status: 'DONE', usdt: out, usdtFinal: true }, steps: steps('all', { out: `${out} USDT` }) }));
     },
     [payoutAddress],
   );
