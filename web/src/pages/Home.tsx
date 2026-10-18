@@ -1,11 +1,12 @@
 import { motion } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { AppMark, BookIcon, CoinIcon, EyeIcon, HouseIcon, PlayIcon, ShieldIcon, UsdtIcon } from '../components/art';
+import { AppMark, BookIcon, ClockIcon, CoinIcon, EyeIcon, HouseIcon, PlayIcon, ShieldIcon, UsdtIcon } from '../components/art';
 import { transferStatus } from '../components/JourneyDialog';
 import { Window } from '../components/Win98';
 import { setPref, usePref } from '../lib/prefs';
 import { shortAddr, timeAgo, trimAmount, usdt } from '../lib/format';
 import { costText } from '../lib/cost';
+import { coinSub, optionsSummary, type SendOptions } from '../lib/sendOptions';
 import type { Coin, Cost, Destination, Meta, Order, Stage, Transfer } from '../types';
 
 export const STAGE_LABEL: Record<Stage, string> = {
@@ -34,6 +35,7 @@ interface Row {
   label: string;
   privacy: boolean;
   route: string | null;
+  pieces: number;
   open(): void;
 }
 
@@ -80,6 +82,7 @@ function OrderList({ orders, transfers, onOpen, onOpenTransfer }: { orders: Orde
       label: o.stage === 'refunded' && !o.refundTx ? 'Refund requested' : STAGE_LABEL[o.stage],
       privacy: false,
       route: null,
+      pieces: 1,
       open: () => onOpen(o),
     })),
     ...transfers.map((t) => ({
@@ -93,6 +96,7 @@ function OrderList({ orders, transfers, onOpen, onOpenTransfer }: { orders: Orde
       label: transferStatus(t),
       privacy: t.privacy,
       route: t.routeLabel,
+      pieces: t.pieces ?? 1,
       open: () => onOpenTransfer(t),
     })),
   ].sort((a, b) => b.createdAt - a.createdAt);
@@ -134,6 +138,11 @@ function OrderList({ orders, transfers, onOpen, onOpenTransfer }: { orders: Orde
                       <HouseIcon size={14} />
                     </span>
                   )}
+                  {o.pieces > 1 && (
+                    <span className="tag tag-pieces" title={`Sent in ${o.pieces} pieces`}>
+                      ×{o.pieces}
+                    </span>
+                  )}
                 </span>
               </td>
               <td>{o.paid ? trimAmount(o.paid) : '—'}</td>
@@ -156,7 +165,9 @@ interface Props {
   orders: Order[];
   transfers: Transfer[];
   onOpenTransfer(t: Transfer): void;
-  onPrivacy(): void;
+  /** How the coin buttons send (route, wait, pieces), and the button that changes it. */
+  sendOptions: SendOptions;
+  onSendOptions(): void;
   onAddresses(): void;
   destinations: Destination[];
   destinationId: string;
@@ -171,7 +182,7 @@ interface Props {
   onDemo(): void;
 }
 
-export function Home({ meta, orders, transfers, onOpenTransfer, onPrivacy, onAddresses, destinations, destinationId, onDestination, onAddressBook, creating, offline, pressing, onCreate, onOpen, onDemo }: Props) {
+export function Home({ meta, orders, transfers, onOpenTransfer, sendOptions, onSendOptions, onAddresses, destinations, destinationId, onDestination, onAddressBook, creating, offline, pressing, onCreate, onOpen, onDemo }: Props) {
   const hideFigures = usePref('hideFigures');
   const toggleHide = () => setPref('hideFigures', !hideFigures);
   const dest = destinations.find((d) => d.id === destinationId) ?? destinations[0];
@@ -216,18 +227,21 @@ export function Home({ meta, orders, transfers, onOpenTransfer, onPrivacy, onAdd
               <CoinIcon coin={c} size={60} />
             </motion.span>
             <span className="coin-name">{creating === c ? 'Getting address…' : COIN_NAME[c]}</span>
-            <span className="coin-sub">New {c} address</span>
+            <span className="coin-sub">{coinSub(sendOptions, c)}</span>
           </motion.button>
         ))}
       </div>
       <div className="extra-row">
-        <button type="button" className="btn98 extra-btn" onClick={onPrivacy}>
-          <ShieldIcon size={30} />
-          <span>
-            <b>Privacy Enhanced…</b>
-            <small>Through Monero, with a wait</small>
+        <div className="send-box">
+          {sendOptions.route === 'monero' ? <ShieldIcon size={30} /> : <ClockIcon size={30} />}
+          <span className="send-box-text">
+            <b>Send options</b>
+            <small>{optionsSummary(sendOptions)}</small>
           </span>
-        </button>
+          <button type="button" className="btn98 btn-small" onClick={onSendOptions}>
+            Change…
+          </button>
+        </div>
         <button type="button" className="btn98 extra-btn" onClick={onAddresses}>
           <HouseIcon size={30} />
           <span>

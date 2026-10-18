@@ -13,9 +13,12 @@ import { keyAt } from './seed.js';
 const DUST = 546n;
 /** Fee estimate assumes the largest common output type (taproot / P2WSH, 43 vbytes). */
 const vsize = (inputs: number) => 11 + 68 * inputs + 43;
+/** A split pays our own native segwit (P2WPKH, 31 vbytes) outputs. */
+const splitVsize = (inputs: number, outputs: number) => 11 + 68 * inputs + 31 * outputs;
 
-export const btcPath = (index: number) => `m/84'/0'/0'/0/${index}`;
-export const btcAddress = (index: number) => btc.p2wpkh(keyAt(btcPath(index)).publicKey!).address!;
+/** Chain 0: permanent addresses. Chain 1 (BIP84's change chain): the pieces of a split, so any BIP84 wallet finds them. */
+export const btcPath = (index: number, chain: 0 | 1 = 0) => `m/84'/0'/0'/${chain}/${index}`;
+export const btcAddress = (index: number, chain: 0 | 1 = 0) => btc.p2wpkh(keyAt(btcPath(index, chain)).publicKey!).address!;
 
 interface Utxo {
   txid: string;
@@ -65,6 +68,18 @@ async function feeRate(): Promise<number> {
   return Math.max(2, Math.ceil(est?.['3'] ?? est?.['6'] ?? 10));
 }
 
+/** A transaction spending exactly these coins of ours from `r` (outputs still to add). */
+function spending(r: RouteRef, inputs: Utxo[]) {
+  const key = keyAt(btcPath(r.index, r.chain ?? 0));
+  const own = btc.p2wpkh(key.publicKey!);
+  if (own.address !== r.address) throw new Error('The permanent address does not match the wallet key.');
+  const tx = new btc.Transaction();
+  for (const u of inputs) {
+    tx.addInput({ txid: u.txid, index: u.vout, witnessUtxo: { script: own.script, amount: BigInt(u.value) }, sequence: 0xfffffffd });
+  }
+  return { key, tx };
+}
+
 export const btcWallet: HotWallet = {
   coin: 'BTC',
   decimals: 8,
@@ -106,17 +121,43 @@ export const btcWallet: HotWallet = {
     // The fee is whatever the quoted coins hold beyond the order amount: never negative, never absurd.
     if (fee <= 0n || fee > total / 5n || fee > 500_000n) throw new Error(`Refusing a Bitcoin fee of ${fee} sats for ${amount} sats.`);
 
-    const key = keyAt(btcPath(r.index));
-    const own = btc.p2wpkh(key.publicKey!);
-    if (own.address !== r.address) throw new Error('The permanent address does not match the wallet key.');
-    const tx = new btc.Transaction();
-    for (const u of inputs) {
-      tx.addInput({ txid: u!.txid, index: u!.vout, witnessUtxo: { script: own.script, amount: BigInt(u!.value) }, sequence: 0xfffffffd });
-    }
+    const { key, tx } = spending(r, inputs as Utxo[]);
     tx.addOutputAddress(to, amount, btc.NETWORK);
     tx.sign(key.privateKey!);
     tx.finalize();
     return { txids: [tx.id], raw: [tx.hex], amount, fee, inputs: want } satisfies Prepared;
+  },
+
+  async quoteSplit(r, n, exclude) {
+    const list = (await utxos(r.address, exclude)).filter((u) => u.status.confirmed);
+    if (!list.length) return null;
+    const total = list.reduce((s, u) => s + BigInt(u.value), 0n);
+    const fee = BigInt(Math.ceil(splitVsize(list.length, n) * (await feeRate())));
+    if (total - fee < DUST * BigInt(n)) return null;
+    return { amount: total - fee, fee, inputs: list.map(outpoint) };
+  },
+
+  async prepareSplit(r, outs, opts) {
+    const want = opts.inputs;
+    if (!want.length || !outs.length) throw new Error('Nothing to split.');
+    const unspent = new Map((await utxos(r.address)).map((u) => [outpoint(u), u]));
+    const inputs = want.map((o) => unspent.get(o));
+    if (inputs.some((u) => !u)) throw new Error('Some of the quoted coins are no longer unspent; quoting again.');
+    const total = inputs.reduce((s, u) => s + BigInt(u!.value), 0n);
+    const sum = outs.reduce((s, o) => s + o.amount, 0n);
+    const fee = total - sum;
+    if (fee <= 0n || fee > total / 5n || fee > 500_000n) throw new Error(`Refusing a Bitcoin fee of ${fee} sats for a split of ${sum} sats.`);
+    const { key, tx } = spending(r, inputs as Utxo[]);
+    for (const o of outs) {
+      if (o.amount < DUST) throw new Error('A piece would be dust.');
+      // Every output is an address of ours, derived right here from the seed.
+      const mine = btc.p2wpkh(keyAt(btcPath(o.ref.index, o.ref.chain ?? 0)).publicKey!);
+      if (mine.address !== o.ref.address) throw new Error('A piece address does not match the wallet key.');
+      tx.addOutput({ script: mine.script, amount: o.amount });
+    }
+    tx.sign(key.privateKey!);
+    tx.finalize();
+    return { txids: [tx.id], raw: [tx.hex], amount: sum, fee, inputs: want } satisfies Prepared;
   },
 
   async broadcast(raw) {

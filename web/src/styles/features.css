@@ -61,9 +61,104 @@
   color: var(--text-dim);
 }
 
+/* Send options: what the coin buttons do now, and the button to change it. */
+.send-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 6px 10px;
+  background: var(--field);
+  box-shadow: var(--sunken);
+}
+
+.send-box svg {
+  flex: none;
+}
+
+.send-box-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.send-box-text b {
+  display: block;
+  font-size: 14px;
+}
+
+.send-box-text small {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.send-box .btn98 {
+  flex: none;
+}
+
 .cell-coin .tag {
   margin-left: 4px;
   vertical-align: -3px;
+}
+
+.cell-coin .tag-pieces {
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 0;
+}
+
+/* Send options dialog. */
+.win-sendopts {
+  width: min(500px, 100%);
+}
+
+.sendopts .group98 {
+  margin-top: 8px;
+}
+
+.pieces98 .seg-btn {
+  min-width: 48px;
+}
+
+/* A split payment's pieces, in its transfer window. */
+.pieces-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  background: var(--field);
+  box-shadow: var(--sunken);
+  font-size: 12px;
+}
+
+.pieces-list li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 2px 0;
+}
+
+.pieces-list .piece-n {
+  flex: none;
+  width: 52px;
+  font-weight: 700;
+}
+
+.pieces-list .piece-amt {
+  flex: none;
+  min-width: 96px;
+}
+
+.pieces-list .piece-state {
+  flex: 1;
+  min-width: 0;
+}
+
+.pieces-list .is-done .piece-state {
+  color: var(--ok);
+}
+
+.pieces-list .is-attention .piece-state {
+  color: var(--error);
 }
 
 /* Windows 10 live tile for Monero. */

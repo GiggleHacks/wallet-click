@@ -1,14 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { addresses } from '../addresses.js';
-import { COINS, PRIVACY_DELAYS, config, type Coin } from '../config.js';
+import { COINS, DELAYS, PIECES_MAX, config, type Coin } from '../config.js';
 import { UserError } from '../errors.js';
 import { limits } from '../orders.js';
 import { changeDelay, createPrivacyTransfer, releaseNow, retry, transferView, transfers } from '../transfers.js';
 import { hotWallet } from '../wallets/index.js';
 import { onDestinationRemove } from './destinations.js';
 
-const delay = z.number().int().refine((h) => (PRIVACY_DELAYS as readonly number[]).includes(h), 'Pick one of the delays');
+const delay = z.number().int().refine((h) => (DELAYS as readonly number[]).includes(h), 'Pick one of the waits');
+const pieces = z.number().int().min(1).max(PIECES_MAX);
 const coin = z.enum(['BTC', 'ETH', 'XMR']);
 
 /** Rough "what arrives" for paying `usd` worth of a coin into a route, using FixedFloat's current rates. */
@@ -48,8 +49,8 @@ export function registerTransfers(app: FastifyInstance): void {
 
   // Privacy Enhanced with a fresh address. The browser names the coin, delay and destination; never an address.
   app.post('/api/transfers', async (req) => {
-    const body = z.object({ coin: z.enum(['BTC', 'ETH']), delayHours: delay, destinationId: z.string().max(40).optional() }).parse(req.body);
-    return transferView(await createPrivacyTransfer(body.coin, body.delayHours, body.destinationId));
+    const body = z.object({ coin: z.enum(['BTC', 'ETH']), delayHours: delay, pieces: pieces.default(1), destinationId: z.string().max(40).optional() }).parse(req.body);
+    return transferView(await createPrivacyTransfer(body.coin, body.delayHours, body.destinationId, Date.now(), body.pieces));
   });
 
   app.post<{ Params: { id: string } }>('/api/transfers/:id/release', async (req) => transferView(releaseNow(req.params.id)));
@@ -68,6 +69,9 @@ export function registerTransfers(app: FastifyInstance): void {
     coinName: COINS[r.coin].name,
     mode: r.mode,
     delayHours: r.delayHours,
+    pieces: r.pieces ?? 1,
+    oneTime: Boolean(r.oneTime),
+    expiresAt: r.expiresAt ?? null,
     destinationId: r.destinationId,
     destinationLabel: r.destination.label,
     destinationAddress: r.destination.address,
@@ -77,19 +81,35 @@ export function registerTransfers(app: FastifyInstance): void {
   });
 
   app.get('/api/addresses', async () => ({
-    addresses: addresses.list().map(routeView),
+    addresses: addresses.saved().map(routeView),
     available: { BTC: Boolean(hotWallet('BTC')), ETH: Boolean(hotWallet('ETH')), XMR: Boolean(hotWallet('XMR')), privacy: Boolean(config.monero.rpcUrl) },
   }));
 
   app.post('/api/addresses', async (req) => {
     const body = z
-      .object({ coin, mode: z.enum(['direct', 'privacy']), delayHours: delay.nullable().optional(), destinationId: z.string().max(40).optional(), label: z.string().max(80).optional() })
+      .object({
+        coin,
+        mode: z.enum(['direct', 'privacy']),
+        delayHours: delay.nullable().optional(),
+        pieces: pieces.optional(),
+        destinationId: z.string().max(40).optional(),
+        label: z.string().max(80).optional(),
+      })
       .parse(req.body);
     return routeView(await addresses.create(body));
   });
 
+  // A coin button with a wait or pieces: a one-time address of our own wallet, so the payment can be held and split.
+  app.post('/api/addresses/once', async (req) => {
+    const body = z.object({ coin, delayHours: delay.default(0), pieces: pieces.default(1), destinationId: z.string().max(40).optional() }).parse(req.body);
+    if (!body.delayHours && body.pieces === 1) throw new UserError('Nothing to wait for or split: use a plain address.');
+    return routeView(await addresses.create({ ...body, mode: 'direct', oneTime: true }));
+  });
+
   app.post<{ Params: { id: string } }>('/api/addresses/:id', async (req) => {
-    const body = z.object({ label: z.string().max(80).optional(), delayHours: delay.optional(), archived: z.boolean().optional() }).parse(req.body);
+    const body = z.object({ label: z.string().max(80).optional(), delayHours: delay.optional(), pieces: pieces.optional(), archived: z.boolean().optional() }).parse(req.body);
+    const r = addresses.get(req.params.id);
+    if (r?.oneTime) throw new UserError('A one-time address can’t be changed.');
     return routeView(addresses.update(req.params.id, body));
   });
 

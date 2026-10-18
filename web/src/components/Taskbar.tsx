@@ -6,7 +6,7 @@ import { useTheme, type Theme } from '../lib/themes';
 import type { Coin } from '../types';
 import { APP_VERSION } from '../version';
 import { VersionTag } from './VersionTag';
-import { AppMark, BookIcon, CoinIcon, DisplayIcon, HouseIcon, KeyIcon, LineSpeaker, LogIcon, PlayIcon, PowerIcon, ShieldIcon, Speaker, StartGlyph } from './art';
+import { AppMark, BookIcon, ClockIcon, CoinIcon, DisplayIcon, HouseIcon, KeyIcon, LineSpeaker, LogIcon, PlayIcon, PowerIcon, Speaker, StartGlyph } from './art';
 
 export interface TaskItem {
   key: string;
@@ -216,7 +216,7 @@ export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, on
     { key: 'btc', label: 'New Bitcoin address', short: 'Bitcoin', icon: (s) => <CoinIcon coin="BTC" size={s} />, onClick: pick(() => onCreate('BTC')), tile: '#d9790b' },
     { key: 'eth', label: 'New Ethereum address', short: 'Ethereum', icon: (s) => <CoinIcon coin="ETH" size={s} />, onClick: pick(() => onCreate('ETH')), tile: '#4a5fc1' },
     { key: 'xmr', label: 'New Monero address', short: 'Monero', icon: (s) => <CoinIcon coin="XMR" size={s} />, onClick: pick(() => onCreate('XMR')), tile: '#c45000' },
-    { key: 'privacy', label: 'Privacy Enhanced…', short: 'Privacy', icon: (s) => <ShieldIcon size={s} />, onClick: pick(onPrivacy), tile: '#4b3a9a' },
+    { key: 'privacy', label: 'Send options…', short: 'Options', icon: (s) => <ClockIcon size={s} />, onClick: pick(onPrivacy), tile: '#4b3a9a' },
     { key: 'addresses', label: 'My Addresses…', short: 'My Addresses', icon: (s) => <HouseIcon size={s} />, onClick: pick(onAddresses), tile: '#9a3b1f' },
     { key: 'book', label: 'Address Book…', short: 'Address Book', icon: (s) => <BookIcon size={s} />, onClick: pick(onAddressBook), tile: '#1d5aa8' },
     { key: 'demo', label: 'How it works', short: 'How it works', icon: (s) => <PlayIcon size={s} />, onClick: pick(onDemo), tile: '#744da9' },

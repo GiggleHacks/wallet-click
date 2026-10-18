@@ -6,9 +6,10 @@ import type { Transfer } from '../types';
 import { BombIcon, BoomBurst, UsdtIcon } from './art';
 
 /**
- * A Privacy Enhanced transfer with a long wait shows up on the desktop as a cartoon time bomb: a red LED
- * countdown over a black bomb, with the money's dollar value underneath. The fuse lights when the wait starts;
- * when it runs out the bomb goes BOOM and turns into a USDT coin until the money lands.
+ * A transfer with a long wait (in Monero, or held at our own address) shows up on the desktop as a cartoon time
+ * bomb: a red LED countdown over a black bomb, with the money's dollar value underneath. The fuse lights when the
+ * wait starts; when it runs out the bomb goes BOOM and turns into a USDT coin until the money lands. A split
+ * payment's bomb lights again for each piece's turn.
  */
 
 const H = 3_600_000;
@@ -18,6 +19,8 @@ const BOOM_MS = 2600;
 
 const LIVE = ['received', 'swapping', 'holding', 'sending', 'attention'];
 const PAST_RELEASE = ['open2', 'send2', 'swap2', 'done'];
+const PAST_HOLD = ['split', 'open1', 'send1', 'swap1', 'done'];
+const viaMonero = (t: Transfer) => t.monero ?? t.privacy;
 
 /** A transfer to show as a bomb, with its clock (the "How it works" run fast-forwards time). */
 export interface Fused {
@@ -38,15 +41,25 @@ export interface Bomb {
 }
 
 export function isBomb(t: Transfer): boolean {
-  if (!t.privacy || !LIVE.includes(t.stage)) return false;
-  // Released early during the wait: it still goes off.
-  return (t.delayHours ?? 0) >= BOMB_HOURS || (t.delayHours === 0 && t.releaseAt !== null);
+  if (!LIVE.includes(t.stage)) return false;
+  // Released early during the wait: it still goes off (`released`; older servers: no wait left but a release time).
+  return (t.delayHours ?? 0) >= BOMB_HOURS || Boolean(t.released) || (t.released === undefined && t.privacy && t.delayHours === 0 && t.releaseAt !== null);
 }
+
+/** When the fuse runs out: the end of the wait, or a split payment's next piece. */
+const fuseAt = (t: Transfer) => (t.state === 'pieces' ? (t.nextPieceAt ?? null) : t.releaseAt);
 
 function phaseOf(t: Transfer, now: number): BombPhase {
   if (t.stage === 'attention') return 'attention';
-  if (PAST_RELEASE.includes(t.state)) return 'swapping';
-  if (t.state === 'wait' && t.releaseAt !== null) return t.releaseAt > now ? 'ticking' : 'swapping';
+  if (t.state === 'pieces') {
+    const at = fuseAt(t);
+    if (t.pieceList?.some((p) => p.stage === 'sending')) return 'swapping';
+    if (at !== null) return at > now ? 'ticking' : 'swapping';
+    // Every piece still waits for the one before it to finish.
+    return t.pieceList?.some((p) => p.stage !== 'waiting') ? 'swapping' : 'armed';
+  }
+  if ((viaMonero(t) ? PAST_RELEASE : PAST_HOLD).includes(t.state)) return 'swapping';
+  if ((t.state === 'wait' || t.state === 'hold') && t.releaseAt !== null) return t.releaseAt > now ? 'ticking' : 'swapping';
   return 'armed';
 }
 
@@ -80,7 +93,7 @@ export function useBombs(fused: Fused[], testDelayMin: number | null = null): Bo
     const now = clock();
     const phase = phaseOf(t, now);
     const full = testDelayMin !== null ? testDelayMin * 60_000 : (t.delayHours ?? 0) * H;
-    const left = phase === 'ticking' ? t.releaseAt! - now : phase === 'swapping' ? 0 : full;
+    const left = phase === 'ticking' ? fuseAt(t)! - now : phase === 'swapping' ? 0 : full;
     return { transfer: t, phase, left, boom: (boomUntil.current.get(t.id) ?? 0) > Date.now() };
   });
 
@@ -112,11 +125,13 @@ export function useBombs(fused: Fused[], testDelayMin: number | null = null): Bo
 
 const label = (b: Bomb) => {
   const t = b.transfer;
-  const what = `Privacy transfer${t.received ? ` of ${trimAmount(t.received)} ${t.coin}` : ''} to ${t.destinationLabel}`;
+  const kind = t.privacy ? 'Privacy transfer' : 'Transfer';
+  const what = `${kind}${t.received ? ` of ${trimAmount(t.received)} ${t.coin}` : ''} to ${t.destinationLabel}`;
+  const piece = t.state === 'pieces' ? ' until the next piece' : '';
   if (b.phase === 'attention') return `${what}: needs you`;
   if (b.phase === 'swapping') return `${what}: the wait is over, swapping to USDT`;
-  if (b.phase === 'armed') return `${what}: a ${countdown(b.left)} wait starts once the Monero unlocks`;
-  return `${what}: ${countdown(b.left)} left`;
+  if (b.phase === 'armed') return `${what}: a ${countdown(b.left)} wait starts once ${viaMonero(t) ? 'the Monero unlocks' : 'the payment is confirmed'}`;
+  return `${what}: ${countdown(b.left)} left${piece}`;
 };
 
 function Art({ b, size }: { b: Bomb; size: number }) {
@@ -153,7 +168,7 @@ export function DesktopBombs({ bombs, onOpen }: { bombs: Bomb[]; onOpen(t: Trans
               </motion.i>
             </em>
             <span>
-              {usdText(b.transfer) || 'Privacy transfer'}
+              {usdText(b.transfer) || (b.transfer.privacy ? 'Privacy transfer' : 'Transfer')}
               <small>{b.phase === 'attention' ? 'Needs you' : b.phase === 'swapping' ? 'Swapping…' : `→ ${b.transfer.destinationLabel}`}</small>
             </span>
           </motion.button>

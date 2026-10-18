@@ -25,7 +25,7 @@ initWallet(process.env.WALLET_KEY, MNEMONIC);
 const { buildApp } = await import('../server/app.js');
 const { setTransport } = await import('../server/fixedfloat.js');
 const { orders, pollDue } = await import('../server/orders.js');
-const { transfers, stepTransfer, scanRoutes, createPrivacyTransfer, refreshPrices } = await import('../server/transfers.js');
+const { transfers, stepTransfer, scanRoutes, createPrivacyTransfer, refreshPrices, rescueLeftovers, planPieces } = await import('../server/transfers.js');
 const { addresses } = await import('../server/addresses.js');
 const { setXmrFetch } = await import('../server/wallets/xmr.js');
 const { setChainFetch } = await import('../server/chain.js');
@@ -49,9 +49,11 @@ function fakeMonero() {
     subs: new Map<number, string>(),
     incoming: new Map<number, In[]>(),
     balance: new Map<number, { total: bigint; unlocked: bigint }>(),
-    sweeps: [] as { index: number; to: string; metadata: string; txid: string; amount: bigint; fee: bigint }[],
+    sweeps: [] as { index: number; to: string; metadata: string; txid: string; amount: bigint; fee: bigint; outs?: { address: string; amount: bigint }[] }[],
     relayed: [] as string[],
     relayFails: 0,
+    /** Like a monero-wallet-rpc before 0.18.3.1: it ignores subtract_fee_from_outputs. */
+    oldWallet: false,
     calls: [] as { method: string; params: Record<string, unknown> }[],
     /** Money arrives at one of our subaddresses (locked until `unlock`). */
     receive(index: number, amount: bigint, txid = `in${index}-${amount}`) {
@@ -104,6 +106,22 @@ function fakeMonero() {
         w.sweeps.push(s);
         return ok({ tx_hash_list: [txid], amount_list: [Number(s.amount)], fee_list: [Number(fee)], tx_metadata_list: [s.metadata] });
       }
+      case 'transfer': {
+        const i = params.subaddr_indices[0];
+        const b = w.balance.get(i);
+        const dests = params.destinations as { amount: number; address: string }[];
+        const total = dests.reduce((s, d) => s + BigInt(d.amount), 0n);
+        const fee = 40_000_000n;
+        const subtract = Array.isArray(params.subtract_fee_from_outputs) && params.subtract_fee_from_outputs.length === dests.length;
+        // An old wallet ignores the subtraction (here: and claims it paid the fee from somewhere else).
+        const each = subtract && !w.oldWallet ? fee / BigInt(dests.length) : 0n;
+        if (!b || (total + (each ? 0n : fee) > b.unlocked && !w.oldWallet)) return new Response(JSON.stringify({ error: { code: -4, message: 'not enough unlocked money' } }));
+        const amounts = dests.map((d, k) => BigInt(d.amount) - each - (k === 0 && each ? fee - each * BigInt(dests.length) : 0n));
+        const txid = `xtx${w.sweeps.length + 1}`;
+        const s = { index: i, to: dests[0].address, metadata: `META-SECRET-${txid}`, txid, amount: amounts.reduce((x, a) => x + a, 0n), fee, outs: dests.map((d, k) => ({ address: d.address, amount: amounts[k] })) };
+        w.sweeps.push(s);
+        return ok({ tx_hash: txid, tx_metadata: s.metadata, fee: Number(fee), amount: Number(s.amount), amounts_by_dest: { amounts: amounts.map(Number) } });
+      }
       case 'relay_tx': {
         if (w.relayFails > 0) {
           w.relayFails--;
@@ -113,8 +131,10 @@ function fakeMonero() {
         if (w.relayed.includes(s.metadata)) return new Response(JSON.stringify({ error: { code: -1, message: 'Failed to relay: double spend' } }));
         w.relayed.push(s.metadata);
         w.balance.set(s.index, { total: 0n, unlocked: 0n });
-        const own = w.indexOf(s.to);
-        if (own !== undefined) w.receive(own, s.amount, s.txid);
+        for (const out of s.outs ?? [{ address: s.to, amount: s.amount }]) {
+          const own = w.indexOf(out.address);
+          if (own !== undefined) w.receive(own, out.amount, s.txid);
+        }
         return ok({ tx_hash: s.txid });
       }
       case 'get_transfer_by_txid': {
@@ -161,7 +181,8 @@ function fakeFF() {
 // ---------------------------------------------------------------- a fake Bitcoin/Ethereum network
 
 const chain = {
-  utxos: [] as { txid: string; vout: number; value: number; status: { confirmed: boolean; block_height?: number } }[],
+  /** Unspent coins; one without an `address` belongs to whichever address is asked about. */
+  utxos: [] as { txid: string; vout: number; value: number; status: { confirmed: boolean; block_height?: number }; address?: string }[],
   tip: 900_000,
   btcBroadcast: [] as string[],
   eth: { latest: 0n, settled: 0n, pending: 0n, nonce: 0, pendingNonce: 0, block: 20_000_000 },
@@ -177,7 +198,10 @@ function fakeChain() {
   const json = (v: unknown) => new Response(JSON.stringify(v));
   const hex = (n: bigint | number) => `0x${BigInt(n).toString(16)}`;
   setChainFetch(async (url, init) => {
-    if (url.includes('/utxo')) return json(chain.utxos);
+    if (url.includes('/utxo')) {
+      const address = url.split('/address/')[1]?.split('/')[0];
+      return json(chain.utxos.filter((u) => !u.address || u.address === address));
+    }
     if (url.endsWith('/blocks/tip/height')) return new Response(String(chain.tip));
     if (url.endsWith('/v1/fees/recommended')) return json({ fastestFee: 9, halfHourFee: 5, hourFee: 3 });
     if (url.endsWith('/tx') && init?.method === 'POST') {
@@ -512,11 +536,13 @@ describe('permanent addresses', () => {
     expect(ff.creates()).toHaveLength(0);
   });
 
-  it('keeps the address and destination fixed: only the name and delay change', async () => {
+  it('keeps the address and destination fixed: only the name, wait and pieces change', async () => {
     const r = (await post('/api/addresses', { coin: 'XMR', mode: 'direct' })).json();
     const changed = (await post(`/api/addresses/${r.id}`, { label: 'Rent', address: 'x', destinationId: 'd_other' })).json();
     expect(changed).toMatchObject({ label: 'Rent', address: r.address, destinationId: 'coinbase' });
-    expect((await post(`/api/addresses/${r.id}`, { delayHours: 4 })).json().error).toMatch(/Only Privacy/);
+    expect((await post(`/api/addresses/${r.id}`, { delayHours: 4, pieces: 3 })).json()).toMatchObject({ delayHours: 4, pieces: 3, address: r.address });
+    expect((await post(`/api/addresses/${r.id}`, { pieces: 5 })).statusCode).toBe(400);
+    expect((await post(`/api/addresses/${r.id}`, { delayHours: 5 })).statusCode).toBe(400);
     expect((await post('/api/addresses', { coin: 'XMR', mode: 'privacy', delayHours: 4 })).json().error).toMatch(/already private/);
     // Coinbase can't go, and neither can a destination a permanent address uses (not tested here: Coinbase is built in).
   });
@@ -575,7 +601,6 @@ describe('safety checks from review', () => {
   });
 
   it('turns Monero left at a finished transfer’s subaddress into a new transfer', async () => {
-    const { rescueLeftovers } = await import('../server/transfers.js');
     const t0 = await createPrivacyTransfer('BTC', 4);
     ff.finish(t0.leg1!, '0.3');
     orders.get(t0.leg1!)!.nextPollAt = 0;
@@ -617,5 +642,330 @@ describe('safety checks from review', () => {
     expect(t.state).toBe('collect');
     expect(t.error).toMatch(/unusually expensive/);
     expect(chain.ethSent).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------- waits and pieces (Send options)
+
+const BIP84_CHANGE_FIRST = 'bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el'; // m/84'/0'/0'/1/0 (BIP84 test vector)
+const MIN = 60_000;
+const XMR_PIECE_MIN = 27_600_000_000n; // 1.5 × FixedFloat's 0.0184 XMR minimum
+const piconero = (xmr: string) => BigInt(Math.round(Number(xmr) * 1e12));
+const kidsOf = (id: string) =>
+  transfers
+    .all()
+    .filter((k) => k.parentId === id)
+    .sort((a, b) => a.piece!.n - b.piece!.n);
+const outAddress = (tx: btc.Transaction, i: number) => btc.Address(btc.NETWORK).encode(btc.OutScript.decode(tx.getOutput(i).script!));
+
+/** A Privacy transfer's first swap finishes and the Monero lands (unlocked) in its vault. */
+async function intoVault(t0: { id: string; leg1?: string }, amount: bigint, vaultIndex: number, now = Date.now()) {
+  ff.finish(t0.leg1!, String(Number(amount) / 1e12));
+  orders.get(t0.leg1!)!.nextPollAt = 0;
+  await pollDue();
+  await run(t0.id, now);
+  wallet.receive(vaultIndex, amount);
+  wallet.unlock(vaultIndex);
+  return run(t0.id, now);
+}
+
+/** FixedFloat finishes a piece's swap to USDT. */
+async function payOut(id: string, usdt: string, now: number) {
+  const t = transfers.get(id)!;
+  const leg = orders.get((t.leg2 ?? t.leg1)!)!;
+  ff.finish(leg.id, usdt);
+  leg.nextPollAt = 0;
+  setTransport(ff.transport); // pieces are minutes apart: a fresh minute of FixedFloat's request budget
+  await pollDue();
+  return run(id, now);
+}
+
+describe('waits and pieces', () => {
+  it('plans random, unequal pieces that each clear the minimum and add up exactly', () => {
+    for (let i = 0; i < 50; i++) {
+      const plan = planPieces(1_000_000n, 4, 100_000n);
+      expect(plan).toHaveLength(4);
+      expect(plan.reduce((s, v) => s + v, 0n)).toBe(1_000_000n);
+      expect(plan.every((v) => v >= 100_000n)).toBe(true);
+    }
+    expect(new Set(planPieces(1_000_000n, 4, 100_000n).map(String)).size).toBeGreaterThan(1);
+    expect(planPieces(250_000n, 4, 100_000n)).toHaveLength(2); // only two fit
+    expect(planPieces(150_000n, 4, 100_000n)).toEqual([150_000n]); // too small: one piece
+  });
+
+  it('splits Privacy Monero into pieces that each move, wait their turn and swap on their own', async () => {
+    const res = await post('/api/transfers', { coin: 'BTC', delayHours: 4, pieces: 3 });
+    expect(res.statusCode).toBe(200);
+    const t0 = transfers.get(res.json().id)!;
+    const start = Date.now();
+    const p = await intoVault(t0, 900_000_000_000n, 1, start);
+    expect(p.state).toBe('pieces');
+
+    // One transaction from the vault to three fresh subaddresses, the fee taken out of the pieces.
+    const split = wallet.calls.find((c) => c.method === 'transfer')!.params as { destinations: { amount: number; address: string }[]; subaddr_indices: number[] };
+    expect(split).toMatchObject({ subaddr_indices: [1], subtract_fee_from_outputs: [0, 1, 2], do_not_relay: true, get_tx_metadata: true });
+    const asked = split.destinations.map((d) => BigInt(d.amount));
+    expect(asked.reduce((s, v) => s + v, 0n)).toBe(900_000_000_000n);
+    expect(asked.every((v) => v >= XMR_PIECE_MIN)).toBe(true);
+    expect(split.destinations.map((d) => d.address)).toEqual([2, 3, 4].map((i) => wallet.subs.get(i)));
+
+    const kids = kidsOf(p.id);
+    expect(kids.map((k) => [k.piece, k.state, k.vault!.index])).toEqual([
+      [{ n: 1, of: 3 }, 'xmr-in', 2],
+      [{ n: 2, of: 3 }, 'xmr-in', 3],
+      [{ n: 3, of: 3 }, 'xmr-in', 4],
+    ]);
+    // The browser sees one transfer, with its pieces inside.
+    const list = (await get('/api/transfers')).json().transfers;
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ id: p.id, pieces: 3, stage: 'holding', canChangeDelay: true });
+    expect(list[0].pieceList.map((x: { n: number; stage: string }) => [x.n, x.stage])).toEqual([
+      [1, 'waiting'],
+      [2, 'waiting'],
+      [3, 'waiting'],
+    ]);
+    expect(list[0].steps.map((s: { key: string }) => s.key)).toEqual(['in', 'swap1', 'vault', 'split', 'wait', 'pieces', 'out']);
+
+    for (const i of [2, 3, 4]) wallet.unlock(i);
+    const release = p.releaseAt!;
+    expect(release - p.vault!.unlockedAt!).toBeGreaterThanOrEqual(4 * H);
+
+    // Before the wait is over each piece moves within the wallet, but nothing goes to FixedFloat.
+    let k1 = await run(kids[0].id, release - 31 * MIN);
+    expect(k1.state).toBe('churn');
+    expect(ff.creates()).toHaveLength(1);
+
+    // Piece 1 goes at the release time; piece 2 waits for it to finish.
+    const late = release + 3 * H; // later than any piece's planned time, so the moves happen at once
+    k1 = await run(kids[0].id, late);
+    expect(k1.state).toBe('wait');
+    wallet.unlock(k1.churn!.index);
+    k1 = await run(kids[0].id, late);
+    expect(k1.state).toBe('swap2');
+    let k2 = await run(kids[1].id, late);
+    wallet.unlock(k2.churn!.index);
+    k2 = await run(kids[1].id, late);
+    expect(k2).toMatchObject({ state: 'wait', waitingFor: 'piece 1 to go first' });
+    expect(ff.creates()).toHaveLength(2);
+    expect(ff.creates()[1]).toMatchObject({ fromCcy: 'XMR', toCcy: 'USDT', toAddress: PAYOUT });
+
+    k1 = await payOut(kids[0].id, '50', late);
+    expect(k1).toMatchObject({ state: 'done', settledAt: late });
+
+    // Piece 2: a random 5 min–2 h after piece 1 settled.
+    k2 = await run(kids[1].id, late);
+    expect(k2.releaseAt).toBe(late + k2.gapMs!);
+    expect(k2.gapMs).toBeGreaterThanOrEqual(5 * MIN);
+    expect(k2.gapMs).toBeLessThanOrEqual(2 * H);
+    expect(ff.creates()).toHaveLength(2);
+    const t2 = k2.releaseAt! + 1;
+    k2 = await run(kids[1].id, t2);
+    expect(k2.state).toBe('swap2');
+    k2 = await payOut(kids[1].id, '60', t2);
+
+    let k3 = await run(kids[2].id, t2);
+    wallet.unlock(k3.churn!.index);
+    k3 = await run(kids[2].id, t2);
+    const t3 = k3.releaseAt! + 1;
+    expect(k3.releaseAt).toBe(t2 + k3.gapMs!);
+    await run(kids[2].id, t3);
+    k3 = await payOut(kids[2].id, '70.5', t3);
+    expect(k3.state).toBe('done');
+
+    const done = await run(p.id, t3);
+    expect(done).toMatchObject({ state: 'done', usdt: '180.5' });
+    const v = (await get(`/api/transfers/${p.id}`)).json();
+    expect(v.steps.every((s: { status: string }) => s.status === 'done')).toBe(true);
+    expect(v.cost).toMatchObject({ inUsd: expect.any(Number), usd: expect.any(Number) });
+
+    // Every Monero spend went to our own subaddress or a FixedFloat order we created.
+    const ffDeposits = new Set([...ff.made.values()].map((o) => o.from.address));
+    for (const s of wallet.sweeps.filter((x) => wallet.relayed.includes(x.metadata))) {
+      for (const out of s.outs ?? [{ address: s.to }]) expect(ffDeposits.has(out.address) || wallet.indexOf(out.address) !== undefined).toBe(true);
+    }
+    expect(JSON.stringify(v)).not.toMatch(/META-SECRET|token/);
+  });
+
+  it('splits into fewer pieces when there is too little for all of them, and not at all below two', async () => {
+    const a = await createPrivacyTransfer('BTC', 4, undefined, Date.now(), 4);
+    const pa = await intoVault(a, 60_000_000_000n, 1); // 0.06 XMR: room for two pieces of 0.0276
+    expect(pa.state).toBe('pieces');
+    expect(kidsOf(pa.id)).toHaveLength(2);
+    expect(pa.log.some((l) => /2 pieces, not 4/.test(l.text))).toBe(true);
+
+    const b = await createPrivacyTransfer('BTC', 4, undefined, Date.now(), 2);
+    const vault = transfers.get(b.id)!.vault!.index;
+    const pb = await intoVault(b, 40_000_000_000n, vault); // 0.04 XMR: one piece
+    expect(pb).toMatchObject({ state: 'wait', pieces: 1 });
+    expect(pb.churn!.broadcastAt).not.toBeNull();
+  });
+
+  it('refuses to split when the Monero wallet cannot take the fee out of the pieces', async () => {
+    wallet.oldWallet = true;
+    const t0 = await createPrivacyTransfer('ETH', 0, undefined, Date.now(), 2);
+    const t = await intoVault(t0, 500_000_000_000n, 1);
+    expect(t.state).toBe('churn');
+    expect(t.error).toMatch(/0\.18\.3\.1/);
+    expect(wallet.relayed).toHaveLength(0);
+  });
+
+  it('carries Change wait and Release now on the parent through to its pieces', async () => {
+    const t0 = await createPrivacyTransfer('BTC', 42, undefined, Date.now(), 2);
+    const p = await intoVault(t0, 600_000_000_000n, 1);
+    expect(p.state).toBe('pieces');
+    const unlockedAt = p.vault!.unlockedAt!;
+
+    let v = (await post(`/api/transfers/${p.id}/delay`, { delayHours: 12 })).json();
+    expect(v.releaseAt - unlockedAt).toBeGreaterThanOrEqual(12 * H);
+    expect(v.releaseAt - unlockedAt).toBeLessThan(13 * H);
+
+    v = (await post(`/api/transfers/${p.id}/release`, {})).json();
+    expect(v.releaseAt).toBeLessThanOrEqual(Date.now());
+    const [k1] = kidsOf(p.id);
+    wallet.unlock(k1.vault!.index);
+    let k = await run(k1.id);
+    wallet.unlock(k.churn!.index);
+    k = await run(k1.id);
+    expect(k.state).toBe('swap2'); // piece 1 went straight away
+    v = (await get(`/api/transfers/${p.id}`)).json();
+    expect(v).toMatchObject({ canChangeDelay: false, canRelease: false });
+  });
+
+  it('holds a direct Bitcoin payment for the wait, and takes in what arrives meanwhile', async () => {
+    const r = (await post('/api/addresses', { coin: 'BTC', mode: 'direct', delayHours: 4 })).json();
+    expect(r).toMatchObject({ delayHours: 4, pieces: 1 });
+    chain.utxos = [{ txid: 'a1'.repeat(32), vout: 0, value: 300_000, status: { confirmed: true, block_height: chain.tip } }];
+    await scanRoutes();
+    const id = transfers.all()[0].id;
+    const now = Date.now();
+    let t = await run(id, now);
+    expect(t.state).toBe('hold');
+    expect(t.releaseAt! - t.heldAt!).toBeGreaterThanOrEqual(4 * H);
+    expect(t.releaseAt! - t.heldAt!).toBeLessThanOrEqual(4 * H + 30 * MIN);
+    expect(ff.creates()).toHaveLength(0);
+    expect((await get(`/api/transfers/${id}`)).json()).toMatchObject({ stage: 'holding', canRelease: true, canChangeDelay: true });
+
+    // More arrives during the wait: no second transfer, it joins this one.
+    chain.utxos.push({ txid: 'a2'.repeat(32), vout: 0, value: 100_000, status: { confirmed: true, block_height: chain.tip } });
+    await scanRoutes(now + MIN);
+    expect(transfers.all()).toHaveLength(1);
+
+    t = await run(id, t.releaseAt! - MIN);
+    expect(t.state).toBe('hold');
+    t = await run(id, t.releaseAt! + 1);
+    // 400000 sats minus 5 sat/vB × 190 vB (two inputs)
+    expect(ff.creates()[0]).toMatchObject({ fromCcy: 'BTC', toCcy: 'USDT', amount: 0.0039905 });
+    expect(t.state).toBe('swap1');
+  });
+
+  it('splits a direct Bitcoin payment through our own change-chain addresses, then forwards each piece by itself', async () => {
+    const r = (await post('/api/addresses', { coin: 'BTC', mode: 'direct', pieces: 2 })).json();
+    chain.utxos = [{ txid: 'b1'.repeat(32), vout: 1, value: 300_000, status: { confirmed: true, block_height: chain.tip }, address: r.address }];
+    await scanRoutes();
+    const id = transfers.all()[0].id;
+    const now = Date.now();
+    const p = await run(id, now);
+    expect(p.state).toBe('pieces');
+
+    // One transaction: exactly the quoted coin in, one output per piece, each to an address derived from our seed.
+    expect(chain.btcBroadcast).toHaveLength(1);
+    const split = btc.Transaction.fromRaw(Buffer.from(chain.btcBroadcast[0], 'hex'));
+    expect(split.inputsLength).toBe(1);
+    expect(split.outputsLength).toBe(2);
+    expect(outAddress(split, 0)).toBe(BIP84_CHANGE_FIRST);
+    const amounts = [0, 1].map((i) => split.getOutput(i).amount!);
+    expect(amounts[0] + amounts[1]).toBe(300_000n - 705n); // 5 sat/vB × 141 vB
+    const kids = kidsOf(p.id);
+    expect(kids.map((k) => k.source)).toEqual([
+      { coin: 'BTC', index: 0, address: BIP84_CHANGE_FIRST, chain: 1 },
+      { coin: 'BTC', index: 1, address: outAddress(split, 1), chain: 1 },
+    ]);
+
+    // The split confirms: the route address is empty again, the pieces sit at their own addresses.
+    chain.utxos = [0, 1].map((i) => ({ txid: split.id, vout: i, value: Number(amounts[i]), status: { confirmed: true, block_height: chain.tip }, address: kids[i].source!.address }));
+    await scanRoutes(now + MIN);
+    expect(transfers.all().filter((t) => !t.parentId)).toHaveLength(1);
+
+    const k1 = await run(kids[0].id, now);
+    expect(k1.state).toBe('swap1');
+    const fwd = btc.Transaction.fromRaw(Buffer.from(chain.btcBroadcast[1], 'hex'));
+    expect(fwd.getInput(0)).toMatchObject({ index: 0 });
+    expect(fwd.outputsLength).toBe(1);
+    expect(fwd.getOutput(0).amount).toBe(amounts[0] - 610n);
+    expect(outAddress(fwd, 0)).toBe(orders.get(k1.leg1!)!.depositAddress);
+    expect(orders.get(k1.leg1!)!.ownRefund).toBe(r.address); // a refund comes back to the permanent address
+
+    let k2 = await run(kids[1].id, now);
+    expect(k2).toMatchObject({ state: 'collect', waitingFor: 'piece 1 to go first' });
+    await payOut(kids[0].id, '120', now);
+    k2 = await run(kids[1].id, now);
+    expect(k2.releaseAt).toBe(now + k2.gapMs!);
+    expect(ff.creates()).toHaveLength(1);
+  });
+
+  it('sends Ethereum pieces one after another from the same address, for exact amounts', async () => {
+    await post('/api/addresses', { coin: 'ETH', mode: 'direct', pieces: 2 });
+    const two = (10n ** 18n / 10n) * 2n; // 0.2 ETH
+    Object.assign(chain.eth, { latest: two, pending: two, settled: two });
+    await scanRoutes();
+    const id = transfers.all()[0].id;
+    const p = await run(id);
+    expect(p.state).toBe('pieces');
+    const kids = kidsOf(p.id);
+    const shares = kids.map((k) => BigInt(k.pieceAmount!));
+    const gas = 60_000n * 7_000_000_000n; // the gas kept back per forward
+    expect(shares[0] + shares[1]).toBe(two - 2n * gas);
+
+    const k1 = await run(kids[0].id);
+    expect(k1.state).toBe('swap1');
+    const order = ff.creates()[0];
+    const sent = parseTransaction(chain.ethSent[0] as `0x${string}`);
+    expect(sent.value).toBe(BigInt(Math.round(Number(order.amount) * 1e8)) * 10n ** 10n);
+    expect(sent.value).toBeLessThanOrEqual(shares[0]);
+
+    // The other piece still sits at the address: a scan doesn't mistake it for a new payment.
+    await scanRoutes(Date.now() + MIN);
+    expect(transfers.all().filter((t) => !t.parentId)).toHaveLength(1);
+    await run(kids[1].id);
+    expect(ff.creates()).toHaveLength(1);
+  });
+
+  it('gives a coin button with a wait a one-time address of our own wallet', async () => {
+    expect((await post('/api/addresses/once', { coin: 'XMR', delayHours: 0, pieces: 1 })).statusCode).toBe(400);
+    const r = (await post('/api/addresses/once', { coin: 'XMR', delayHours: 4 })).json();
+    expect(r).toMatchObject({ coin: 'XMR', oneTime: true, delayHours: 4, label: 'One-time XMR address', address: wallet.subs.get(1) });
+    expect(r.expiresAt - Date.now()).toBeGreaterThan(29 * 24 * H);
+    expect((await get('/api/addresses')).json().addresses).toHaveLength(0);
+    expect((await post(`/api/addresses/${r.id}`, { delayHours: 12 })).statusCode).toBe(400);
+
+    wallet.receive(1, 200_000_000_000n);
+    wallet.unlock(1);
+    await scanRoutes();
+    const id = transfers.all()[0].id;
+    const t = await run(id);
+    // Monero with a wait: its own subaddress is the vault, it moves once, then waits.
+    expect(t).toMatchObject({ state: 'wait', monero: true, privacy: false });
+    expect(wallet.sweeps.filter((s) => wallet.relayed.includes(s.metadata))).toMatchObject([{ index: 1, to: wallet.subs.get(2) }]);
+    expect(t.releaseAt! - t.vault!.unlockedAt!).toBeGreaterThanOrEqual(4 * H);
+    const v = (await get(`/api/transfers/${id}`)).json();
+    expect(v).toMatchObject({ oneTime: true, routeLabel: null });
+    expect(v.steps.map((s: { key: string }) => s.key)).toEqual(['in', 'churn', 'wait', 'swap2', 'out']);
+
+    // A second payment, after the first moved off: a transfer of its own. And it isn't "left behind" Monero.
+    wallet.receive(1, 50_000_000_000n);
+    await scanRoutes(Date.now() + MIN);
+    expect(transfers.all()).toHaveLength(2);
+    await rescueLeftovers(Date.now() + 11 * MIN);
+    expect(transfers.all()).toHaveLength(2);
+  });
+
+  it('stops watching a one-time address after 30 days', async () => {
+    const r = (await post('/api/addresses/once', { coin: 'BTC', delayHours: 4 })).json();
+    expect(r.address).toBe(BIP84_FIRST);
+    chain.utxos = [{ txid: 'c1'.repeat(32), vout: 0, value: 300_000, status: { confirmed: true, block_height: chain.tip } }];
+    await scanRoutes(Date.now() + 31 * 24 * H);
+    expect(transfers.all()).toHaveLength(0);
+    await scanRoutes();
+    expect(transfers.all()).toHaveLength(1);
   });
 });

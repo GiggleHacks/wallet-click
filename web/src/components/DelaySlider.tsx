@@ -1,4 +1,6 @@
-/** Privacy Enhanced: how long the Monero waits before the second swap. A slider with a stop per choice. */
+const tick = (h: number) => (h ? `${h} h` : 'None');
+
+/** How long a payment waits before it goes on. A slider with a stop per choice. */
 export function DelaySlider({ value, delays, onChange, disabled }: { value: number; delays: number[]; onChange(h: number): void; disabled?: boolean }) {
   const i = Math.max(0, delays.indexOf(value));
   return (
@@ -12,8 +14,8 @@ export function DelaySlider({ value, delays, onChange, disabled }: { value: numb
         value={i}
         disabled={disabled}
         onChange={(e) => onChange(delays[Number(e.target.value)])}
-        aria-label="Wait before the second swap"
-        aria-valuetext={`${value} hours`}
+        aria-label="Wait before it goes on"
+        aria-valuetext={value ? `${value} hours` : 'No wait'}
       />
       <div className="delay-ticks">
         {delays.map((d, n) => (
@@ -25,7 +27,7 @@ export function DelaySlider({ value, delays, onChange, disabled }: { value: numb
             onClick={() => onChange(d)}
             disabled={disabled}
           >
-            {d} h
+            {tick(d)}
           </button>
         ))}
       </div>

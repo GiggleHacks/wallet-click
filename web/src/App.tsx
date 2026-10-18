@@ -13,19 +13,20 @@ import { DEMO_ID, DEMO_TRANSFER, useDemo, type DemoKind } from './lib/demo';
 import { costText } from './lib/cost';
 import { trimAmount, usdt } from './lib/format';
 import { getChoice, setChoice, usePref } from './lib/prefs';
+import { plainAddress, throughMonero, useSendOptions } from './lib/sendOptions';
 import { applyThemeAttr, saveMode, savedMode, saveTheme, savedTheme, ThemeContext, useDark, type Mode, type Theme } from './lib/themes';
 import { savedWallpaper, saveWallpaper, wallpaperById, wallpaperCss, type Wallpaper } from './lib/wallpapers';
 import { setSoundTheme, sfx } from './lib/sound';
 import { AddressBook } from './pages/AddressBook';
 import { Addresses } from './pages/Addresses';
 import { DemoPicker } from './pages/DemoPicker';
-import { PrivacyDialog } from './pages/PrivacyDialog';
 import { Home } from './pages/Home';
 import { Lock } from './pages/Lock';
 import { Logs } from './pages/Logs';
-import { Receive } from './pages/Receive';
+import { Receive, ReceiveOnce } from './pages/Receive';
+import { SendOptionsDialog } from './pages/SendOptionsDialog';
 import { APP_VERSION } from './version';
-import type { Coin, Destination, Meta, Order, Stage, Status, Transfer, TransferStage } from './types';
+import type { Coin, Destination, Meta, Order, Route, Stage, Status, Transfer, TransferStage } from './types';
 
 const POLL_MS = 2000;
 
@@ -64,9 +65,9 @@ function MessageBox({ title, text, onOk }: { title: string; text: string; onOk()
   );
 }
 
-type View = { name: 'home' } | { name: 'receive'; id: string };
+type View = { name: 'home' } | { name: 'receive'; id: string } | { name: 'once'; route: Route };
 
-const DELAYS = [4, 12, 24, 42];
+const DELAYS = [0, 4, 12, 24, 42];
 const LIVE: TransferStage[] = ['received', 'swapping', 'holding', 'sending'];
 
 interface DesktopProps {
@@ -129,7 +130,8 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
   /** The open transfer window; `auto` = money just arrived, play the whole flow. */
   const [journey, setJourney] = useState<{ id: string; auto: boolean } | null>(null);
   const [demoPicker, setDemoPicker] = useState(false);
-  const [privacy, setPrivacy] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const sendOptions = useSendOptions();
   const [myAddresses, setMyAddresses] = useState(false);
   const [logs, setLogs] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -142,6 +144,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
 
   const stages = useRef(new Map<string, Stage>());
   const tStages = useRef(new Map<string, TransferStage>());
+  const pStages = useRef(new Map<string, string>());
   const loaded = useRef(false);
   const dialogRef = useRef(dialog);
   dialogRef.current = dialog;
@@ -175,9 +178,18 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
     for (const t of tList) {
       const prev = tStages.current.get(t.id);
       tStages.current.set(t.id, t.stage);
-      if (!loaded.current || prev === t.stage) continue;
       const showing = journeyRef.current?.id === t.id;
       const open = () => setJourney({ id: t.id, auto: false });
+      // Each piece of a split payment that lands gets its own balloon (the last one is the transfer's own).
+      for (const p of t.pieceList ?? []) {
+        const was = pStages.current.get(p.id);
+        pStages.current.set(p.id, p.stage);
+        if (loaded.current && was && was !== 'done' && p.stage === 'done' && t.stage !== 'done' && !showing) {
+          sfx.ding();
+          notify(`Piece ${p.n} of ${p.of} sent`, `${p.usdt ? `${usdt(p.usdt)} USDT` : 'USDT'} to ${t.destinationLabel}.`, open);
+        }
+      }
+      if (!loaded.current || prev === t.stage) continue;
       if ((prev === undefined || prev === 'waiting' || prev === 'expired') && LIVE.includes(t.stage)) {
         // Money arrived (at a permanent address, or a Privacy Enhanced address): ring and show its journey.
         demoRef.current?.stop();
@@ -191,8 +203,10 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
       } else if (t.stage === 'attention') {
         sfx.error();
         if (!showing) notify('A transfer needs you', t.attention ?? 'Click to see why.', open);
-      } else if (t.stage === 'holding' && !showing) {
-        notify('Holding in Monero', `${t.xmr ? `${trimAmount(t.xmr)} XMR` : 'The Monero'} waits about ${t.delayHours} h, then goes to ${t.destinationLabel} as USDT.`, open);
+      } else if (t.stage === 'holding' && prev !== 'sending' && !showing) {
+        const pieces = (t.pieces ?? 1) > 1 ? ` in ${t.pieces} pieces` : '';
+        if (t.monero ?? t.privacy) notify('Holding in Monero', `${t.xmr ? `${trimAmount(t.xmr)} XMR` : 'The Monero'} waits about ${t.delayHours} h, then goes to ${t.destinationLabel} as USDT${pieces}.`, open);
+        else notify('Holding the payment', `${trimAmount(t.received)} ${t.coin} ${t.delayHours ? `waits about ${t.delayHours} h, then goes` : 'goes'} to ${t.destinationLabel} as USDT${pieces}.`, open);
       }
     }
     setTransfers(tList);
@@ -283,11 +297,30 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
     setCreating(coin);
     document.body.classList.add('busy');
     try {
-      const o = await api.createOrder(coin, destination);
-      stages.current.set(o.id, o.stage);
-      setOrders((prev) => [o, ...prev.filter((x) => x.id !== o.id)]);
-      setDialog(null);
-      setView({ name: 'receive', id: o.id });
+      const opts = sendOptions;
+      if (throughMonero(opts, coin)) {
+        // Privacy Enhanced: FixedFloat swaps it into our own Monero wallet; the wait and pieces happen there.
+        const t = await api.createPrivacy(coin, opts.delayHours, destination, opts.pieces);
+        tStages.current.set(t.id, t.stage);
+        setTransfers((prev) => [t, ...prev.filter((x) => x.id !== t.id)]);
+        setDialog(null);
+        if (t.leg1) {
+          stages.current.set(t.leg1.id, t.leg1.stage);
+          setOrders((prev) => [t.leg1!, ...prev.filter((x) => x.id !== t.leg1!.id)]);
+          setView({ name: 'receive', id: t.leg1.id });
+        }
+      } else if (!plainAddress(opts, coin)) {
+        // A wait or pieces: a one-time address of our own wallet holds the payment.
+        const r = await api.createOnce(coin, opts.delayHours, opts.pieces, destination);
+        setDialog(null);
+        setView({ name: 'once', route: r });
+      } else {
+        const o = await api.createOrder(coin, destination);
+        stages.current.set(o.id, o.stage);
+        setOrders((prev) => [o, ...prev.filter((x) => x.id !== o.id)]);
+        setDialog(null);
+        setView({ name: 'receive', id: o.id });
+      }
       sfx.open();
     } catch (e) {
       sfx.error();
@@ -324,7 +357,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
   };
   const openTransfer = (t: Transfer) => {
     sfx.open();
-    if (t.leg1 && !t.routeId && t.leg1.stage === 'waiting') setView({ name: 'receive', id: t.leg1.id });
+    if (t.leg1 && !t.routeId && t.state === 'swap1' && t.leg1.stage === 'waiting') setView({ name: 'receive', id: t.leg1.id });
     else setJourney({ id: t.id, auto: false });
   };
   // Long Privacy waits tick away on the desktop as bombs (the demo's too, on its fast-forwarded clock).
@@ -357,6 +390,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
     { key: 'home', label: 'Wallet Click', icon: <AppMark />, active: view.name === 'home' && !dialogOrder, onClick: goHome },
   ];
   if (current) items.push({ key: 'recv', label: `Receive ${current.coinName}`, icon: <CoinIcon coin={current.coin} size={16} />, active: !dialogOrder, onClick: () => setDialog(null) });
+  if (view.name === 'once') items.push({ key: 'recv', label: `Receive ${view.route.coinName}`, icon: <CoinIcon coin={view.route.coin} size={16} />, active: true, onClick: () => {} });
   if (dialogOrder) items.push({ key: 'dlg', label: 'Swapping…', icon: <AppMark />, active: true, onClick: () => {} });
   if (journeyT) items.push({ key: 'journey', label: journeyT.privacy ? 'Privacy transfer' : 'Transfer', icon: journeyT.privacy ? <ShieldIcon size={16} /> : <AppMark />, active: true, onClick: () => {} });
 
@@ -371,9 +405,20 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
               demo={isDemo}
               offline={offline}
               creating={creating !== null}
-              onNew={() => (isDemo ? playDemo(demo.kind ?? current.coin) : current.transferId ? setPrivacy(true) : void create(current.coin))}
+              onNew={() => (isDemo ? playDemo(demo.kind ?? current.coin) : void create(current.coin))}
               onBack={goHome}
               onShowProgress={() => (current.transferId ? setJourney({ id: current.transferId, auto: false }) : setDialog({ id: current.id, auto: false }))}
+            />
+          ) : view.name === 'once' ? (
+            <ReceiveOnce
+              key={`o-${view.route.id}`}
+              route={view.route}
+              transfer={transfers.find((t) => t.routeId === view.route.id)}
+              offline={offline}
+              creating={creating !== null}
+              onNew={() => void create(view.route.coin)}
+              onBack={goHome}
+              onShowProgress={(t) => setJourney({ id: t.id, auto: false })}
             />
           ) : (
             <Home
@@ -382,7 +427,8 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
               orders={orders}
               transfers={transfers}
               onOpenTransfer={openTransfer}
-              onPrivacy={() => setPrivacy(true)}
+              sendOptions={sendOptions}
+              onSendOptions={() => (sfx.open(), setOptionsOpen(true))}
               onAddresses={() => setMyAddresses(true)}
               destinations={destinations}
               destinationId={destination}
@@ -431,21 +477,15 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {privacy && (
-          <PrivacyDialog
+        {optionsOpen && (
+          <SendOptionsDialog
+            value={sendOptions}
             delays={delays}
-            destinations={destinations}
-            destinationId={destination}
-            unavailable={meta?.features?.monero === false}
+            piecesMax={meta?.privacy?.piecesMax}
+            moneroOk={meta?.features?.monero !== false}
+            walletOk={meta?.features?.wallet !== false}
             testDelayMin={meta?.privacy?.testDelayMin ?? null}
-            onClose={() => setPrivacy(false)}
-            onCreated={(t) => {
-              tStages.current.set(t.id, t.stage);
-              setTransfers((prev) => [t, ...prev.filter((x) => x.id !== t.id)]);
-              setPrivacy(false);
-              setDialog(null);
-              if (t.leg1) setView({ name: 'receive', id: t.leg1.id });
-            }}
+            onClose={() => setOptionsOpen(false)}
           />
         )}
       </AnimatePresence>
@@ -463,7 +503,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
         onDemo={pickDemo}
         onDisplay={() => setDisplay(true)}
         onAddressBook={() => setBook(true)}
-        onPrivacy={() => setPrivacy(true)}
+        onPrivacy={() => setOptionsOpen(true)}
         onAddresses={() => setMyAddresses(true)}
         onLogs={() => setLogs(true)}
         onLock={lock}

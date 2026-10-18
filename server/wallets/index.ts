@@ -11,6 +11,8 @@ export interface RouteRef {
   /** Derivation index (BTC/ETH) or subaddress index (XMR). */
   index: number;
   address: string;
+  /** Bitcoin: 0 = receiving chain (permanent addresses), 1 = change chain (the pieces of a split). */
+  chain?: 0 | 1;
 }
 
 export interface Scan {
@@ -49,6 +51,10 @@ export interface HotWallet {
   quote(r: RouteRef, exclude?: Set<string>): Promise<{ amount: bigint; fee: bigint; inputs?: string[] } | null>;
   /** Signs, without broadcasting, a payment of exactly `amount` to `to` (Monero: everything unlocked). */
   prepare(r: RouteRef, to: string, amount: bigint, opts?: { inputs?: string[]; exclude?: Set<string> }): Promise<Prepared>;
+  /** Bitcoin: what splitting everything spendable into `n` outputs leaves for them after the network fee. */
+  quoteSplit?(r: RouteRef, n: number, exclude?: Set<string>): Promise<{ amount: bigint; fee: bigint; inputs: string[] } | null>;
+  /** Bitcoin: signs, without broadcasting, one payment from `r` to several of our own addresses (exactly these amounts, no change). */
+  prepareSplit?(r: RouteRef, outs: { ref: RouteRef; amount: bigint }[], opts: { inputs: string[] }): Promise<Prepared>;
   broadcast(raw: string): Promise<void>;
   /** Whether one of our transactions is on the network yet (mempool or chain); null if not seen. */
   status(txid: string): Promise<{ confirmations: number } | null>;

@@ -200,6 +200,22 @@ export function Hourglass({ size = 20 }: IconProps) {
   );
 }
 
+/** Send options: a stopwatch (the wait) over three coins in a row (the pieces). */
+export function ClockIcon({ size = 32 }: IconProps) {
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden="true">
+      <rect x="13" y="1.5" width="6" height="3" rx="1" fill="#4c4c4c" />
+      <rect x="15" y="4" width="2" height="2.5" fill="#4c4c4c" />
+      <circle cx="16" cy="15" r="10" fill="#fff" stroke="#2b2b8f" strokeWidth="2.2" />
+      <path d="M16 8.5V15l4.5 2.6" fill="none" stroke="#2b2b8f" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="16" cy="15" r="1.4" fill="#c0392b" />
+      <circle cx="7" cy="28" r="3" fill="#f7931a" stroke="#a35f00" strokeWidth=".8" />
+      <circle cx="16" cy="28" r="3" fill="#26a17b" stroke="#17654d" strokeWidth=".8" />
+      <circle cx="25" cy="28" r="3" fill="#ff6600" stroke="#a34100" strokeWidth=".8" />
+    </svg>
+  );
+}
+
 /** Small app mark (a coin with a swap arrow) for the title bar, Start button and favicon. */
 export function AppMark({ size = 16 }: IconProps) {
   return (

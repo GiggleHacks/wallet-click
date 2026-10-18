@@ -78,6 +78,7 @@ let loginBody: unknown = null;
 let serverOrders: Order[] = [];
 let serverTransfers: Transfer[] = [];
 let transferBody: unknown = null;
+let onceBody: unknown = null;
 const serverLog = [
   { id: 1, run: 1, count: 1, at: Date.now() - 60_000, first: Date.now() - 60_000, level: 'info', msg: '[order K7Q2XZ] FixedFloat: NEW → PENDING, received 0.0015 BTC' },
   { id: 2, run: 2, count: 3, at: Date.now() - 30_000, first: Date.now() - 50_000, level: 'warn', msg: "[order K7Q2XZ] couldn't check with FixedFloat: timeout" },
@@ -137,6 +138,11 @@ function route(method: string, path: string, body: unknown): [number, unknown] {
     transferBody = body;
     serverTransfers = [privacyTransfer()];
     return [200, serverTransfers[0]];
+  }
+  if (path === '/api/addresses/once' && method === 'POST') {
+    onceBody = body;
+    const b = body as { coin: 'BTC'; delayHours: number; pieces: number };
+    return [200, { id: 'r_once', label: 'One-time BTC address', coin: b.coin, coinName: 'Bitcoin', mode: 'direct', delayHours: b.delayHours, pieces: b.pieces, oneTime: true, expiresAt: Date.now() + 30 * 86_400_000, destinationId: 'coinbase', destinationLabel: 'Coinbase', destinationAddress: PAYOUT, address: 'bc1qonetimeaddressxxxxxxxxxxxxxxxxxxxxxx', createdAt: Date.now(), archived: true }];
   }
   if (path === '/api/orders' && method === 'POST') {
     expect(body).toEqual({ coin: 'BTC' }); // the browser only ever names the coin
@@ -272,20 +278,30 @@ describe('Wallet Click UI', () => {
     expect(host.querySelector('a[href="https://etherscan.io/tx/0xout"]')).toBeTruthy();
   });
 
-  it('makes a Privacy Enhanced address, then shows the Monero wait with its countdown', async () => {
+  it('sends through Monero in pieces from Send options, then shows the Monero wait with its countdown', async () => {
     status = { ...status, authed: true };
     serverOrders = [];
     serverTransfers = [];
+    localStorage.removeItem('wc.sendOptions');
     await mount();
-    await waitFor(() => !!button('Privacy Enhanced…'), 'privacy button');
-    await click(button('Privacy Enhanced…'), 'Privacy Enhanced');
-    await waitFor(() => text().includes('about $110 or more'), 'privacy dialog');
-    const inDialog = (label: string) => [...host.querySelectorAll('.win-privacy button')].find((b) => b.textContent?.includes(label));
-    await click(inDialog('Ethereum'), 'Ethereum');
+    await waitFor(() => text().includes('Straight to USDT · no wait · 1 piece'), 'send options box');
+    expect(text()).not.toContain('Privacy Enhanced…');
+    await click(button('Change…'), 'Change…');
+    await waitFor(() => !!host.querySelector('.win-sendopts'), 'send options dialog');
+    const inDialog = (label: string) => [...host.querySelectorAll('.win-sendopts button')].find((b) => b.textContent?.trim() === label);
+    await click(inDialog('Through Monero'), 'Through Monero');
+    expect(text()).toContain('about $110 or more');
     await click(inDialog('12 h'), '12 h');
     expect(text()).toContain('Wait in Monero: 12 hours');
-    await click(inDialog('Get address'), 'Get address');
-    expect(transferBody).toEqual({ coin: 'ETH', delayHours: 12, destinationId: 'coinbase' }); // never an address
+    await click(inDialog('3'), '3 pieces');
+    expect(text()).toContain('Send in: 3 pieces');
+    expect(text()).toContain("can't be linked");
+    await click(inDialog('OK'), 'OK');
+    await waitFor(() => !host.querySelector('.win-sendopts'), 'dialog closed', 3000);
+    expect(text()).toContain('Through Monero · wait 12 h · 3 pieces');
+    expect(text()).toContain('Private · 12 h · 3 pieces'); // under each coin button
+    await click(button('Ethereum'), 'Ethereum');
+    expect(transferBody).toEqual({ coin: 'ETH', delayHours: 12, destinationId: 'coinbase', pieces: 3 }); // never an address
     await waitFor(() => text().includes(VAULT_LEG.address), 'receive window for the first swap');
     expect(text()).toContain('Becomes Monero first');
 
@@ -311,7 +327,54 @@ describe('Wallet Click UI', () => {
     expect(button('Release now')).toBeTruthy();
     expect(button('Change wait…')).toBeTruthy();
     serverTransfers = [];
+    localStorage.removeItem('wc.sendOptions');
   }, 45_000);
+
+  it('gives a one-time address of our own wallet when a coin button has a wait', async () => {
+    status = { ...status, authed: true };
+    serverOrders = [];
+    serverTransfers = [];
+    localStorage.setItem('wc.sendOptions', JSON.stringify({ route: 'direct', delayHours: 4, pieces: 2 }));
+    await mount();
+    await waitFor(() => text().includes('BTC · 4 h · 2 pieces'), 'coin button with its options');
+    await click(button('Bitcoin'), 'Bitcoin');
+    expect(onceBody).toEqual({ coin: 'BTC', delayHours: 4, pieces: 2, destinationId: 'coinbase' });
+    await waitFor(() => text().includes('bc1qonetimeaddress'), 'one-time address');
+    expect(text()).toContain('One-time address');
+    expect(text()).toContain('waits 4 hours');
+    expect(text()).toContain('in 2 pieces');
+    localStorage.removeItem('wc.sendOptions');
+  });
+
+  it('lists the pieces of a split payment in its transfer window', async () => {
+    status = { ...status, authed: true };
+    serverOrders = [];
+    const piece = (n: number, over: object) => ({ id: `t_p${n}`, n, of: 3, coin: 'XMR' as const, amount: '0.3', stage: 'waiting' as const, releaseAt: null, usdt: null, payoutTxUrl: null, attention: null, waitingFor: null, ...over });
+    serverTransfers = [
+      privacyTransfer({
+        state: 'pieces',
+        stage: 'holding',
+        monero: true,
+        pieces: 3,
+        received: '0.05',
+        xmr: '0.9',
+        unlockedAt: Date.now() - 3_600_000,
+        nextPieceAt: Date.now() + 40 * 60_000,
+        pieceList: [piece(1, { stage: 'done', usdt: '50', payoutTxUrl: 'https://etherscan.io/tx/0xp1' }), piece(2, { releaseAt: Date.now() + 40 * 60_000 }), piece(3, {})],
+      }),
+    ];
+    await mount();
+    await waitFor(() => text().includes('1 of 3 sent'), 'list status');
+    expect(text()).toContain('×3');
+    await click(host.querySelector('.listview tbody tr') ?? undefined, 'transfer row');
+    await waitFor(() => !!host.querySelector('.pieces-list'), 'pieces list');
+    const list = host.querySelector('.pieces-list')!.textContent!;
+    expect(list).toContain('Sent: 50.00 USDT');
+    expect(list).toMatch(/Goes in (39|40) min/);
+    expect(list).toContain('A random 5 min–2 h after piece 2');
+    expect(host.querySelector('.pieces-list a[href="https://etherscan.io/tx/0xp1"]')).toBeTruthy();
+    serverTransfers = [];
+  });
 
   it('plays the "How it works" demo end to end without touching the server', async () => {
     status = { ...status, authed: true };

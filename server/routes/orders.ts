@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { COIN_IDS, COINS, PRIVACY_DELAYS, config, type Coin } from '../config.js';
+import { COIN_IDS, COINS, DELAYS, PIECES_MAX, config, type Coin } from '../config.js';
 import { HttpError } from '../errors.js';
 import { createOrder, orderView, orders, refundOrder } from '../orders.js';
 import { transferView, transfers } from '../transfers.js';
@@ -20,7 +20,7 @@ export function registerOrders(app: FastifyInstance): void {
     coins: Object.fromEntries(COIN_IDS.map((id) => [id, { name: COINS[id].name, network: COINS[id].network }])),
     swapConfigured: Boolean(config.ff.apiKey && config.ff.apiSecret),
     features: { monero: Boolean(config.monero.rpcUrl), wallet: walletState().ready, seedBackupPending: walletState().backupPending, walletError: walletState().error },
-    privacy: { delays: PRIVACY_DELAYS, testDelayMin: config.privacyTestDelayMin },
+    privacy: { delays: DELAYS, piecesMax: PIECES_MAX, testDelayMin: config.privacyTestDelayMin },
     version: VERSION,
   }));
 

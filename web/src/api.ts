@@ -45,13 +45,15 @@ export const api = {
   destinations: () => request<{ destinations: Destination[] }>('GET', '/api/destinations'),
   addDestination: (label: string, address: string, password: string) => request<{ destinations: Destination[] }>('POST', '/api/destinations', { label, address, password }),
   removeDestination: (id: string, password: string) => request<{ destinations: Destination[] }>('POST', `/api/destinations/${id}/delete`, { password }),
-  createPrivacy: (coin: Coin, delayHours: number, destinationId: string) => request<Transfer>('POST', '/api/transfers', { coin, delayHours, destinationId }),
+  createPrivacy: (coin: Coin, delayHours: number, destinationId: string, pieces = 1) => request<Transfer>('POST', '/api/transfers', { coin, delayHours, destinationId, pieces }),
+  /** A one-time address of our own wallet, for a coin button with a wait or pieces. */
+  createOnce: (coin: Coin, delayHours: number, pieces: number, destinationId: string) => request<Route>('POST', '/api/addresses/once', { coin, delayHours, pieces, destinationId }),
   release: (id: string) => request<Transfer>('POST', `/api/transfers/${id}/release`, {}),
   changeDelay: (id: string, delayHours: number) => request<Transfer>('POST', `/api/transfers/${id}/delay`, { delayHours }),
   retry: (id: string) => request<Transfer>('POST', `/api/transfers/${id}/retry`, {}),
   addresses: () => request<{ addresses: Route[]; available: Record<Coin | 'privacy', boolean> }>('GET', '/api/addresses'),
-  createAddress: (body: { coin: Coin; mode: 'direct' | 'privacy'; delayHours: number | null; destinationId: string; label: string }) => request<Route>('POST', '/api/addresses', body),
-  updateAddress: (id: string, patch: { label?: string; delayHours?: number; archived?: boolean }) => request<Route>('POST', `/api/addresses/${id}`, patch),
+  createAddress: (body: { coin: Coin; mode: 'direct' | 'privacy'; delayHours: number | null; pieces?: number; destinationId: string; label: string }) => request<Route>('POST', '/api/addresses', body),
+  updateAddress: (id: string, patch: { label?: string; delayHours?: number; pieces?: number; archived?: boolean }) => request<Route>('POST', `/api/addresses/${id}`, patch),
   logs: (after: number) => request<{ lines: LogLine[]; startedAt: number }>('GET', `/api/logs?after=${after}`),
   quote: (coin: Coin, usd: number, mode: 'direct' | 'privacy') => request<Quote>('GET', `/api/quote?coin=${coin}&usd=${usd}&mode=${mode}`),
 };

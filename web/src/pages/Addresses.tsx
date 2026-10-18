@@ -3,8 +3,10 @@ import { api } from '../api';
 import { CoinIcon, HouseIcon, ShieldIcon, WarnIcon } from '../components/art';
 import { DelaySlider } from '../components/DelaySlider';
 import { QrCode } from '../components/QrCode';
+import { SendOptionsFields } from '../components/SendOptions';
 import { ModalLayer, Window } from '../components/Win98';
 import { shortAddr, trimAmount, usdt } from '../lib/format';
+import { piecesText, waitText, type SendOptions } from '../lib/sendOptions';
 import { sfx } from '../lib/sound';
 import type { Coin, Destination, Quote, Route } from '../types';
 
@@ -105,19 +107,18 @@ function NewForm({
 }) {
   const coins = (['BTC', 'ETH', 'XMR'] as Coin[]).filter((c) => available[c]);
   const [coin, setCoin] = useState<Coin>(coins[0] ?? 'XMR');
-  const [mode, setMode] = useState<'direct' | 'privacy'>('direct');
-  const [delay, setDelay] = useState(delays.includes(24) ? 24 : delays[0]);
+  const [opts, setOpts] = useState<SendOptions>({ route: 'direct', delayHours: 0, pieces: 1 });
   const [dest, setDest] = useState(destinations[0]?.id ?? 'coinbase');
   const [label, setLabel] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const privacyOk = coin !== 'XMR' && available.privacy;
+  const privacy = coin !== 'XMR' && available.privacy && opts.route === 'monero';
 
   async function go() {
     setBusy(true);
     setError('');
     try {
-      onCreated(await api.createAddress({ coin, mode: privacyOk ? mode : 'direct', delayHours: privacyOk && mode === 'privacy' ? delay : null, destinationId: dest, label }));
+      onCreated(await api.createAddress({ coin, mode: privacy ? 'privacy' : 'direct', delayHours: opts.delayHours, pieces: opts.pieces, destinationId: dest, label }));
       sfx.open();
     } catch (e) {
       sfx.error();
@@ -145,25 +146,8 @@ function NewForm({
             </button>
           ))}
         </div>
-        {privacyOk && (
-          <div className="seg98" role="radiogroup" aria-label="Route">
-            <button type="button" role="radio" aria-checked={mode === 'direct'} className={`btn98 seg-btn ${mode === 'direct' ? 'is-pressed' : ''}`} onClick={() => setMode('direct')}>
-              Straight to USDT
-            </button>
-            <button type="button" role="radio" aria-checked={mode === 'privacy'} className={`btn98 seg-btn ${mode === 'privacy' ? 'is-pressed' : ''}`} onClick={() => setMode('privacy')}>
-              <ShieldIcon size={18} /> Privacy Enhanced
-            </button>
-          </div>
-        )}
-        {privacyOk && mode === 'privacy' && (
-          <>
-            <span className="lbl">
-              Wait in Monero: <b>{delay} hours</b> (you can change it later)
-            </span>
-            <DelaySlider value={delay} delays={delays} onChange={setDelay} />
-            <p className="line-sub">Payments collect here until they reach FixedFloat's ≈ $110 minimum for swapping into Monero.</p>
-          </>
-        )}
+        <SendOptionsFields value={opts} onChange={setOpts} delays={delays} moneroOk={available.privacy} coin={coin} />
+        {privacy && <p className="line-sub">Payments collect here until they reach FixedFloat's ≈ $110 minimum for swapping into Monero.</p>}
         <label className="field">
           <span className="lbl">USDT goes to (fixed for this address):</span>
           <select className="input98 select98" value={dest} onChange={(e) => setDest(e.target.value)}>
@@ -224,7 +208,7 @@ export function Addresses({ delays, destinations, seedBackupPending, onClose }: 
   const current = shown.find((r) => r.id === selected) ?? null;
   const replace = (r: Route) => setRoutes((list) => (list ?? []).map((x) => (x.id === r.id ? r : x)));
 
-  async function update(patch: { delayHours?: number; archived?: boolean }) {
+  async function update(patch: { delayHours?: number; pieces?: number; archived?: boolean }) {
     if (!current) return;
     try {
       const r = await api.updateAddress(current.id, patch);
@@ -293,7 +277,7 @@ export function Addresses({ delays, destinations, seedBackupPending, onClose }: 
               </div>
               <div className="receive-info">
                 <span className="lbl">
-                  {NAMES[current.coin]} → {current.mode === 'privacy' ? `Monero (${current.delayHours} h) → ` : ''}USDT in <b>{current.destinationLabel}</b>
+                  {NAMES[current.coin]} → {current.mode === 'privacy' ? 'Monero → ' : ''}USDT in <b>{current.destinationLabel}</b> · {waitText(current.delayHours ?? 0)} · {piecesText(current.pieces ?? 1)}
                 </span>
                 <div className="address-box" onClick={() => void copyText(current.address).then((ok) => ok && (sfx.copy(), setCopied(true)))} title="Click to copy">
                   {current.address}
@@ -301,12 +285,25 @@ export function Addresses({ delays, destinations, seedBackupPending, onClose }: 
                 <button type="button" className="btn98" onClick={() => void copyText(current.address).then((ok) => ok && (sfx.copy(), setCopied(true)))}>
                   {copied ? 'Copied!' : 'Copy address'}
                 </button>
-                {current.mode === 'privacy' && (
-                  <div className="route-delay">
-                    <span className="lbl">Wait in Monero for the next payments:</span>
-                    <DelaySlider value={current.delayHours ?? delays[0]} delays={delays} onChange={(h) => void update({ delayHours: h })} />
+                <div className="route-delay">
+                  <span className="lbl">For the next payments, wait{current.mode === 'privacy' || current.coin === 'XMR' ? ' in Monero' : ''}:</span>
+                  <DelaySlider value={current.delayHours ?? 0} delays={delays} onChange={(h) => void update({ delayHours: h })} />
+                  <span className="lbl">…and send in:</span>
+                  <div className="seg98 pieces98" role="radiogroup" aria-label="Pieces">
+                    {[1, 2, 3, 4].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        role="radio"
+                        aria-checked={(current.pieces ?? 1) === n}
+                        className={`btn98 seg-btn ${(current.pieces ?? 1) === n ? 'is-pressed' : ''}`}
+                        onClick={() => void update({ pieces: n })}
+                      >
+                        {n === 1 ? 'one piece' : n}
+                      </button>
+                    ))}
                   </div>
-                )}
+                </div>
               </div>
             </div>
             <SendForm route={current} />

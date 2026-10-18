@@ -5,7 +5,7 @@ import { minutesText, shortAddr, trimAmount, usdt } from '../lib/format';
 import { COST_HELP, costText, driftText } from '../lib/cost';
 import { sfx } from '../lib/sound';
 import { useTheme } from '../lib/themes';
-import type { Order, Transfer, TransferStep } from '../types';
+import type { Order, Piece, Transfer, TransferStep } from '../types';
 import { AppMark, CheckBadge, CoinIcon, CoinbaseIcon, HouseIcon, Hourglass, ModernPC, ShieldIcon, SwapMachine, UsdtIcon, WarnIcon, XmrIcon } from './art';
 import { DelaySlider, untilText } from './DelaySlider';
 import { Burst, Flyers, RefundForm, Sparkles, SpinFaces, Station } from './TransferDialog';
@@ -17,15 +17,24 @@ import { ModalLayer, ProgressBar, SpeedGraph, Window } from './Win98';
  *
  *   paying → confirming → swap1 → vault-in → locked → churn → waiting → release → swap2 → sending → done
  *
- * (a direct payment to a permanent address skips the vault: paying → confirming → swap1 → sending → done).
+ * (a direct payment to a permanent address skips the vault: paying → confirming → [held] → swap1 → sending → done).
+ * A split payment goes round again for each piece: waiting/held → swap → sending → waiting/held → …
  */
 
-export type Phase = 'paying' | 'confirming' | 'swap1' | 'vault-in' | 'locked' | 'churn' | 'waiting' | 'release' | 'swap2' | 'sending' | 'done' | 'attention' | 'refunded';
+export type Phase = 'paying' | 'confirming' | 'held' | 'swap1' | 'vault-in' | 'locked' | 'churn' | 'waiting' | 'release' | 'swap2' | 'sending' | 'done' | 'attention' | 'refunded';
 const PRIVACY_FLOW: Phase[] = ['paying', 'confirming', 'swap1', 'vault-in', 'locked', 'churn', 'waiting', 'release', 'swap2', 'sending', 'done'];
 const DIRECT_FLOW: Phase[] = ['paying', 'confirming', 'swap1', 'sending', 'done'];
+/** A direct payment with a wait or pieces: it's held at our address first. */
+const HELD_FLOW: Phase[] = ['paying', 'confirming', 'held', 'swap1', 'sending', 'done'];
+
+/** Whether the money waits in Monero (the five-station journey). */
+export const viaMonero = (t: Transfer) => t.monero ?? t.privacy;
+const flowOf = (t: Transfer) => (viaMonero(t) ? PRIVACY_FLOW : t.delayHours || t.heldAt || (t.pieces ?? 1) > 1 ? HELD_FLOW : DIRECT_FLOW);
+/** What the countdown counts down to: the end of the wait, or the next piece. */
+export const wakeAt = (t: Transfer) => (t.state === 'pieces' ? (t.nextPieceAt ?? null) : t.releaseAt);
 
 /** How long each moment stays on screen at least, so its animation gets its turn. */
-const DWELL: Partial<Record<Phase, number>> = { confirming: 1800, swap1: 2200, 'vault-in': 1500, locked: 1900, churn: 2400, waiting: 1200, release: 1500, swap2: 2200, sending: 1800 };
+const DWELL: Partial<Record<Phase, number>> = { confirming: 1800, held: 1200, swap1: 2200, 'vault-in': 1500, locked: 1900, churn: 2400, waiting: 1200, release: 1500, swap2: 2200, sending: 1800 };
 
 const SOUND: Partial<Record<Phase, () => void>> = {
   confirming: () => sfx.ding(),
@@ -46,12 +55,19 @@ export function phaseOf(t: Transfer, now: number): Phase {
   if (t.state === 'refunded') return 'refunded';
   if (t.state === 'done') return 'done';
   if (t.state === 'collect') return t.received ? 'confirming' : 'paying';
+  if (t.state === 'hold') return 'held';
+  if (t.state === 'split') return 'confirming';
+  if (t.state === 'pieces') {
+    const sending = t.pieceList?.some((p) => p.stage === 'sending');
+    if (viaMonero(t)) return sending ? 'swap2' : 'waiting';
+    return sending ? 'swap1' : 'held';
+  }
   if (t.state === 'open1' || t.state === 'send1') return 'confirming';
   if (t.state === 'swap1') {
     const s = t.leg1?.stage;
     if (!t.routeId && (!s || s === 'waiting' || s === 'expired')) return 'paying';
     if (s === 'received') return 'confirming';
-    if (s === 'sending' || s === 'done') return t.privacy ? 'vault-in' : s === 'done' ? 'done' : 'sending';
+    if (s === 'sending' || s === 'done') return viaMonero(t) ? 'vault-in' : s === 'done' ? 'done' : 'sending';
     if (s === 'refunded') return 'refunded';
     return 'swap1';
   }
@@ -157,8 +173,9 @@ function Vault({ door, turning, coins, churning, ring }: { door: 'open' | 'close
 
 function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: number }) {
   const theme = useTheme();
-  const five = t.privacy;
-  const flow = five ? PRIVACY_FLOW : DIRECT_FLOW;
+  const five = viaMonero(t);
+  const flow = flowOf(t);
+  const until = wakeAt(t);
   const X = five ? { coin: 9, swap1: 29.5, vault: 50, swap2: 70.5, dest: 91 } : { coin: 13, swap1: 50, vault: 50, swap2: 50, dest: 87 };
   const at = flow.indexOf(shown);
   const after = (p: Phase) => at >= 0 && at > flow.indexOf(p);
@@ -181,18 +198,19 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
   const machine = (spinning: boolean) => (theme.shell === 'classic' ? <SwapMachine size={size} spinning={spinning} /> : <ModernPC size={size} spinning={spinning} variant={theme.shell} />);
   const coinbase = t.destinationId === 'coinbase';
   const holding = shown === 'locked' || shown === 'churn' || shown === 'waiting';
+  const coinLabel = shown === 'held' && until ? shortUntil(until - now) : t.coinName;
 
   // The ring around the vault: filling while it unlocks, draining while it waits.
   let ring: { fraction: number; kind: 'unlock' | 'wait' } | null = null;
   if (shown === 'locked') ring = { fraction: Math.min(t.xmrConfirmations ?? 0, 10) / 10, kind: 'unlock' };
-  if (shown === 'waiting' && t.releaseAt && t.unlockedAt) ring = { fraction: (t.releaseAt - now) / Math.max(1, t.releaseAt - t.unlockedAt), kind: 'wait' };
+  if (shown === 'waiting' && until && t.unlockedAt) ring = { fraction: (until - now) / Math.max(1, until - t.unlockedAt), kind: 'wait' };
   const vaultLabel =
     shown === 'locked'
       ? 'Unlocking'
       : shown === 'churn'
         ? 'Shuffling'
-        : shown === 'waiting' && t.releaseAt
-          ? shortUntil(t.releaseAt - now)
+        : shown === 'waiting' && until
+          ? shortUntil(until - now)
           : shown === 'release'
             ? 'Opening'
             : 'Vault';
@@ -206,10 +224,15 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
   return (
     <div className={`strip journey-strip ${five ? 'is-five' : ''} phase-${shown}`} aria-hidden="true">
       <div className="track" style={{ left: `${X.coin}%`, right: `${100 - X.dest}%` }} />
-      <Station x={X.coin} label={t.coinName} dim={after('confirming')} pulse={shown === 'confirming'}>
+      <Station x={X.coin} label={coinLabel} dim={after(flow.includes('held') ? 'held' : 'confirming')} pulse={shown === 'confirming' || shown === 'held'}>
         <span className="stack-icon">
           <CoinIcon coin={t.coin} size={five ? 40 : 44} />
-          {t.routeId && (
+          {shown === 'held' && (
+            <span className="stack-badge">
+              <Hourglass size={18} />
+            </span>
+          )}
+          {t.routeId && shown !== 'held' && !t.oneTime && (
             <span className="stack-badge">
               <HouseIcon size={18} />
             </span>
@@ -262,7 +285,7 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
         )}
       </Station>
 
-      {shown === 'confirming' && fly(X.coin, X.swap1, <CoinIcon coin={t.coin} size={22} />)}
+      {(shown === 'confirming' || (shown === 'swap1' && t.state === 'pieces')) && fly(X.coin, X.swap1, <CoinIcon coin={t.coin} size={22} />)}
       {shown === 'vault-in' && fly(X.swap1, X.vault, <XmrIcon size={22} />)}
       {shown === 'release' && fly(X.vault, X.swap2, <XmrIcon size={22} />)}
       {shown === 'sending' && fly(five ? X.swap2 : X.swap1, X.dest, <UsdtIcon size={22} />)}
@@ -278,8 +301,16 @@ function progressOf(t: Transfer, shown: Phase, now: number, elapsed: number): nu
     const req = t.leg1?.requiredConfirmations || 1;
     return from + (to - from) * Math.min(1, (t.leg1?.confirmations ?? 0) / req);
   };
-  if (!t.privacy) {
-    return { paying: 0, confirming: conf(6, 40), swap1: ease(48, 70, 60_000), sending: ease(74, 96, 45_000), done: 100 }[shown as 'paying'] ?? 0;
+  // A split payment: the share of its pieces that have landed (once the first one has gone).
+  const list = t.pieceList ?? [];
+  const sent = list.filter((p) => p.stage === 'done').length;
+  if (t.state === 'pieces' && list.length && (!viaMonero(t) || list.some((p) => p.stage !== 'waiting'))) {
+    const share = (sent + (list.some((p) => p.stage === 'sending') ? 0.5 : 0)) / list.length;
+    return viaMonero(t) ? 82 + 16 * share : 48 + 48 * share;
+  }
+  if (!viaMonero(t)) {
+    const held = t.releaseAt && t.heldAt ? 40 + 8 * (1 - Math.max(0, t.releaseAt - now) / Math.max(1, t.releaseAt - t.heldAt)) : 44;
+    return { paying: 0, confirming: conf(6, 40), held, swap1: ease(48, 70, 60_000), sending: ease(74, 96, 45_000), done: 100 }[shown as 'paying'] ?? 0;
   }
   switch (shown) {
     case 'paying':
@@ -294,8 +325,10 @@ function progressOf(t: Transfer, shown: Phase, now: number, elapsed: number): nu
       return 32 + 8 * (Math.min(t.xmrConfirmations ?? 0, 10) / 10);
     case 'churn':
       return 42;
-    case 'waiting':
-      return t.releaseAt && t.unlockedAt ? 45 + 35 * (1 - Math.max(0, t.releaseAt - now) / Math.max(1, t.releaseAt - t.unlockedAt)) : 45;
+    case 'waiting': {
+      const until = wakeAt(t);
+      return until && t.unlockedAt ? 45 + 35 * (1 - Math.max(0, until - now) / Math.max(1, until - t.unlockedAt)) : 45;
+    }
     case 'release':
       return 82;
     case 'swap2':
@@ -342,6 +375,42 @@ function Steps({ steps, releaseAt }: { steps: TransferStep[]; releaseAt: number 
   );
 }
 
+/** A split payment's pieces: what each one holds, and where it is. */
+function PieceList({ pieces, now }: { pieces: Piece[]; now: number }) {
+  const state = (p: Piece) => {
+    if (p.stage === 'done') return `Sent: ${p.usdt ? `${usdt(p.usdt)} USDT` : 'USDT'}`;
+    if (p.stage === 'refunded') return 'Sent back';
+    if (p.stage === 'attention') return `Needs you: ${p.attention ?? ''}`;
+    if (p.stage === 'sending') return 'Swapping…';
+    if (p.releaseAt && p.releaseAt > now) return `Goes in ${untilText(p.releaseAt - now)}`;
+    if (p.releaseAt) return 'Its turn now';
+    return p.n > 1 ? `A random 5 min–2 h after piece ${p.n - 1}` : 'Waiting';
+  };
+  return (
+    <ul className="pieces-list" aria-label="Pieces">
+      {pieces.map((p) => (
+        <li key={p.id} className={`is-${p.stage}`}>
+          <span className="piece-n">
+            {p.n} of {p.of}
+          </span>
+          <span className="piece-amt">{p.amount ? `${trimAmount(p.amount)} ${p.coin}` : '…'}</span>
+          <span className="piece-state">
+            {state(p)}
+            {p.payoutTxUrl && (
+              <>
+                {' '}
+                <a href={p.payoutTxUrl} target="_blank" rel="noreferrer">
+                  view
+                </a>
+              </>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** The "How it works" run fast-forwards the wait: virtual time runs `speed` times faster from `realStart`. */
 export interface TimeLapse {
   realStart: number;
@@ -370,7 +439,7 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
   const [error, setError] = useState('');
   const [editDelay, setEditDelay] = useState(false);
   const [delay, setDelay] = useState(t.delayHours && delays.includes(t.delayHours) ? t.delayHours : delays[0]);
-  const flow = t.privacy ? PRIVACY_FLOW : DIRECT_FLOW;
+  const flow = flowOf(t);
   const shown = useStepped(phaseOf(t, now), flow, autoplay ? 'paying' : undefined);
   const enteredAt = useRef(Date.now());
   const prevShown = useRef(shown);
@@ -409,19 +478,25 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
     }
   }
 
-  const left = t.releaseAt !== null ? t.releaseAt - now : null;
+  const until = wakeAt(t);
+  const left = until !== null ? until - now : null;
+  const monero = viaMonero(t);
+  const split = (t.pieces ?? 1) > 1;
+  const pieceList = t.pieceList ?? [];
+  const sentPieces = pieceList.filter((p) => p.stage === 'done').length;
+  const nextPiece = pieceList.find((p) => p.stage === 'waiting');
   const finished = shown === 'done' || shown === 'refunded';
   const percent = progressOf(t, shown, now, Date.now() - enteredAt.current);
   const showProgress = shown !== 'attention' && shown !== 'refunded';
   const paid = t.received ? `${trimAmount(t.received)} ${t.coin}` : t.coinName;
   const xmr = t.xmr ? `${trimAmount(t.xmr)} XMR` : 'the Monero';
-  const out = t.usdt ?? t.leg2?.usdt ?? (t.privacy ? null : t.leg1?.usdt);
+  const out = t.usdt ?? t.leg2?.usdt ?? (monero ? null : t.leg1?.usdt);
   const leg1Needs = t.leg1?.stage === 'attention' && t.leg1.emergency?.choice === 'NONE' && !demo;
-  const name = t.privacy ? 'Privacy Enhanced' : `Payment to "${t.routeLabel ?? 'permanent address'}"`;
+  const name = t.privacy ? 'Privacy Enhanced' : t.oneTime || !t.routeLabel ? `${t.coinName} payment` : `Payment to "${t.routeLabel}"`;
   const title = shown === 'done' ? 'Transfer complete' : modern && showProgress && shown !== 'paying' ? `${Math.round(percent)}% complete` : demo ? `${name} (demo)` : name;
 
   let eta: string | null = null;
-  if (shown === 'waiting' && left !== null) eta = untilText(left);
+  if ((shown === 'waiting' || shown === 'held') && left !== null && left > 0) eta = untilText(left);
   else if (shown === 'locked') eta = minutesText(Math.max(1, (10 - Math.min(t.xmrConfirmations ?? 0, 10)) * 2));
   else if (shown === 'confirming' || shown === 'swap1' || shown === 'swap2') eta = minutesText(shown === 'confirming' ? 10 : 3);
   else if (shown === 'sending' || shown === 'release' || shown === 'vault-in') eta = 'about a minute';
@@ -435,17 +510,35 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
     ],
     confirming: [
       <>
-        {t.routeId ? `Payment at "${t.routeLabel}"` : 'Payment received'}: <b>{paid}</b>
+        {t.routeLabel ? `Payment at "${t.routeLabel}"` : 'Payment received'}: <b>{paid}</b>
       </>,
-      t.state === 'open1' || t.state === 'send1'
+      t.state === 'split'
+        ? `Splitting it into ${t.pieces} pieces at fresh addresses of your own wallet…`
+        : t.state === 'open1' || t.state === 'send1'
         ? 'Confirmed: forwarding it to a fresh FixedFloat order…'
         : t.leg1 && t.leg1.requiredConfirmations && !t.routeId
           ? `Waiting for network confirmations (${Math.min(t.leg1.confirmations, t.leg1.requiredConfirmations)} of ${t.leg1.requiredConfirmations})…`
           : 'Waiting for network confirmations…',
     ],
+    held: [
+      <>
+        <Hourglass size={16} />{' '}
+        {t.state === 'pieces' ? (
+          <>
+            {sentPieces} of {pieceList.length} pieces sent{left !== null && left > 0 ? <>; the next one goes in {untilText(left)}</> : nextPiece ? <>; the next one waits a random 5 min–2 h</> : null}
+          </>
+        ) : (
+          <>
+            Holding <b>{paid}</b>
+            {left !== null && left > 0 ? <> for another {untilText(left)}</> : null}
+          </>
+        )}
+      </>,
+      t.state === 'pieces' ? 'Each piece is forwarded to FixedFloat on its own, in a random, unequal amount.' : until ? `Goes on at ${new Date(until).toLocaleString()}${split ? `, in ${t.pieces} pieces` : ''}.` : null,
+    ],
     swap1: [
       <>
-        Swapping <b>{paid}</b> to {t.privacy ? 'Monero' : 'USDT'}…
+        Swapping <b>{t.state === 'pieces' ? `piece ${pieceList.find((p) => p.stage === 'sending')?.n ?? ''} of ${pieceList.length}` : paid}</b> to {t.privacy ? 'Monero' : 'USDT'}…
       </>,
       t.privacy ? 'FixedFloat pays the Monero into your own wallet.' : 'FixedFloat is exchanging it at the market rate.',
     ],
@@ -456,17 +549,29 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
       </>,
       `Unlocking: ${Math.min(t.xmrConfirmations ?? 0, 10)} of 10 confirmations.`,
     ],
-    churn: [<>Moving it to a fresh spot in your wallet…</>, "So FixedFloat's own coins never go straight back to it."],
+    churn: [
+      <>{split ? `Splitting it into ${t.pieces} pieces within your wallet…` : 'Moving it to a fresh spot in your wallet…'}</>,
+      split ? 'One fresh address per piece; each piece moves once more on its own.' : "So FixedFloat's own coins never go straight back to it.",
+    ],
     waiting: [
       <>
-        <Hourglass size={16} /> Holding <b>{xmr}</b> for another {left !== null ? untilText(left) : '…'}
+        <Hourglass size={16} />{' '}
+        {t.state === 'pieces' && sentPieces ? (
+          <>
+            {sentPieces} of {pieceList.length} pieces sent{left !== null && left > 0 ? <>; the next one goes in {untilText(left)}</> : <>; the next one waits a random 5 min–2 h</>}
+          </>
+        ) : (
+          <>
+            Holding <b>{xmr}</b> for another {left !== null ? untilText(Math.max(0, left)) : '…'}
+          </>
+        )}
       </>,
-      t.releaseAt ? `Swaps to USDT at ${new Date(t.releaseAt).toLocaleString()}.` : null,
+      until ? `${t.state === 'pieces' && sentPieces ? 'Next piece swaps' : 'Swaps'} to USDT at ${new Date(until).toLocaleString()}${split && !sentPieces ? `, in ${t.pieces} pieces` : ''}.` : null,
     ],
     release: [<>Wait over: opening the vault…</>, `${xmr} heads to the swap.`],
     swap2: [
       <>
-        Swapping <b>{xmr}</b> to USDT…
+        Swapping <b>{t.state === 'pieces' ? `piece ${pieceList.find((p) => p.stage === 'sending')?.n ?? ''} of ${pieceList.length}` : xmr}</b> to USDT…
       </>,
       'FixedFloat is exchanging it at the market rate.',
     ],
@@ -492,10 +597,10 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
 
   return (
     <ModalLayer>
-      <Window title={title} icon={t.privacy ? <ShieldIcon size={16} /> : <AppMark />} onClose={onClose} className="win-dialog win-journey" role="dialog">
+      <Window title={title} icon={monero ? <ShieldIcon size={16} /> : <AppMark />} onClose={onClose} className="win-dialog win-journey" role="dialog">
         {modern && (
           <p className="modern-head">
-            {t.privacy ? (
+            {monero ? (
               <>
                 <b>{t.coinName}</b> → Monero → <b>{t.destinationLabel}</b>
               </>
@@ -521,12 +626,12 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
             </p>
           )}
           {sub && <p className="line-sub">{sub}</p>}
-          {shown === 'waiting' && timeLapse && (
+          {(shown === 'waiting' || shown === 'held') && timeLapse && (
             <p className="line-sub timelapse">
               <FastForward /> Time-lapse: a day in a few seconds.
             </p>
           )}
-          {!finished && t.waitingFor && shown !== 'waiting' && <p className="line-sub">Waiting for {t.waitingFor}…</p>}
+          {!finished && t.waitingFor && shown !== 'waiting' && shown !== 'held' && <p className="line-sub">Waiting for {t.waitingFor}…</p>}
           {t.error && !t.attention && <p className="line-sub">Retrying: {t.error}</p>}
         </div>
 
@@ -540,6 +645,7 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
         )}
 
         <Steps steps={t.steps} releaseAt={t.releaseAt} />
+        {pieceList.length > 0 && <PieceList pieces={pieceList} now={now} />}
 
         {t.attention && (
           <div className="attention">
@@ -560,7 +666,7 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
         {editDelay && !demo && (
           <fieldset className="group98">
             <legend>
-              Wait in Monero: <b>{delay} hours</b> (counted from when it unlocked)
+              {monero ? 'Wait in Monero' : 'Wait before it goes on'}: <b>{delay ? `${delay} hours` : 'none'}</b> (counted from when it {monero ? 'unlocked' : 'was confirmed'})
             </legend>
             <DelaySlider value={delay} delays={delays} onChange={setDelay} />
             <div className="btn-row">
@@ -607,6 +713,15 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
 
 /** One word for the transfer list. */
 export function transferStatus(t: Transfer, now = Date.now()): string {
-  if (t.stage === 'holding') return t.releaseAt && t.releaseAt > now && t.state === 'wait' ? `Waiting ${untilText(t.releaseAt - now)}` : 'In Monero';
+  const until = wakeAt(t);
+  if (t.state === 'pieces' && t.pieceList?.length) {
+    const sent = t.pieceList.filter((p) => p.stage === 'done').length;
+    if (t.stage === 'sending' || !until || until <= now) return `${sent} of ${t.pieceList.length} sent`;
+    return sent ? `${sent} of ${t.pieceList.length} sent · next ${untilText(until - now)}` : `Waiting ${untilText(until - now)}`;
+  }
+  if (t.stage === 'holding') {
+    if (until && until > now && (t.state === 'wait' || t.state === 'hold')) return `Waiting ${untilText(until - now)}`;
+    return viaMonero(t) ? 'In Monero' : t.state === 'split' ? 'Splitting' : 'Holding';
+  }
   return { waiting: 'Waiting', received: t.routeId ? 'Received' : 'Confirming', swapping: 'Swapping', sending: 'Sending', done: 'Done', refunded: 'Sent back', expired: 'Expired', attention: 'Needs you' }[t.stage];
 }

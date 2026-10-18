@@ -4,8 +4,11 @@ import { QrCode } from '../components/QrCode';
 import { Window } from '../components/Win98';
 import { clock, trimAmount, usdt } from '../lib/format';
 import { sfx } from '../lib/sound';
-import type { Order } from '../types';
+import type { Order, Route, Transfer } from '../types';
+import { transferStatus } from '../components/JourneyDialog';
 import { STAGE_LABEL } from './Home';
+
+const NETWORK: Record<Route['coin'], string> = { BTC: 'Bitcoin', ETH: 'Ethereum mainnet', XMR: 'Monero' };
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -23,6 +26,106 @@ async function copyText(text: string): Promise<boolean> {
     ta.remove();
     return ok;
   }
+}
+
+interface OnceProps {
+  route: Route;
+  /** The payment that came in to it, once there is one. */
+  transfer?: Transfer;
+  offline?: boolean;
+  creating: boolean;
+  onNew(): void;
+  onBack(): void;
+  onShowProgress(t: Transfer): void;
+}
+
+/** A coin button with a wait or pieces: a one-time address of our own wallet, which holds the payment for a while. */
+export function ReceiveOnce({ route, transfer, offline, creating, onNew, onBack, onShowProgress }: OnceProps) {
+  const [copied, setCopied] = useState(false);
+  const wait = route.delayHours ? `waits ${route.delayHours} hours (plus up to 30 minutes)` : 'goes on once it is confirmed';
+  const pieces = (route.pieces ?? 1) > 1 ? ` in ${route.pieces} pieces, at random times` : '';
+  async function copy() {
+    if (await copyText(route.address)) {
+      sfx.copy();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    }
+  }
+  return (
+    <Window
+      title={`Receive ${route.coinName}`}
+      icon={<CoinIcon coin={route.coin} size={16} />}
+      onClose={onBack}
+      className="win-receive"
+      statusBar={
+        <>
+          <span className="status-cell grow">{transfer ? transferStatus(transfer) : 'Waiting'}</span>
+          <span className="status-cell">One-time address</span>
+        </>
+      }
+    >
+      <div className="receive-grid">
+        <div className="qr-box">
+          <QrCode value={route.address} size={200} logo={<CoinIcon coin={route.coin} size={40} />} />
+        </div>
+        <div className="receive-info">
+          <span className="lbl">
+            Send {route.coinName} ({route.coin}) to:
+          </span>
+          <div className="address-box" onClick={() => void copy()} title="Click to copy">
+            {route.address}
+          </div>
+          <button type="button" className="btn98 is-default" onClick={() => void copy()}>
+            {copied ? 'Copied!' : 'Copy address'}
+          </button>
+          <ul className="hints">
+            <li>
+              <b>{NETWORK[route.coin]} only.</b>
+              {route.coin === 'ETH' && ' Not Base, Arbitrum or any other network.'}
+            </li>
+            <li>
+              A one-time address of your own wallet. The payment {wait}, then goes to <b>{route.destinationLabel}</b> as USDT{pieces}.
+            </li>
+            <li>Below FixedFloat's minimum (about $10) it waits here for more. It's watched for 30 days.</li>
+          </ul>
+        </div>
+      </div>
+      <div className={`wait-row ${transfer ? 'is-live' : ''}`}>
+        {transfer ? (
+          <>
+            <CoinIcon coin={route.coin} size={18} />
+            <span>
+              {transferStatus(transfer)}
+              {transfer.received ? `: ${trimAmount(transfer.received)} ${route.coin}` : ''}
+            </span>
+            <button type="button" className="btn98" onClick={() => onShowProgress(transfer)}>
+              Show progress
+            </button>
+          </>
+        ) : (
+          <>
+            <Hourglass size={18} />
+            <span>
+              Waiting for payment<span className="dots" />
+            </span>
+          </>
+        )}
+      </div>
+      {offline && (
+        <p className="error-text" role="status">
+          Can't reach the Wallet Click server right now. Retrying…
+        </p>
+      )}
+      <div className="btn-row">
+        <button type="button" className="btn98" onClick={onNew} disabled={creating}>
+          {creating ? 'Getting address…' : 'New address'}
+        </button>
+        <button type="button" className="btn98" onClick={onBack}>
+          Back
+        </button>
+      </div>
+    </Window>
+  );
 }
 
 interface Props {

@@ -1,10 +1,10 @@
 # Wallet Click
 
-Get paid in **Bitcoin**, **Ethereum** or **Monero**: at a brand-new address every time, or at a **permanent address** you save in your phone wallet. Whatever arrives is swapped to **USDT** and sent to **Coinbase** (or another USDT address in your address book). **Privacy Enhanced** routes it through Monero first, with a wait you choose. You watch it all happen in a retro "copying files" style window, in one of four desktop themes.
+Get paid in **Bitcoin**, **Ethereum** or **Monero**: at a brand-new address every time, or at a **permanent address** you save in your phone wallet. Whatever arrives is swapped to **USDT** and sent to **Coinbase** (or another USDT address in your address book). **Send options** can route it through Monero first, make it wait before it goes on, and split it into 2–4 pieces sent at random times. You watch it all happen in a retro "copying files" style window, in one of four desktop themes.
 
 ## How it works
 
-1. Click **Bitcoin**, **Ethereum** or **Monero**. The server creates a FixedFloat float-rate order and shows its deposit address as a QR code. Every order has its own address.
+1. Click **Bitcoin**, **Ethereum** or **Monero**. With the default Send options (straight to USDT, no wait, one piece), the server creates a FixedFloat float-rate order and shows its deposit address as a QR code. Every order has its own address.
 2. Someone pays any amount between FixedFloat's minimum and maximum, within 24 hours of the address being made. The minimum is about $10.
 3. **The moment the payment is broadcast**, the app rings and opens the transfer window. The server watches each deposit address on-chain itself, through public Ethereum RPCs and mempool.space, and doesn't wait for FixedFloat to report the payment.
 4. FixedFloat confirms the payment. In the window, the coin floats to the swap, turns into USDT, and the USDT floats to Coinbase.
@@ -18,16 +18,37 @@ The server polls FixedFloat and the chain for every order, so payments are picke
 
 The USDT (ERC-20) addresses swaps may pay out to. **Coinbase** is built in. Adding or removing one asks for the password again, and the address must carry its EIP-55 checksum (copy it from the exchange's deposit page). Pick the destination for new addresses on the main window.
 
+### Send options
+
+The **Send options** box on the main window says what the coin buttons do now (for example "Through Monero · wait 4 h · 4 pieces"); **Change…** sets it, and the browser remembers it. Each permanent address has its own copy.
+
+- **Route**: *Straight to USDT*, or *Through Monero* (Privacy Enhanced, below).
+- **Wait**: none, 4, 12, 24 or 42 hours, plus a random 0–30 minutes so the length isn't a fingerprint.
+- **Pieces**: 1–4. The amounts are random and unequal (each at least 1.5 × FixedFloat's minimum; with too little, it's fewer pieces). Piece 1 goes when the wait is over; each next one a random 5 minutes to 2 hours after the one before has finished (FixedFloat only takes one order per direction at a time, so they never overlap). Each piece is its own FixedFloat order, so it pays its own FixedFloat and network fees.
+
+Where it happens:
+
+| | Wait | Pieces |
+|---|---|---|
+| Through Monero (Bitcoin/Ethereum) | in Monero, after the first swap | one Monero transaction splits it into a fresh subaddress per piece; each piece then moves once more by itself, at a random time, and swaps to USDT on its own |
+| A Monero payment | in your Monero wallet | the same Monero split |
+| Bitcoin, straight | at your own address, before the swap | one transaction to a fresh address of yours per piece (BIP84 change chain, `m/84'/0'/0'/1/i`); each forwards by itself |
+| Ethereum, straight | at your own address, before the swap | each piece forwards its share from the same address, one after another |
+
+**How private is it?** Inside Monero the pieces can't be tied to each other or to the payment. Straight Bitcoin/Ethereum pieces only hide the amounts and the timing from Coinbase: on the blockchain anyone can still follow them from your address to FixedFloat. Use **Through Monero** (or get paid in Monero) for the real thing.
+
+With a wait or pieces and *Straight to USDT*, a coin button gives you a **one-time address of your own wallet** instead of a FixedFloat address: the payment lands in the server's hot wallet, waits, then goes on like a permanent address's. One-time addresses aren't listed under My Addresses, and are watched for 30 days.
+
 ### Privacy Enhanced
 
-**Privacy Enhanced…** on the main window: pick Bitcoin or Ethereum, a wait (4, 12, 24 or 42 hours) and a destination, and pay the address it shows.
+*Through Monero* in Send options: click Bitcoin or Ethereum and pay the address it shows.
 
 1. FixedFloat swaps the payment to **Monero**, paid to a fresh subaddress of the VPS's own Monero wallet.
 2. Once it has unlocked (10 blocks, about 20 minutes), the server moves it once to another fresh subaddress of its own, so FixedFloat's outputs never go straight back to FixedFloat.
 3. It waits the chosen hours (from the moment it unlocked) plus a random 0–30 minutes.
 4. A second FixedFloat order swaps exactly that Monero to USDT for the destination, and the wallet pays it.
 
-The transfer window shows every step, a countdown, and **Change wait…**, **Release now** and **Retry**.
+With pieces, step 2 is the split, and steps 3–4 happen for each piece. The transfer window shows every step, every piece, a countdown, and **Change wait…**, **Release now** and **Retry** (Release now skips the wait; the pieces keep their random gaps).
 
 Limits: FixedFloat only swaps **about $110 or more into Monero**, so smaller privacy payments can't go through (they're sent back). Two swaps cost two FixedFloat fees (0.5% each) plus small network fees. It hides the link between your coins and the USDT from outside chain analysis; FixedFloat itself still sees both swaps (the same API key makes them).
 
@@ -37,7 +58,7 @@ Limits: FixedFloat only swaps **about $110 or more into Monero**, so smaller pri
 
 - **Monero**: a subaddress of the VPS's Monero wallet.
 - **Bitcoin / Ethereum**: from the server's own hot wallet (a 24-word seed, encrypted on disk).
-- Each one goes **straight to USDT** or through **Privacy Enhanced**, to a destination that's **fixed for life**: a saved address always lands in the same place. Only its name and privacy wait can change.
+- Each one goes **straight to USDT** or through **Privacy Enhanced**, to a destination that's **fixed for life**: a saved address always lands in the same place. It has its own wait and pieces (Send options), which can change for the next payments; the name can change too.
 
 When money lands, it rings. Once it's confirmed (BTC 1 block, ETH 12 blocks, XMR 10 blocks) and above FixedFloat's minimum, the server creates a FixedFloat order for exactly that amount and pays it from the hot wallet. Smaller payments **collect** at the address until they add up to the minimum. **Send $…** works out the coin amount for a dollar amount and gives an **Open in wallet** link (`bitcoin:`, `ethereum:`, `monero:`) that opens your wallet app with everything filled in.
 
@@ -83,7 +104,8 @@ Backgrounds can be changed on their own on the **Background** tab. All wallpaper
 - **Client addresses:** only one proxy hop is trusted, so a client can't spoof its address with `X-Forwarded-For`.
 
 **Hot wallet (permanent addresses, Privacy Enhanced)**
-- The server can only send to the deposit address of a FixedFloat order it has just created and checked (right coin in, USDT to a saved destination or XMR to our own subaddress, float rate), or to one of its own Monero subaddresses. No API takes an outbound address.
+- The server can only send to the deposit address of a FixedFloat order it has just created and checked (right coin in, USDT to a saved destination or XMR to our own subaddress, float rate), to one of its own Monero subaddresses, or (a Bitcoin split) to its own change-chain addresses, each derived from the seed and checked before signing. No API takes an outbound address.
+- A Monero split takes the fee out of the pieces, so nothing is left as change at the account's main address. It needs monero-wallet-rpc **0.18.3.1 or newer**; an older one can't do that, and the split is refused (nothing is sent) rather than signed any other way.
 - Every send is signed and saved to disk before it's broadcast. After a crash the same transaction is broadcast again; a second one is never built. Bitcoin forwards spend exactly the quoted coins; Ethereum keeps gas back.
 - FixedFloat's rule that a new order in the same direction waits for the previous one is followed: one order per pair at a time.
 - Refunds of orders the hot wallet paid go back to the hot wallet's own address.
@@ -139,5 +161,6 @@ docker compose restart
 - jsdom runs of the real flow and the demo, checking the sounds, plus switching themes and backgrounds.
 - The address book (password, checksum), Monero orders, and order checks against what was asked for.
 - The transfer engine against a fake monero-wallet-rpc, Esplora and Ethereum RPC: Privacy Enhanced end to end (vault, churn, wait, second swap), release and change of the wait, relaying the saved transaction after a failed relay, the one-order-per-pair rule, permanent Monero/Bitcoin/Ethereum forwards (BIP84/BIP44 test vectors, exact amounts and inputs), collecting below the minimum, and no secrets in any API answer.
+- Waits and pieces: random unequal amounts, the Monero split (fee out of the pieces, refused on an old wallet) with each piece moving and swapping on its own, the random gaps after each piece, fewer pieces when there's too little, Change wait and Release now reaching the pieces, the direct wait taking in later payments, the Bitcoin split to change-chain addresses (BIP84 change test vector), Ethereum pieces from one address, and one-time addresses (hidden, expiring).
 
 The previous Burner wallet app is kept in `archive/burner-v1/`.

@@ -17,7 +17,7 @@ export interface Meta {
   swapConfigured: boolean;
   /** monero: the VPS Monero wallet is connected; wallet: the BTC/ETH hot wallet is unlocked. */
   features?: { monero: boolean; wallet?: boolean; seedBackupPending?: boolean; walletError?: string | null };
-  privacy?: { delays: number[]; testDelayMin: number | null };
+  privacy?: { delays: number[]; piecesMax?: number; testDelayMin: number | null };
   version: string;
 }
 
@@ -91,7 +91,7 @@ export interface Order {
   updatedAt: number;
 }
 
-export type TransferState = 'collect' | 'open1' | 'send1' | 'swap1' | 'xmr-in' | 'churn' | 'wait' | 'open2' | 'send2' | 'swap2' | 'done' | 'refunded';
+export type TransferState = 'collect' | 'hold' | 'split' | 'open1' | 'send1' | 'swap1' | 'xmr-in' | 'churn' | 'wait' | 'pieces' | 'open2' | 'send2' | 'swap2' | 'done' | 'refunded';
 export type TransferStage = 'waiting' | 'received' | 'swapping' | 'holding' | 'sending' | 'done' | 'refunded' | 'expired' | 'attention';
 
 export interface TransferStep {
@@ -102,16 +102,39 @@ export interface TransferStep {
   link: string | null;
 }
 
-/** A Privacy Enhanced transfer, or a payment that came in through a permanent address. */
+/** One piece of a split payment. */
+export interface Piece {
+  id: string;
+  n: number;
+  of: number;
+  /** What the piece holds: Monero for a split inside Monero, else the coin paid in. */
+  coin: Coin;
+  amount: string | null;
+  stage: 'waiting' | 'sending' | 'done' | 'refunded' | 'attention';
+  /** When it goes (null: once the piece before it has finished). */
+  releaseAt: number | null;
+  usdt: string | null;
+  payoutTxUrl: string | null;
+  attention: string | null;
+  waitingFor: string | null;
+}
+
+/** A Privacy Enhanced transfer, or a payment that came in through a permanent (or one-time) address. */
 export interface Transfer {
   id: string;
   createdAt: number;
   coin: Coin;
   coinName: string;
   privacy: boolean;
+  /** The money waits in Monero (Privacy Enhanced, or a Monero payment with a wait or pieces). */
+  monero?: boolean;
   delayHours: number | null;
+  /** How many pieces it goes out in. */
+  pieces?: number;
   routeId: string | null;
   routeLabel: string | null;
+  /** Paid to a one-time address of our own wallet (a coin button with a wait or pieces). */
+  oneTime?: boolean;
   destinationId: string;
   destinationLabel: string;
   destinationAddress: string;
@@ -121,7 +144,14 @@ export interface Transfer {
   usdt: string | null;
   payoutTxUrl: string | null;
   releaseAt: number | null;
+  /** A direct payment's wait started here (when it was confirmed). */
+  heldAt?: number | null;
   unlockedAt: number | null;
+  /** When the next piece goes. */
+  nextPieceAt?: number | null;
+  pieceList?: Piece[];
+  /** Released early (the bomb still goes off). */
+  released?: boolean;
   xmr: string | null;
   /** The XMR has reached the vault (it then unlocks over 10 blocks). */
   xmrArrived?: boolean;
@@ -151,6 +181,10 @@ export interface Route {
   coinName: string;
   mode: 'direct' | 'privacy';
   delayHours: number | null;
+  pieces?: number;
+  /** Made by a coin button for one payment (watched until expiresAt). */
+  oneTime?: boolean;
+  expiresAt?: number | null;
   destinationId: string;
   destinationLabel: string;
   destinationAddress: string;

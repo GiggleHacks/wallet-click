@@ -63,8 +63,10 @@ export const PAYOUTS = {
 } as const;
 export type PayoutCcy = keyof typeof PAYOUTS;
 
-/** Privacy Enhanced: how long the Monero waits between the two swaps. */
-export const PRIVACY_DELAYS = [4, 12, 24, 42] as const;
+/** How long a payment waits before it goes on (hours). Privacy Enhanced: in Monero, between the two swaps. */
+export const DELAYS = [0, 4, 12, 24, 42] as const;
+/** A payment can go out in up to this many pieces, at random times. */
+export const PIECES_MAX = 4;
 
 const num = (v: string | undefined) => (v && Number.isFinite(Number(v)) ? Number(v) : null);
 
@@ -116,6 +118,6 @@ export const config = {
   /** Unlocks data/wallet.enc (the BTC/ETH hot wallet seed). Unset = permanent BTC/ETH addresses are off. */
   walletKey: env.WALLET_KEY || null,
 
-  /** Testing only: Privacy Enhanced waits this many minutes instead of the chosen hours. */
+  /** Testing only: every wait is this many minutes instead of the chosen hours (and pieces are seconds apart). */
   privacyTestDelayMin: num(env.PRIVACY_TEST_DELAY_MIN),
 };

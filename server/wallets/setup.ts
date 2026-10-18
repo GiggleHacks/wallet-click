@@ -9,6 +9,6 @@ export function setupHotWallets(): ReturnType<typeof walletState> {
   const ready = unlock();
   registerWallet('BTC', () => (ready ? btcWallet : null));
   registerWallet('ETH', () => (ready ? ethWallet : null));
-  setDeriver(ready ? (coin, index) => (coin === 'BTC' ? btcAddress(index) : ethAddress(index)) : null);
+  setDeriver(ready ? (coin, index, chain = 0) => (coin === 'BTC' ? btcAddress(index, chain) : ethAddress(index)) : null);
   return walletState();
 }

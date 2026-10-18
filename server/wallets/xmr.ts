@@ -8,9 +8,11 @@ import { readJson, writeJsonAtomic } from '../store.js';
  * account 0, whose primary address is published elsewhere) and to subaddresses it created itself:
  *  - one per permanent Monero address;
  *  - per Privacy Enhanced transfer, a "vault" subaddress FixedFloat pays the XMR to, and a "churn" one it
- *    moves to while waiting.
- * Every spend is a sweep_all scoped to one of those subaddresses, built with do_not_relay so the signed
- * transaction can be saved before it is relayed (and relayed again after a crash, never rebuilt).
+ *    moves to while waiting;
+ *  - per piece of a split payment, a subaddress of its own (and a churn one).
+ * Every spend is a sweep_all (or, for a split, one transfer that empties the subaddress) scoped to one of those
+ * subaddresses, built with do_not_relay so the signed transaction can be saved before it is relayed (and relayed
+ * again after a crash, never rebuilt).
  * Amounts are atomic units (1 XMR = 1e12) as bigint.
  */
 
@@ -87,8 +89,11 @@ async function post(body: string): Promise<Response> {
 /** JSON.parse loses precision above 2^53; Monero amounts can be bigger, so long integers are read as strings. */
 const parseExact = (text: string) => JSON.parse(text.replace(/([:[,]\s*)(\d{16,})(?=\s*[,\]}])/g, '$1"$2"'));
 
+/** Amounts go out as exact JSON integers (JSON.stringify refuses bigint, and Number would round). */
+const stringifyExact = (v: unknown) => JSON.stringify(v, (_k, x) => (typeof x === 'bigint' ? `#big:${x}` : x)).replace(/"#big:(-?\d+)"/g, '$1');
+
 async function call<T>(method: string, params: object = {}): Promise<T> {
-  const res = await post(JSON.stringify({ jsonrpc: '2.0', id: '0', method, params }));
+  const res = await post(stringifyExact({ jsonrpc: '2.0', id: '0', method, params }));
   if (res.status === 401) throw new XmrError(401, 'The Monero wallet refused the login (MONERO_RPC_USER / MONERO_RPC_PASSWORD).');
   if (!res.ok) throw new XmrUnavailable(`The Monero wallet answered HTTP ${res.status}.`);
   const json = parseExact(await res.text()) as { result?: T; error?: { code: number; message: string } };
@@ -193,7 +198,36 @@ export async function prepareSweep(index: number, to: string): Promise<XmrSweep>
   return { txids, amount: sum(r.amount_list), fee: sum(r.fee_list), metadata };
 }
 
-/** Relays a transaction signed by prepareSweep. */
+/**
+ * Signs (does not relay) one transaction splitting everything at one of our subaddresses into several of our own
+ * subaddresses. The amounts must add up to exactly what's there and unlocked; the fee comes out of the pieces, so no
+ * change is left at the account's main address. Needs monero-wallet-rpc 0.18.3.1 or newer: an older one can't take
+ * the fee out of the outputs, and this refuses rather than sign anything else.
+ */
+export async function prepareSplit(index: number, outs: { address: string; amount: bigint }[]): Promise<XmrSweep & { amounts: bigint[] }> {
+  const want = outs.reduce((s, o) => s + o.amount, 0n);
+  const b = await balance(index);
+  if (outs.length < 2 || b.unlocked !== b.total || want !== b.unlocked) throw new XmrError(-1, 'Refusing to split: the pieces must add up to exactly what is unlocked there.');
+  type R = { tx_hash?: string; tx_metadata?: string; fee?: unknown; amounts_by_dest?: { amounts?: unknown[] } };
+  const r = await call<R>('transfer', {
+    destinations: outs.map((o) => ({ amount: o.amount, address: o.address })),
+    account_index: await account(),
+    subaddr_indices: [index],
+    subtract_fee_from_outputs: outs.map((_, i) => i),
+    do_not_relay: true,
+    get_tx_metadata: true,
+    priority: 0,
+  });
+  const amounts = (r.amounts_by_dest?.amounts ?? []).map(big);
+  const fee = big(r.fee);
+  if (!r.tx_hash || !r.tx_metadata) throw new XmrError(-1, 'The Monero wallet did not return a signed transaction.');
+  if (amounts.length !== outs.length || amounts.some((a) => a <= 0n) || amounts.reduce((s, a) => s + a, 0n) + fee !== want) {
+    throw new XmrError(-1, 'The Monero wallet did not take the fee out of the pieces (monero-wallet-rpc 0.18.3.1 or newer is needed). Nothing was sent.');
+  }
+  return { txids: [r.tx_hash], metadata: [r.tx_metadata], amount: want - fee, fee, amounts };
+}
+
+/** Relays a transaction signed by prepareSweep or prepareSplit. */
 export async function relay(metadata: string): Promise<string> {
   return (await call<{ tx_hash: string }>('relay_tx', { hex: metadata })).tx_hash;
 }
