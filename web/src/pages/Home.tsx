@@ -7,6 +7,8 @@ import { setPref, usePref } from '../lib/prefs';
 import { shortAddr, timeAgo, trimAmount, usdt } from '../lib/format';
 import { costText } from '../lib/cost';
 import { coinSub, optionsSummary, type SendOptions } from '../lib/sendOptions';
+import { usdText, useMinimums } from '../lib/minimums';
+import { safeForAll } from '../components/SendOptions';
 import type { Coin, Cost, Destination, Meta, Order, Stage, Transfer } from '../types';
 
 export const STAGE_LABEL: Record<Stage, string> = {
@@ -184,6 +186,7 @@ interface Props {
 
 export function Home({ meta, orders, transfers, onOpenTransfer, sendOptions, onSendOptions, onAddresses, destinations, destinationId, onDestination, onAddressBook, creating, offline, pressing, onCreate, onOpen, onDemo }: Props) {
   const hideFigures = usePref('hideFigures');
+  const safe = safeForAll(useMinimums(), sendOptions);
   const toggleHide = () => setPref('hideFigures', !hideFigures);
   const dest = destinations.find((d) => d.id === destinationId) ?? destinations[0];
   const payoutAddress = dest?.address ?? meta?.payout.address;
@@ -237,6 +240,7 @@ export function Home({ meta, orders, transfers, onOpenTransfer, sendOptions, onS
           <span className="send-box-text">
             <b>Send options</b>
             <small>{optionsSummary(sendOptions)}</small>
+            {safe !== null && <small className="send-box-min">To be safe, send at least {usdText(safe)}</small>}
           </span>
           <button type="button" className="btn98 btn-small" onClick={onSendOptions}>
             Change…

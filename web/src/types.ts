@@ -193,6 +193,14 @@ export interface Route {
   archived: boolean;
 }
 
+/** FixedFloat's minimums in dollars: per coin straight to USDT and into Monero; each piece is at least pieceFactor × that. */
+export interface Minimums {
+  BTC: { direct: number | null; intoMonero: number | null };
+  ETH: { direct: number | null; intoMonero: number | null };
+  XMR: { direct: number | null; intoMonero: number | null };
+  pieceFactor: number;
+}
+
 export interface Quote {
   coin: Coin;
   amount: string;

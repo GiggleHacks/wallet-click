@@ -25,6 +25,7 @@ The **Send options** box on the main window says what the coin buttons do now (f
 - **Route**: *Straight to USDT*, or *Through Monero* (Privacy Enhanced, below).
 - **Wait**: none, 4, 12, 24 or 42 hours, plus a random 0–30 minutes so the length isn't a fingerprint.
 - **Pieces**: 1–4. The amounts are random and unequal (each at least 1.5 × FixedFloat's minimum; with too little, it's fewer pieces). Piece 1 goes when the wait is over; each next one a random 5 minutes to 2 hours after the one before has finished (FixedFloat only takes one order per direction at a time, so they never overlap). Each piece is its own FixedFloat order, so it pays its own FixedFloat and network fees.
+- **How much to send**: pieces raise the minimum (3 pieces straight to USDT need about 3 × 1.5 × FixedFloat's ≈ $10). Send options, the receive windows and My Addresses show that minimum from FixedFloat's live rates, and suggest sending about 30% more, rounded up, to be safe. Less goes in fewer pieces, or waits for more.
 
 Where it happens:
 

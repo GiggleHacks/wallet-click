@@ -3,7 +3,8 @@ import { api } from '../api';
 import { CoinIcon, HouseIcon, ShieldIcon, WarnIcon } from '../components/art';
 import { DelaySlider } from '../components/DelaySlider';
 import { QrCode } from '../components/QrCode';
-import { SendOptionsFields } from '../components/SendOptions';
+import { MinimumNote, SendOptionsFields } from '../components/SendOptions';
+import { minimumFor, usdText, useMinimums } from '../lib/minimums';
 import { ModalLayer, Window } from '../components/Win98';
 import { shortAddr, trimAmount, usdt } from '../lib/format';
 import { piecesText, waitText, type SendOptions } from '../lib/sendOptions';
@@ -30,8 +31,11 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+const optionsOf = (r: Route) => ({ route: r.mode === 'privacy' ? ('monero' as const) : ('direct' as const), delayHours: r.delayHours ?? 0, pieces: r.pieces ?? 1 });
+
 function SendForm({ route }: { route: Route }) {
   const [usd, setUsd] = useState('20');
+  const need = minimumFor(useMinimums(), route.coin, optionsOf(route));
   const [quote, setQuote] = useState<Quote | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -72,6 +76,14 @@ function SendForm({ route }: { route: Route }) {
             </b>{' '}
             → about <b>{usdt(quote.usdtEstimate)} USDT</b> in {route.destinationLabel}
           </p>
+          {need && !below && Number(usd) < need.min && (
+            <p className="error-text">
+              ${usd} is below the ≈ {usdText(need.min)} that {(route.pieces ?? 1) > 1 ? `${route.pieces} pieces need` : 'this needs'}: it would go in fewer pieces or wait for more. Send at least {usdText(need.safe)} to be safe.
+            </p>
+          )}
+          {need && Number(usd) >= need.min && Number(usd) < need.safe && (
+            <p className="line-sub">That's close to the minimum (≈ {usdText(need.min)}). {usdText(need.safe)} or more leaves room for fees and price moves.</p>
+          )}
           {below && (
             <p className="error-text">
               FixedFloat's minimum here is {trimAmount(quote.minAmount)} {route.coin} (≈ ${usdt(String(quote.minUsd))}). Smaller payments wait at this address until they add up to it.
@@ -191,6 +203,7 @@ export function Addresses({ delays, destinations, seedBackupPending, onClose }: 
   const [making, setMaking] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  const minimums = useMinimums();
 
   useEffect(() => {
     api
@@ -285,6 +298,7 @@ export function Addresses({ delays, destinations, seedBackupPending, onClose }: 
                 <button type="button" className="btn98" onClick={() => void copyText(current.address).then((ok) => ok && (sfx.copy(), setCopied(true)))}>
                   {copied ? 'Copied!' : 'Copy address'}
                 </button>
+                <MinimumNote m={minimums} o={optionsOf(current)} coin={current.coin} />
                 <div className="route-delay">
                   <span className="lbl">For the next payments, wait{current.mode === 'privacy' || current.coin === 'XMR' ? ' in Monero' : ''}:</span>
                   <DelaySlider value={current.delayHours ?? 0} delays={delays} onChange={(h) => void update({ delayHours: h })} />

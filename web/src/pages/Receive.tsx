@@ -6,6 +6,8 @@ import { clock, trimAmount, usdt } from '../lib/format';
 import { sfx } from '../lib/sound';
 import type { Order, Route, Transfer } from '../types';
 import { transferStatus } from '../components/JourneyDialog';
+import { MinimumNote } from '../components/SendOptions';
+import { useMinimums } from '../lib/minimums';
 import { STAGE_LABEL } from './Home';
 
 const NETWORK: Record<Route['coin'], string> = { BTC: 'Bitcoin', ETH: 'Ethereum mainnet', XMR: 'Monero' };
@@ -42,6 +44,7 @@ interface OnceProps {
 /** A coin button with a wait or pieces: a one-time address of our own wallet, which holds the payment for a while. */
 export function ReceiveOnce({ route, transfer, offline, creating, onNew, onBack, onShowProgress }: OnceProps) {
   const [copied, setCopied] = useState(false);
+  const minimums = useMinimums();
   const wait = route.delayHours ? `waits ${route.delayHours} hours (plus up to 30 minutes)` : 'goes on once it is confirmed';
   const pieces = (route.pieces ?? 1) > 1 ? ` in ${route.pieces} pieces, at random times` : '';
   async function copy() {
@@ -86,8 +89,9 @@ export function ReceiveOnce({ route, transfer, offline, creating, onNew, onBack,
             <li>
               A one-time address of your own wallet. The payment {wait}, then goes to <b>{route.destinationLabel}</b> as USDT{pieces}.
             </li>
-            <li>Below FixedFloat's minimum (about $10) it waits here for more. It's watched for 30 days.</li>
+            <li>It's watched for 30 days.</li>
           </ul>
+          <MinimumNote m={minimums} o={{ route: 'direct', delayHours: route.delayHours ?? 0, pieces: route.pieces ?? 1 }} coin={route.coin} />
         </div>
       </div>
       <div className={`wait-row ${transfer ? 'is-live' : ''}`}>
@@ -130,6 +134,8 @@ export function ReceiveOnce({ route, transfer, offline, creating, onNew, onBack,
 
 interface Props {
   order: Order;
+  /** A Privacy transfer that goes on in pieces: how many. */
+  pieces?: number;
   /** The browser can't reach the server right now. */
   offline?: boolean;
   /** The "How it works" run: fake address, nothing to pay. */
@@ -140,8 +146,9 @@ interface Props {
   onShowProgress(): void;
 }
 
-export function Receive({ order, demo, offline, creating, onNew, onBack, onShowProgress }: Props) {
+export function Receive({ order, pieces = 1, demo, offline, creating, onNew, onBack, onShowProgress }: Props) {
   const [copied, setCopied] = useState(false);
+  const minimums = useMinimums();
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -212,7 +219,7 @@ export function Receive({ order, demo, offline, creating, onNew, onBack, onShowP
                 ? "Less than the minimum can't be swapped; Monero hides who paid, so you'd give a refund address."
                 : 'Less than the minimum is sent back to the sender.'}
             </li>
-            <li>{order.toCcy === 'XMR' ? 'Becomes Monero first, then USDT (Privacy Enhanced).' : `Arrives as USDT in ${payout}.`}</li>
+            <li>{order.toCcy === 'XMR' ? `Becomes Monero first, then USDT (Privacy Enhanced)${pieces > 1 ? `, in ${pieces} pieces` : ''}.` : `Arrives as USDT in ${payout}.`}</li>
             <li>
               {left !== null && left > 0 ? (
                 <>
@@ -223,6 +230,7 @@ export function Receive({ order, demo, offline, creating, onNew, onBack, onShowP
               )}
             </li>
           </ul>
+          {!demo && pieces > 1 && <MinimumNote m={minimums} o={{ route: order.toCcy === 'XMR' ? 'monero' : 'direct', delayHours: 0, pieces }} coin={order.coin} />}
         </div>
       </div>
       <div className={`wait-row ${waiting ? '' : 'is-live'}`}>

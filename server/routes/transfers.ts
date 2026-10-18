@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { addresses } from '../addresses.js';
-import { COINS, DELAYS, PIECES_MAX, config, type Coin } from '../config.js';
+import { COINS, DELAYS, PIECE_MIN_FACTOR, PIECES_MAX, config, type Coin, type PayoutCcy } from '../config.js';
 import { UserError } from '../errors.js';
 import { limits } from '../orders.js';
 import { changeDelay, createPrivacyTransfer, releaseNow, retry, transferView, transfers } from '../transfers.js';
@@ -111,6 +111,25 @@ export function registerTransfers(app: FastifyInstance): void {
     const r = addresses.get(req.params.id);
     if (r?.oneTime) throw new UserError('A one-time address can’t be changed.');
     return routeView(addresses.update(req.params.id, body));
+  });
+
+  // FixedFloat's minimums in dollars, so the browser can say what a payment in pieces needs (rates up to two minutes old).
+  app.get('/api/minimums', async () => {
+    const usd = async (from: Coin, to: PayoutCcy) => {
+      try {
+        const l = await limits(from, to, { cached: true });
+        return l.usdPerCoin ? Math.round(l.min * l.usdPerCoin * 100) / 100 : null;
+      } catch {
+        return null; // pair paused, FixedFloat unreachable or not set up: the browser just doesn't show it
+      }
+    };
+    const monero = Boolean(config.monero.rpcUrl);
+    return {
+      BTC: { direct: await usd('BTC', 'USDT'), intoMonero: monero ? await usd('BTC', 'XMR') : null },
+      ETH: { direct: await usd('ETH', 'USDT'), intoMonero: monero ? await usd('ETH', 'XMR') : null },
+      XMR: { direct: await usd('XMR', 'USDT'), intoMonero: null },
+      pieceFactor: PIECE_MIN_FACTOR,
+    };
   });
 
   app.get<{ Querystring: { coin?: string; usd?: string; mode?: string } }>('/api/quote', async (req) => {

@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 import { addresses, type Route } from './addresses.js';
 import { DECIMALS, fromBase, toBase } from './chain.js';
-import { COINS, DELAYS, PAYOUTS, PIECES_MAX, config, type Coin } from './config.js';
+import { COINS, DELAYS, PAYOUTS, PIECE_MIN_FACTOR, PIECES_MAX, config, type Coin } from './config.js';
 import { destinations } from './destinations.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
 import { FfError } from './fixedfloat.js';
@@ -277,10 +277,10 @@ export function planPieces(total: bigint, n: number, min: bigint): bigint[] {
   return [total];
 }
 
-/** FixedFloat's minimum for a piece of `coin` → USDT, with room for the fees on the way (base units). */
+/** FixedFloat's minimum for a piece of `coin` → USDT, with room for the fees on the way and price moves (base units). */
 async function pieceMin(coin: Coin, now: number): Promise<bigint> {
   const lim = await limits(coin, 'USDT', { now });
-  return toBase((lim.min * 1.5).toFixed(8), DECIMALS[coin]) ?? 0n;
+  return toBase((lim.min * PIECE_MIN_FACTOR).toFixed(8), DECIMALS[coin]) ?? 0n;
 }
 
 /** Adds to a transfer's own history, and to the server log. */

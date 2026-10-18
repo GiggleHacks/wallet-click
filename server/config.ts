@@ -67,6 +67,8 @@ export type PayoutCcy = keyof typeof PAYOUTS;
 export const DELAYS = [0, 4, 12, 24, 42] as const;
 /** A payment can go out in up to this many pieces, at random times. */
 export const PIECES_MAX = 4;
+/** Each piece is at least this many times FixedFloat's minimum: room for fees and prices moving while it waits. */
+export const PIECE_MIN_FACTOR = 1.5;
 
 const num = (v: string | undefined) => (v && Number.isFinite(Number(v)) ? Number(v) : null);
 

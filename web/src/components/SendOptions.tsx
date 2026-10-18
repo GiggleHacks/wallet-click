@@ -1,7 +1,55 @@
-import type { SendOptions } from '../lib/sendOptions';
-import type { Coin } from '../types';
-import { ShieldIcon } from './art';
+import { minimumFor, usdText, useMinimums } from '../lib/minimums';
+import { throughMonero, type SendOptions } from '../lib/sendOptions';
+import type { Coin, Minimums } from '../types';
+import { ShieldIcon, WarnIcon } from './art';
 import { DelaySlider } from './DelaySlider';
+
+const NAME: Record<Coin, string> = { BTC: 'Bitcoin', ETH: 'Ethereum', XMR: 'Monero' };
+
+/** The highest "send at least" across the coin buttons (they share one set of Send options). */
+export function safeForAll(m: Minimums | null, o: SendOptions): number | null {
+  const all = (['BTC', 'ETH', 'XMR'] as Coin[]).map((c) => minimumFor(m, c, o)?.safe).filter((v): v is number => v !== undefined);
+  return all.length ? Math.max(...all) : null;
+}
+
+/**
+ * How much to send for these options: the minimum (every piece is its own FixedFloat swap, so pieces raise it) and
+ * what we suggest, with room for prices and fees to move. For one coin, or for every coin button.
+ */
+export function MinimumNote({ m, o, coin }: { m: Minimums | null; o: SendOptions; coin?: Coin }) {
+  const coins = coin ? [coin] : (['BTC', 'ETH', 'XMR'] as Coin[]);
+  const rows = coins.map((c) => ({ c, v: minimumFor(m, c, o) })).filter((r) => r.v);
+  if (!rows.length) return null;
+  const top = rows.reduce((a, b) => (b.v!.min > a.v!.min ? b : a));
+  const why =
+    o.pieces > 1
+      ? `Each of the ${o.pieces} pieces is its own FixedFloat swap, so the minimum is about ${usdText(top.v!.min)}${throughMonero(o, top.c) ? ' (and about $110 to get into Monero)' : ''}.`
+      : `FixedFloat's minimum is about ${usdText(top.v!.min)}.`;
+  const less = top.v!.single !== null ? ` Less goes in fewer pieces; below about ${usdText(top.v!.single)} it waits for more.` : ' Less waits for more (or, at a FixedFloat address, is sent back).';
+  return (
+    <div className="min-note" role="note">
+      <WarnIcon size={18} />
+      <p>
+        To be safe, send at least{' '}
+        {rows.length === 1 ? (
+          <b>{usdText(rows[0].v!.safe)}</b>
+        ) : (
+          rows.map((r, i) => (
+            <span key={r.c}>
+              {i ? ' · ' : ''}
+              {NAME[r.c]} <b>{usdText(r.v!.safe)}</b>
+            </span>
+          ))
+        )}
+        .{' '}
+        <span className="line-sub">
+          {why}
+          {less} Prices and fees move, so leave some room.
+        </span>
+      </p>
+    </div>
+  );
+}
 
 interface Props {
   value: SendOptions;
@@ -18,6 +66,7 @@ interface Props {
 
 /** Route, wait and pieces: the same three choices on the main window and for a permanent address. */
 export function SendOptionsFields({ value: o, onChange, delays, piecesMax = 4, moneroOk, walletOk = true, coin }: Props) {
+  const minimums = useMinimums();
   const set = (patch: Partial<SendOptions>) => onChange({ ...o, ...patch });
   const isXmr = coin === 'XMR';
   const monero = o.route === 'monero' && !isXmr;
@@ -83,6 +132,7 @@ export function SendOptionsFields({ value: o, onChange, delays, piecesMax = 4, m
         )}
         {o.pieces > 1 && <li>Each piece pays its own FixedFloat and network fees.</li>}
       </ul>
+      <MinimumNote m={minimums} o={o} coin={coin} />
       {!monero && holds && !walletOk && coin !== 'XMR' && (
         <p className="error-text">A wait or pieces on Bitcoin and Ethereum needs the hot wallet on the server (WALLET_KEY and wallet:init).</p>
       )}

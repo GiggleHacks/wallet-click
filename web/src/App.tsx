@@ -402,6 +402,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
             <Receive
               key={`r-${current.id}`}
               order={current}
+              pieces={current.transferId ? (transfers.find((t) => t.id === current.transferId)?.pieces ?? 1) : 1}
               demo={isDemo}
               offline={offline}
               creating={creating !== null}

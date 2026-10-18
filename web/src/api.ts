@@ -1,5 +1,5 @@
 import { clientLog } from './lib/devlog';
-import type { Coin, Destination, LogLine, Meta, Order, Quote, Route, Status, Transfer } from './types';
+import type { Coin, Destination, LogLine, Meta, Minimums, Order, Quote, Route, Status, Transfer } from './types';
 
 export class ApiError extends Error {
   constructor(
@@ -55,5 +55,6 @@ export const api = {
   createAddress: (body: { coin: Coin; mode: 'direct' | 'privacy'; delayHours: number | null; pieces?: number; destinationId: string; label: string }) => request<Route>('POST', '/api/addresses', body),
   updateAddress: (id: string, patch: { label?: string; delayHours?: number; pieces?: number; archived?: boolean }) => request<Route>('POST', `/api/addresses/${id}`, patch),
   logs: (after: number) => request<{ lines: LogLine[]; startedAt: number }>('GET', `/api/logs?after=${after}`),
+  minimums: () => request<Minimums>('GET', '/api/minimums'),
   quote: (coin: Coin, usd: number, mode: 'direct' | 'privacy') => request<Quote>('GET', `/api/quote?coin=${coin}&usd=${usd}&mode=${mode}`),
 };

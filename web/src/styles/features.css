@@ -1123,3 +1123,28 @@ html[data-mode='dark'][data-theme='win11'] .log-list {
   display: block;
   color: var(--text-faint);
 }
+
+/* How much to send for the chosen Send options. */
+.min-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: var(--field);
+  box-shadow: var(--sunken);
+}
+
+.min-note svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.min-note p {
+  margin: 0;
+}
+
+.min-note .line-sub {
+  display: block;
+  margin-top: 2px;
+}

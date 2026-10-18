@@ -139,6 +139,7 @@ function route(method: string, path: string, body: unknown): [number, unknown] {
     serverTransfers = [privacyTransfer()];
     return [200, serverTransfers[0]];
   }
+  if (path === '/api/minimums') return [200, { BTC: { direct: 10.42, intoMonero: 109 }, ETH: { direct: 12.72, intoMonero: 109 }, XMR: { direct: 9.97, intoMonero: null }, pieceFactor: 1.5 }];
   if (path === '/api/addresses/once' && method === 'POST') {
     onceBody = body;
     const b = body as { coin: 'BTC'; delayHours: number; pieces: number };
@@ -296,9 +297,13 @@ describe('Wallet Click UI', () => {
     await click(inDialog('3'), '3 pieces');
     expect(text()).toContain('Send in: 3 pieces');
     expect(text()).toContain("can't be linked");
+    // Into Monero needs about $110; with room to spare: $145 (BTC and ETH alike), and 3 × 1.5 × $9.97 for Monero.
+    await waitFor(() => text().includes('To be safe, send at least'), 'minimum note');
+    expect(host.querySelector('.min-note')!.textContent).toMatch(/Bitcoin \$145 · Ethereum \$145 · Monero \$60/);
     await click(inDialog('OK'), 'OK');
     await waitFor(() => !host.querySelector('.win-sendopts'), 'dialog closed', 3000);
     expect(text()).toContain('Through Monero · wait 12 h · 3 pieces');
+    expect(text()).toContain('To be safe, send at least $145');
     expect(text()).toContain('Private · 12 h · 3 pieces'); // under each coin button
     await click(button('Ethereum'), 'Ethereum');
     expect(transferBody).toEqual({ coin: 'ETH', delayHours: 12, destinationId: 'coinbase', pieces: 3 }); // never an address
@@ -343,6 +348,11 @@ describe('Wallet Click UI', () => {
     expect(text()).toContain('One-time address');
     expect(text()).toContain('waits 4 hours');
     expect(text()).toContain('in 2 pieces');
+    // 2 pieces × 1.5 × $10.42 = $31.26 at least; with room to spare, $45.
+    await waitFor(() => !!host.querySelector('.min-note'), 'minimum note');
+    expect(host.querySelector('.min-note')!.textContent).toContain('To be safe, send at least $45');
+    expect(host.querySelector('.min-note')!.textContent).toContain('the minimum is about $31.26');
+    expect(host.querySelector('.min-note')!.textContent).toContain('below about $10.42 it waits for more');
     localStorage.removeItem('wc.sendOptions');
   });
 

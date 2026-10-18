@@ -959,6 +959,16 @@ describe('waits and pieces', () => {
     expect(transfers.all()).toHaveLength(2);
   });
 
+  it("tells the browser FixedFloat's minimums in dollars, for the pieces' minimum", async () => {
+    const m = (await get('/api/minimums')).json();
+    expect(m).toEqual({
+      BTC: { direct: 10.42, intoMonero: 109 },
+      ETH: { direct: 12.72, intoMonero: 109 },
+      XMR: { direct: 9.97, intoMonero: null },
+      pieceFactor: 1.5,
+    });
+  });
+
   it('stops watching a one-time address after 30 days', async () => {
     const r = (await post('/api/addresses/once', { coin: 'BTC', delayHours: 4 })).json();
     expect(r.address).toBe(BIP84_FIRST);
