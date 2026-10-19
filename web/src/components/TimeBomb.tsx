@@ -9,7 +9,7 @@ import { BombIcon, BoomBurst, StableIcon } from './art';
 /**
  * A transfer with a long wait (in Monero, or held at our own address) shows up on the desktop as a cartoon time
  * bomb: a red LED countdown over a black bomb, with the money's dollar value underneath. The fuse lights when the
- * wait starts; when it runs out the bomb goes BOOM and turns into a USDT coin until the money lands. A split
+ * wait starts; when it runs out the bomb goes BOOM and turns into a USDC coin until the money lands. A split
  * payment's bomb lights again for each piece's turn.
  */
 

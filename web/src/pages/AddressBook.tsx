@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { api } from '../api';
 import { BookIcon, CoinbaseIcon, StableIcon } from '../components/art';
-import { assetName } from '../lib/assets';
+import { DEFAULT_DESTINATION, assetName } from '../lib/assets';
 import { PasswordField } from '../components/PasswordField';
 import { ModalLayer, Window } from '../components/Win98';
 import { MASK_ADDR, shortAddr } from '../lib/format';
 import { usePref } from '../lib/prefs';
 import { sfx } from '../lib/sound';
-import type { Destination, Stable } from '../types';
+import type { Destination } from '../types';
 
 interface Props {
   destinations: Destination[];
@@ -15,14 +15,13 @@ interface Props {
   onClose(): void;
 }
 
-/** Saved payout addresses (USDT on Ethereum, or USDC on Base). Adding and removing ask for the password again. */
+/** Saved payout addresses (USDC on Base). Adding and removing ask for the password again. */
 export function AddressBook({ destinations, onChange, onClose }: Props) {
   const hideFigures = usePref('hideFigures');
-  const [selected, setSelected] = useState(destinations[0]?.id ?? 'coinbase');
+  const [selected, setSelected] = useState(destinations[0]?.id ?? DEFAULT_DESTINATION);
   const [mode, setMode] = useState<'list' | 'add' | 'remove'>('list');
   const [label, setLabel] = useState('');
   const [address, setAddress] = useState('');
-  const [ccy, setCcy] = useState<Stable>('USDT');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -53,20 +52,20 @@ export function AddressBook({ destinations, onChange, onClose }: Props) {
 
   const add = () =>
     run(
-      () => api.addDestination(label, address, password, ccy),
+      () => api.addDestination(label, address, password),
       (list) => {
-        setSelected(list[list.length - 1]?.id ?? 'coinbase');
+        setSelected(list[list.length - 1]?.id ?? DEFAULT_DESTINATION);
         setLabel('');
         setAddress('');
       },
     );
-  const remove = () => run(() => api.removeDestination(current.id, password), () => setSelected('coinbase'));
+  const remove = () => run(() => api.removeDestination(current.id, password), () => setSelected(DEFAULT_DESTINATION));
 
   return (
     <ModalLayer>
       <Window title="Address Book" icon={<BookIcon size={16} />} onClose={onClose} className="win-book" role="dialog">
         <p className="line-sub book-intro">
-          Swaps pay out to one of these, as <b>USDT on Ethereum</b> or <b>USDC on Base</b> (each address is for one of them). A permanent address always pays the destination it was made with.
+          Swaps pay out <b>USDC on Base</b> to one of these. A permanent address always pays the destination it was made with.
         </p>
         <ul className="listbox book-list" role="listbox" aria-label="Destinations">
           {destinations.map((d) => (
@@ -104,19 +103,12 @@ export function AddressBook({ destinations, onChange, onClose }: Props) {
               <span className="lbl">Name:</span>
               <input className="input98" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={40} placeholder="e.g. Kraken" autoFocus />
             </label>
-            <div className="seg98" role="radiogroup" aria-label="Pays out">
-              {(['USDT', 'USDCBASE'] as const).map((c) => (
-                <button key={c} type="button" role="radio" aria-checked={ccy === c} className={`btn98 seg-btn ${ccy === c ? 'is-pressed' : ''}`} onClick={() => setCcy(c)}>
-                  <StableIcon ccy={c} size={18} /> {assetName(c)}
-                </button>
-              ))}
-            </div>
             <label className="field">
-              <span className="lbl">{assetName(ccy)} deposit address:</span>
+              <span className="lbl">{assetName('USDCBASE')} deposit address:</span>
               <input className="input98 mono" value={address} onChange={(e) => setAddress(e.target.value)} spellCheck={false} autoComplete="off" placeholder="0x…" />
             </label>
             <PasswordField value={password} onChange={setPassword} label="Your password:" />
-            <p className="line-sub">Copy the address from the exchange's {assetName(ccy)} deposit page. The same address on another network can lose the money.</p>
+            <p className="line-sub">Copy the address from the exchange's {assetName('USDCBASE')} deposit page. The same address on another network can lose the money.</p>
             {error && <p className="error-text">{error}</p>}
             <div className="btn-row">
               <button type="submit" className="btn98 is-default" disabled={busy || !label.trim() || !address.trim() || !password}>

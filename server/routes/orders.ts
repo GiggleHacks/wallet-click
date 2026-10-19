@@ -16,7 +16,7 @@ function needOrder(id: string) {
 
 export function registerOrders(app: FastifyInstance): void {
   app.get('/api/meta', async () => ({
-    payout: { address: config.payout.address, label: config.payout.label, ccy: config.payout.ccy, network: config.payout.network },
+    payout: { address: config.payoutBase.address, label: config.payoutBase.label, ccy: config.payoutBase.ccy, network: config.payoutBase.network },
     coins: Object.fromEntries(COIN_IDS.map((id) => [id, { name: COINS[id].name, network: COINS[id].network }])),
     swapConfigured: Boolean(config.ff.apiKey && config.ff.apiSecret),
     features: { monero: Boolean(config.monero.rpcUrl), wallet: walletState().ready, seedBackupPending: walletState().backupPending, walletError: walletState().error },

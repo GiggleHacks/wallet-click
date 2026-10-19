@@ -40,10 +40,10 @@ export const api = {
   logout: () => request<{ ok: true }>('POST', '/api/logout', {}),
   meta: () => request<Meta>('GET', '/api/meta'),
   orders: () => request<{ orders: Order[]; transfers?: Transfer[] }>('GET', '/api/orders'),
-  createOrder: (coin: Coin, destinationId?: string) => request<Order>('POST', '/api/orders', destinationId && destinationId !== 'coinbase' ? { coin, destinationId } : { coin }),
+  createOrder: (coin: Coin, destinationId?: string) => request<Order>('POST', '/api/orders', destinationId && destinationId !== 'coinbase-base' ? { coin, destinationId } : { coin }),
   refund: (id: string, address: string, password: string) => request<Order>('POST', `/api/orders/${id}/refund`, { address, password }),
   destinations: () => request<{ destinations: Destination[] }>('GET', '/api/destinations'),
-  addDestination: (label: string, address: string, password: string, ccy: Stable = 'USDT') => request<{ destinations: Destination[] }>('POST', '/api/destinations', { label, address, ccy, password }),
+  addDestination: (label: string, address: string, password: string, ccy: Stable = 'USDCBASE') => request<{ destinations: Destination[] }>('POST', '/api/destinations', { label, address, ccy, password }),
   removeDestination: (id: string, password: string) => request<{ destinations: Destination[] }>('POST', `/api/destinations/${id}/delete`, { password }),
   createPrivacy: (coin: Coin, delayHours: number, destinationId: string, pieces = 1) => request<Transfer>('POST', '/api/transfers', { coin, delayHours, destinationId, pieces }),
   /** A one-time address of our own wallet, for a coin button with a wait or pieces. */
@@ -56,5 +56,5 @@ export const api = {
   updateAddress: (id: string, patch: { label?: string; delayHours?: number; pieces?: number; archived?: boolean }) => request<Route>('POST', `/api/addresses/${id}`, patch),
   logs: (after: number) => request<{ lines: LogLine[]; startedAt: number }>('GET', `/api/logs?after=${after}`),
   minimums: () => request<Minimums>('GET', '/api/minimums'),
-  quote: (coin: Coin, usd: number, mode: 'direct' | 'privacy', ccy: Stable = 'USDT') => request<Quote>('GET', `/api/quote?coin=${coin}&usd=${usd}&mode=${mode}&ccy=${ccy}`),
+  quote: (coin: Coin, usd: number, mode: 'direct' | 'privacy', ccy: Stable = 'USDCBASE') => request<Quote>('GET', `/api/quote?coin=${coin}&usd=${usd}&mode=${mode}&ccy=${ccy}`),
 };

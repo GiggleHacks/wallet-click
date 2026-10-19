@@ -7,7 +7,7 @@ import { sfx } from './sound';
  * "How it works": a preview of exactly what you see and hear when money arrives, with the real windows,
  * animations and sounds, and pretend coins. Nothing touches the server.
  *  - a coin: click → fresh address → payment → swap → Coinbase;
- *  - Privacy Enhanced: … → swap to Monero → vault → shuffle → a day's wait as a time-lapse → swap to USDT → Coinbase;
+ *  - Privacy Enhanced: … → swap to Monero → vault → shuffle → a day's wait as a time-lapse → swap to USDC → Coinbase;
  *  - a permanent address: money lands at your saved address → forward → swap (→ the vault…) → Coinbase.
  */
 
@@ -87,16 +87,16 @@ function stepList(flavor: Flavor): [string, string][] {
   const tail: [string, string][] =
     flavor === 'route'
       ? [
-          ['swap1', 'Swap to USDT'],
-          ['out', 'USDT to Coinbase'],
+          ['swap1', 'Swap to USDC'],
+          ['out', 'USDC to Coinbase'],
         ]
       : [
           ['swap1', 'Swap to Monero'],
           ['vault', 'Monero arrives and unlocks'],
           ['churn', 'Move within your wallet'],
           ['wait', 'Wait 24 hours'],
-          ['swap2', 'Swap Monero to USDT'],
-          ['out', 'USDT to Coinbase'],
+          ['swap2', 'Swap Monero to USDC'],
+          ['out', 'USDC to Coinbase'],
         ];
   return [...head, ...tail];
 }
@@ -121,8 +121,9 @@ function demoTransfer(flavor: Flavor, leg1: Order, payoutAddress: string): Trans
     delayHours: privacy ? 24 : null,
     routeId: route ? DEMO_ROUTE : null,
     routeLabel: route ? ROUTE_LABEL[flavor] : null,
-    destinationId: 'coinbase',
+    destinationId: 'coinbase-base',
     destinationLabel: 'Coinbase',
+    payoutCcy: 'USDCBASE',
     destinationAddress: payoutAddress,
     state: route ? 'collect' : 'swap1',
     stage: 'waiting',
@@ -221,7 +222,7 @@ export function useDemo(payoutAddress: string, hooks: Hooks) {
       let leg1: Order = {
         ...demoOrder('BTC'),
         payoutAddress: privacy ? '' : payoutAddress,
-        toCcy: privacy ? 'XMR' : 'USDT',
+        toCcy: privacy ? 'XMR' : 'USDCBASE',
         payoutLabel: privacy ? 'Monero vault' : 'Coinbase',
         transferId: DEMO_TRANSFER,
         ...(privacy ? { min: '0.0013469', minUsd: 108.8 } : {}),
@@ -276,14 +277,14 @@ export function useDemo(payoutAddress: string, hooks: Hooks) {
       }
 
       if (!privacy) {
-        // 4. USDT out to Coinbase.
+        // 4. USDC out to Coinbase.
         at(3200, () => {
           setLeg({ stage: 'sending', status: 'WITHDRAW', usdt: out });
-          set({ stage: 'sending', steps: steps('out', { swap1: `${out} USDT` }) });
+          set({ stage: 'sending', steps: steps('out', { swap1: `${out} USDC` }) });
         });
         at(2800, () => {
           setLeg({ stage: 'done', status: 'DONE', usdtFinal: true });
-          set({ state: 'done', stage: 'done', usdt: out, cost: { usd: 2.07, pct: 1.6, inUsd: 126.1 }, steps: steps('all', { out: `${out} USDT` }) });
+          set({ state: 'done', stage: 'done', usdt: out, cost: { usd: 2.07, pct: 1.6, inUsd: 126.1 }, steps: steps('all', { out: `${out} USDC` }) });
         });
         return;
       }
@@ -303,13 +304,13 @@ export function useDemo(payoutAddress: string, hooks: Hooks) {
         setTimeLapse({ realStart: now, virtualStart: now, speed: (24 * H) / LAPSE_MS });
         set({ state: 'wait', unlockedAt: now, releaseAt: now + 24 * H, steps: steps('wait', { churn: `${xmr} XMR` }) });
       });
-      // 7. Out of the vault, swapped to USDT, sent to Coinbase.
+      // 7. Out of the vault, swapped to USDC, sent to Coinbase.
       const leg2: Order = { ...demoOrder('XMR'), id: 'DEMO2', payoutAddress, payoutLabel: 'Coinbase', transferId: DEMO_TRANSFER, stage: 'swapping', status: 'EXCHANGE', received: xmr };
       at(LAPSE_MS + 300, () => set({ state: 'open2', steps: steps('swap2', { wait: 'Over' }) }));
       at(1600, () => set({ state: 'swap2', stage: 'swapping', leg2, steps: steps('swap2', { swap2: `FixedFloat order DEMO2: ${xmr} XMR` }) }));
       at(3000, () => set({ stage: 'sending', leg2: { ...leg2, stage: 'sending', status: 'WITHDRAW', usdt: out }, steps: steps('out', { swap2: `${xmr} XMR` }) }));
       // 126.10 in, 118.42 out: 4.61 of fees, and the Monero price fell 3.07 while it waited.
-      at(2800, () => set({ state: 'done', stage: 'done', usdt: out, cost: { usd: 4.61, pct: 3.7, inUsd: 126.1, drift: -3.07 }, leg2: { ...leg2, stage: 'done', status: 'DONE', usdt: out, usdtFinal: true }, steps: steps('all', { out: `${out} USDT` }) }));
+      at(2800, () => set({ state: 'done', stage: 'done', usdt: out, cost: { usd: 4.61, pct: 3.7, inUsd: 126.1, drift: -3.07 }, leg2: { ...leg2, stage: 'done', status: 'DONE', usdt: out, usdtFinal: true }, steps: steps('all', { out: `${out} USDC` }) }));
     },
     [payoutAddress],
   );

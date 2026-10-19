@@ -20,12 +20,15 @@ export function isChecksumAddress(address: string): boolean {
   return address.slice(2) === expected;
 }
 
-/** The user's Coinbase USDT (ERC-20) deposit address. Every swap pays out here and nowhere else. */
+/**
+ * LEGACY: the Coinbase USDT (ERC-20) deposit address that payouts used before USDC on Base. New payouts never go
+ * here; it is only used to read old records and to keep finishing transfers that were started with it.
+ */
 const payoutAddress = env.PAYOUT_ADDRESS?.trim() || '0x7E577e577e577E577e577E577E577E577e577E57';
 if (!isChecksumAddress(payoutAddress)) {
   throw new Error(`PAYOUT_ADDRESS "${payoutAddress}" is not a valid checksummed Ethereum address. Copy it again from Coinbase.`);
 }
-/** The same Coinbase account's USDC-on-Base deposit address: a second built-in destination. */
+/** The Coinbase USDC-on-Base deposit address: the built-in destination, and where every swap pays out by default. */
 const payoutBaseAddress = env.PAYOUT_ADDRESS_USDC_BASE?.trim() || '0xBA5eba5EBa5EbA5eBA5EBA5eBa5EBa5ebA5ebA5E';
 if (!isChecksumAddress(payoutBaseAddress)) {
   throw new Error(`PAYOUT_ADDRESS_USDC_BASE "${payoutBaseAddress}" is not a valid checksummed address. Copy it again from Coinbase.`);
@@ -74,6 +77,11 @@ export type PayoutCcy = keyof typeof PAYOUTS;
 /** The payouts that go to an address book destination (the others are our own Monero). */
 export type Stable = 'USDT' | 'USDCBASE';
 export const STABLES: readonly Stable[] = ['USDT', 'USDCBASE'];
+/**
+ * What a new payout can be. USDT on Ethereum is no longer offered, but older orders, transfers and permanent
+ * addresses that already pay it keep working (they carry their own destination), so it stays a Stable.
+ */
+export const PAYOUT_CHOICES: readonly Stable[] = ['USDCBASE'];
 /** Both are worth one US dollar here, for prices and costs. */
 export const isStable = (c: string): c is Stable => c === 'USDT' || c === 'USDCBASE';
 
@@ -121,7 +129,7 @@ export const config = {
     network: 'Ethereum (ERC-20)',
     explorerTx: (h: string) => `https://etherscan.io/tx/${h}`,
   },
-  /** The built-in Coinbase destination for USDC on Base. */
+  /** The built-in Coinbase destination: USDC on Base. */
   payoutBase: { address: payoutBaseAddress, ccy: 'USDCBASE' as const, label: 'Coinbase (USDC on Base)', network: 'Base' },
 
   /** The VPS's monero-wallet-rpc. Unset = Monero wallet features (Privacy Enhanced, permanent XMR addresses) are off. */

@@ -127,7 +127,7 @@ export function TransferStrip({ order, shown }: { order: Order; shown: Stage }) 
   const swapping = shown === 'swapping';
   const after = (s: Stage) => FLOW.indexOf(shown) > FLOW.indexOf(s);
 
-  // One-shot effects on the moments that matter: the coin going in, the USDT popping out, arrival.
+  // One-shot effects on the moments that matter: the coin going in, the USDC popping out, arrival.
   const prev = useRef(shown);
   const [fx, setFx] = useState<Fx | null>(null);
   useEffect(() => {

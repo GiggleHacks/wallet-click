@@ -14,7 +14,7 @@ interface Props {
   /** The Bitcoin/Ethereum hot wallet is unlocked. */
   walletOk: boolean;
   testDelayMin: number | null;
-  /** What the destination is paid in ("USDT", "USDC"). */
+  /** What the destination is paid in ("USDC"). */
   sym?: string;
   onClose(): void;
 }

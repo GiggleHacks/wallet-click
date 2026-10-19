@@ -126,16 +126,16 @@ export function registerTransfers(app: FastifyInstance): void {
     };
     const monero = Boolean(config.monero.rpcUrl);
     return {
-      BTC: { direct: await usd('BTC', 'USDT'), intoMonero: monero ? await usd('BTC', 'XMR') : null },
-      ETH: { direct: await usd('ETH', 'USDT'), intoMonero: monero ? await usd('ETH', 'XMR') : null },
-      XMR: { direct: await usd('XMR', 'USDT'), intoMonero: null },
+      BTC: { direct: await usd('BTC', 'USDCBASE'), intoMonero: monero ? await usd('BTC', 'XMR') : null },
+      ETH: { direct: await usd('ETH', 'USDCBASE'), intoMonero: monero ? await usd('ETH', 'XMR') : null },
+      XMR: { direct: await usd('XMR', 'USDCBASE'), intoMonero: null },
       pieceFactor: PIECE_MIN_FACTOR,
     };
   });
 
   app.get<{ Querystring: { coin?: string; usd?: string; mode?: string; ccy?: string } }>('/api/quote', async (req) => {
     const q = z
-      .object({ coin, usd: z.coerce.number().positive().max(1_000_000), mode: z.enum(['direct', 'privacy']).default('direct'), ccy: z.enum(STABLES as [Stable, ...Stable[]]).default('USDT') })
+      .object({ coin, usd: z.coerce.number().positive().max(1_000_000), mode: z.enum(['direct', 'privacy']).default('direct'), ccy: z.enum(STABLES as [Stable, ...Stable[]]).default('USDCBASE') })
       .parse(req.query);
     return quote(q.coin, q.usd, q.mode === 'privacy', q.ccy);
   });

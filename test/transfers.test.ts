@@ -5,7 +5,7 @@ import * as btc from '@scure/btc-signer';
 import type { FastifyInstance } from 'fastify';
 import { parseTransaction } from 'viem';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { PAYOUT, PAYOUT_BASE, fakeFixedFloat, ffOrder, priceAnswer, xmrAddress } from './helpers.js';
+import { PAYOUT, PAYOUT_BASE, PAYOUT_USDT, fakeFixedFloat, ffOrder, priceAnswer, xmrAddress } from './helpers.js';
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-transfers-'));
 process.env.DATA_DIR = dataDir;
@@ -153,7 +153,7 @@ let ff: ReturnType<typeof fakeFF>;
 function fakeFF() {
   const made = new Map<string, ReturnType<typeof ffOrder>>();
   const fake = fakeFixedFloat({
-    price: (b) => priceAnswer(b.fromCcy as 'BTC', b.toCcy as 'USDT'),
+    price: (b) => priceAnswer(b.fromCcy as 'BTC', b.toCcy as 'USDT' | 'USDCBASE'),
     create: (b) => {
       const o = ffOrder({ coin: b.fromCcy as 'BTC', toCode: String(b.toCcy), payout: String(b.toAddress), fromAmount: String(b.amount) });
       made.set(o.id, o);
@@ -280,11 +280,11 @@ async function run(id: string, now = Date.now(), max = 12) {
 }
 
 describe('Privacy Enhanced (fresh address)', () => {
-  it('goes BTC → XMR (own vault) → churn → wait → XMR → USDT to Coinbase', async () => {
+  it('goes BTC → XMR (own vault) → churn → wait → XMR → USDC to Coinbase', async () => {
     const res = await post('/api/transfers', { coin: 'BTC', delayHours: 24 });
     expect(res.statusCode).toBe(200);
     const view = res.json();
-    expect(view).toMatchObject({ privacy: true, delayHours: 24, destinationLabel: 'Coinbase', state: 'swap1' });
+    expect(view).toMatchObject({ privacy: true, delayHours: 24, destinationLabel: 'Coinbase (USDC on Base)', state: 'swap1' });
 
     // Our own account, never account 0.
     expect(wallet.calls.find((c) => c.method === 'create_account')?.params).toEqual({ label: 'wallet-click' });
@@ -334,7 +334,7 @@ describe('Privacy Enhanced (fresh address)', () => {
     // Time's up: an order for exactly what the wallet can send, paid from the churn subaddress.
     t = await run(view.id, t.releaseAt! + 1);
     const second = ff.creates()[1];
-    expect(second).toMatchObject({ fromCcy: 'XMR', toCcy: 'USDT', toAddress: PAYOUT });
+    expect(second).toMatchObject({ fromCcy: 'XMR', toCcy: 'USDCBASE', toAddress: PAYOUT });
     expect(second.amount).toBe(0.29994); // 0.3 - two 0.00003 fees, floored to 8 decimals
     const leg2 = orders.get(t.leg2!)!;
     expect(leg2.ownRefund).toBe(wallet.subs.get(2)); // a refund comes back to us
@@ -438,7 +438,7 @@ describe('permanent addresses', () => {
   it('forwards a Monero payment once it unlocks and is above the minimum', async () => {
     const r = (await post('/api/addresses', { coin: 'XMR', mode: 'direct' })).json();
     expect(r.address).toBe(wallet.subs.get(1));
-    expect(r).toMatchObject({ coin: 'XMR', destinationLabel: 'Coinbase', label: 'XMR to Coinbase' });
+    expect(r).toMatchObject({ coin: 'XMR', destinationLabel: 'Coinbase (USDC on Base)', label: 'XMR to Coinbase (USDC on Base)' });
 
     wallet.receive(1, 10_000_000_000n); // 0.01 XMR: below the 0.0184 minimum
     await scanRoutes();
@@ -453,7 +453,7 @@ describe('permanent addresses', () => {
     wallet.receive(1, 90_000_000_000n);
     wallet.unlock(1);
     t = await run(id, Date.now() + 3 * 60_000);
-    expect(ff.creates()[0]).toMatchObject({ fromCcy: 'XMR', toCcy: 'USDT', toAddress: PAYOUT, amount: 0.09997 });
+    expect(ff.creates()[0]).toMatchObject({ fromCcy: 'XMR', toCcy: 'USDCBASE', toAddress: PAYOUT, amount: 0.09997 });
     const leg = orders.get(t.leg1!)!;
     expect(leg.ownRefund).toBe(r.address);
     expect(wallet.sweeps[wallet.sweeps.length - 1]).toMatchObject({ index: 1, to: leg.depositAddress });
@@ -478,7 +478,7 @@ describe('permanent addresses', () => {
     chain.utxos[0].status = { confirmed: true, block_height: chain.tip };
     t = await run(id);
     // 300000 sats minus 5 sat/vB × 122 vB
-    expect(ff.creates()[0]).toMatchObject({ fromCcy: 'BTC', toCcy: 'USDT', toAddress: PAYOUT, amount: 0.0029939 });
+    expect(ff.creates()[0]).toMatchObject({ fromCcy: 'BTC', toCcy: 'USDCBASE', toAddress: PAYOUT, amount: 0.0029939 });
     const leg = orders.get(t.leg1!)!;
     expect(leg.ownRefund).toBe(BIP84_FIRST);
     expect(chain.btcBroadcast).toHaveLength(1);
@@ -509,7 +509,7 @@ describe('permanent addresses', () => {
     chain.eth.settled = one;
     t = await run(id);
     const order = ff.creates()[0];
-    expect(order).toMatchObject({ fromCcy: 'ETH', toCcy: 'USDT', toAddress: PAYOUT });
+    expect(order).toMatchObject({ fromCcy: 'ETH', toCcy: 'USDCBASE', toAddress: PAYOUT });
     const leg = orders.get(t.leg1!)!;
     const sent = parseTransaction(chain.ethSent[0] as `0x${string}`);
     expect(sent).toMatchObject({ chainId: 1, to: leg.depositAddress, type: 'eip1559' });
@@ -539,7 +539,7 @@ describe('permanent addresses', () => {
   it('keeps the address and destination fixed: only the name, wait and pieces change', async () => {
     const r = (await post('/api/addresses', { coin: 'XMR', mode: 'direct' })).json();
     const changed = (await post(`/api/addresses/${r.id}`, { label: 'Rent', address: 'x', destinationId: 'd_other' })).json();
-    expect(changed).toMatchObject({ label: 'Rent', address: r.address, destinationId: 'coinbase' });
+    expect(changed).toMatchObject({ label: 'Rent', address: r.address, destinationId: 'coinbase-base' });
     expect((await post(`/api/addresses/${r.id}`, { delayHours: 4, pieces: 3 })).json()).toMatchObject({ delayHours: 4, pieces: 3, address: r.address });
     expect((await post(`/api/addresses/${r.id}`, { pieces: 5 })).statusCode).toBe(400);
     expect((await post(`/api/addresses/${r.id}`, { delayHours: 5 })).statusCode).toBe(400);
@@ -613,7 +613,7 @@ describe('safety checks from review', () => {
     wallet.receive(1, 200_000_000_000n, 'second-payout');
     await rescueLeftovers(Date.now() + 11 * 60_000);
     const rescued = transfers.all().find((t) => t.id !== t0.id)!;
-    expect(rescued).toMatchObject({ state: 'xmr-in', privacy: true, delayHours: 4, destinationId: 'coinbase' });
+    expect(rescued).toMatchObject({ state: 'xmr-in', privacy: true, delayHours: 4, destinationId: 'coinbase-base' });
     expect(rescued.vault!.index).toBe(1);
     // Not twice.
     await rescueLeftovers(Date.now() + 22 * 60_000);
@@ -626,7 +626,7 @@ describe('safety checks from review', () => {
     const { destinations } = await import('../server/destinations.js');
     destinations.reset();
     fs.rmSync(path.join(dataDir, 'destinations.json'), { force: true });
-    const id = (await post('/api/destinations', { label: 'Friend', address: FRIEND, password: PASSWORD })).json().destinations[2].id;
+    const id = (await post('/api/destinations', { label: 'Friend', address: FRIEND, password: PASSWORD })).json().destinations[1].id;
     await createPrivacyTransfer('BTC', 4, id);
     const res = await post(`/api/destinations/${id}/delete`, { password: PASSWORD });
     expect(res.json().error).toMatch(/A transfer still in progress pays out here/);
@@ -669,7 +669,7 @@ async function intoVault(t0: { id: string; leg1?: string }, amount: bigint, vaul
   return run(t0.id, now);
 }
 
-/** FixedFloat finishes a piece's swap to USDT. */
+/** FixedFloat finishes a piece's swap to USDC. */
 async function payOut(id: string, usdt: string, now: number) {
   const t = transfers.get(id)!;
   const leg = orders.get((t.leg2 ?? t.leg1)!)!;
@@ -747,7 +747,7 @@ describe('waits and pieces', () => {
     k2 = await run(kids[1].id, late);
     expect(k2).toMatchObject({ state: 'wait', waitingFor: 'piece 1 to go first' });
     expect(ff.creates()).toHaveLength(2);
-    expect(ff.creates()[1]).toMatchObject({ fromCcy: 'XMR', toCcy: 'USDT', toAddress: PAYOUT });
+    expect(ff.creates()[1]).toMatchObject({ fromCcy: 'XMR', toCcy: 'USDCBASE', toAddress: PAYOUT });
 
     k1 = await payOut(kids[0].id, '50', late);
     expect(k1).toMatchObject({ state: 'done', settledAt: late });
@@ -854,7 +854,7 @@ describe('waits and pieces', () => {
     expect(t.state).toBe('hold');
     t = await run(id, t.releaseAt! + 1);
     // 400000 sats minus 5 sat/vB × 190 vB (two inputs)
-    expect(ff.creates()[0]).toMatchObject({ fromCcy: 'BTC', toCcy: 'USDT', amount: 0.0039905 });
+    expect(ff.creates()[0]).toMatchObject({ fromCcy: 'BTC', toCcy: 'USDCBASE', amount: 0.0039905 });
     expect(t.state).toBe('swap1');
   });
 
@@ -1004,7 +1004,7 @@ describe('USDC on Base as the payout', () => {
     expect(v.cost).toMatchObject({ inUsd: expect.any(Number), usd: expect.any(Number) });
   });
 
-  it('sends Privacy pieces out of Monero as USDC on Base, never to the USDT address', async () => {
+  it('sends Privacy pieces out of Monero as USDC on Base, never to the old USDT address', async () => {
     const res = await post('/api/transfers', { coin: 'BTC', delayHours: 0, pieces: 2, destinationId: 'coinbase-base' });
     const t0 = transfers.get(res.json().id)!;
     expect(res.json()).toMatchObject({ destinationLabel: 'Coinbase (USDC on Base)', payoutCcy: 'USDCBASE' });
@@ -1020,7 +1020,7 @@ describe('USDC on Base as the payout', () => {
     k1 = await run(kids[0].id, late);
     expect(k1.state).toBe('swap2');
     expect(ff.creates()[1]).toMatchObject({ fromCcy: 'XMR', toCcy: 'USDCBASE', toAddress: PAYOUT_BASE });
-    expect(ff.creates().some((c) => c.toAddress === PAYOUT)).toBe(false);
+    expect(ff.creates().some((c) => c.toAddress === PAYOUT_USDT)).toBe(false);
     k1 = await payOut(kids[0].id, '50', late);
     expect(k1.state).toBe('done');
     const view = (await get(`/api/transfers/${p.id}`)).json();
@@ -1028,8 +1028,10 @@ describe('USDC on Base as the payout', () => {
     expect(view.steps.map((s: { label: string }) => s.label)).toContain('Swap 2 pieces to USDC, at random times');
   });
 
-  it("doesn't let a USDT order in flight hold up a USDC one: they are different directions for FixedFloat", async () => {
-    const a = await createPrivacyTransfer('BTC', 0, 'coinbase');
+  it("doesn't let an old USDT order in flight hold up a USDC one: they are different directions for FixedFloat", async () => {
+    const a = await createPrivacyTransfer('BTC', 0, 'coinbase-base');
+    // A transfer started before USDT was removed still pays USDT (its destination is its own copy).
+    transfers.get(a.id)!.destination = { label: 'Coinbase', address: PAYOUT_USDT, ccy: 'USDT' };
     const b = await createPrivacyTransfer('BTC', 0, 'coinbase-base');
     for (const [t, vaultIndex] of [
       [a, 1],
@@ -1048,5 +1050,61 @@ describe('USDC on Base as the payout', () => {
     expect((await run(a.id, later)).state).toBe('swap2');
     expect((await run(b.id, later)).state).toBe('swap2'); // not "waiting for the XMR → USDT order to finish first"
     expect(ff.creates().filter((c) => c.fromCcy === 'XMR').map((c) => c.toCcy)).toEqual(['USDT', 'USDCBASE']);
+  });
+});
+
+describe('USDT is gone, but what already pays it keeps working', () => {
+  it('finishes a permanent address made for USDT: same FixedFloat order, same Coinbase address, Etherscan link', async () => {
+    // A permanent Bitcoin address saved before USDT was removed: it carries its own copy of the destination.
+    fs.writeFileSync(
+      path.join(dataDir, 'routes.json'),
+      JSON.stringify({
+        version: 1,
+        next: { BTC: 1 },
+        routes: [
+          {
+            id: 'r_legacy',
+            label: 'Phone → Coinbase',
+            coin: 'BTC',
+            mode: 'direct',
+            destinationId: 'coinbase',
+            destination: { label: 'Coinbase', address: PAYOUT_USDT },
+            delayHours: null,
+            index: 0,
+            address: BIP84_FIRST,
+            createdAt: 1,
+            archived: false,
+          },
+        ],
+      }),
+    );
+    addresses.reset();
+    // It shows as USDT, not as the new default.
+    const listed = (await get('/api/addresses')).json().addresses[0];
+    expect(listed).toMatchObject({ destinationLabel: 'Coinbase', destinationAddress: PAYOUT_USDT, destinationCcy: 'USDT', pieces: 1 });
+
+    chain.utxos = [{ txid: 'a9'.repeat(32), vout: 0, value: 300_000, status: { confirmed: true, block_height: chain.tip } }];
+    await scanRoutes();
+    const id = transfers.all()[0].id;
+    const t = await run(id);
+    expect(ff.creates()[0]).toMatchObject({ fromCcy: 'BTC', toCcy: 'USDT', toAddress: PAYOUT_USDT });
+    expect(orders.get(t.leg1!)).toMatchObject({ toCcy: 'USDT', toAddress: PAYOUT_USDT });
+    expect((await get(`/api/transfers/${id}`)).json()).toMatchObject({ payoutCcy: 'USDT', destinationLabel: 'Coinbase' });
+
+    ff.finish(t.leg1!, '240.5', '0xoldpay');
+    orders.get(t.leg1!)!.nextPollAt = 0;
+    await pollDue();
+    await run(id);
+    const v = (await get(`/api/transfers/${id}`)).json();
+    expect(v).toMatchObject({ state: 'done', usdt: '240.5', payoutCcy: 'USDT', payoutTxUrl: 'https://etherscan.io/tx/0xoldpay' });
+    expect(v.steps.at(-1)).toMatchObject({ label: 'USDT to Coinbase', detail: '240.5 USDT', link: 'https://etherscan.io/tx/0xoldpay' });
+    expect(transfers.get(id)!.log.at(-1)!.text).toBe('240.5 USDT sent to Coinbase');
+  });
+
+  it('refuses to make anything new that pays USDT, however it is asked', async () => {
+    expect((await post('/api/transfers', { coin: 'BTC', delayHours: 0, destinationId: 'd_nope' })).statusCode).toBeGreaterThanOrEqual(400);
+    const fresh = (await post('/api/transfers', { coin: 'BTC', delayHours: 0, destinationId: 'coinbase' })).json();
+    expect(fresh).toMatchObject({ payoutCcy: 'USDCBASE', destinationAddress: PAYOUT, destinationLabel: 'Coinbase (USDC on Base)' });
+    expect(ff.creates().every((c) => c.toCcy === 'XMR')).toBe(true);
   });
 });

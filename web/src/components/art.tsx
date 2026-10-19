@@ -71,7 +71,7 @@ export function UsdcIcon(p: IconProps) {
 }
 
 /** The coin a destination is paid in. */
-export const StableIcon = ({ ccy, ...p }: IconProps & { ccy?: string | null }) => (ccy === 'USDCBASE' ? <UsdcIcon {...p} /> : <UsdtIcon {...p} />);
+export const StableIcon = ({ ccy, ...p }: IconProps & { ccy?: string | null }) => (ccy === 'USDT' ? <UsdtIcon {...p} /> : <UsdcIcon {...p} />);
 
 /** A plain blue "C" coin standing in for Coinbase (not the official artwork). */
 export function CoinbaseIcon(p: IconProps) {

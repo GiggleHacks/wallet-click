@@ -57,7 +57,7 @@ describe('the Logs window', () => {
     await get('/api/orders');
     const o = (await post('/api/orders', { coin: 'ETH' })).json();
     const text = (await logs()).lines.map((l) => l.msg).join('\n');
-    expect(text).toContain(`[order ${o.id}] new ETH address ${o.address}: pays USDT to Coinbase`);
+    expect(text).toContain(`[order ${o.id}] new ETH address ${o.address}: pays USDCBASE to Coinbase (USDC on Base)`);
     expect(text).toMatch(/POST \/api\/orders → 200/);
     expect(text).not.toMatch(/GET \/api\/orders/);
   });

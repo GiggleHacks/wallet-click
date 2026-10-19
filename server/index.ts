@@ -30,4 +30,4 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     setTimeout(() => process.exit(0), 5000).unref();
   });
 }
-app.log.info(`Wallet Click listening on http://${config.host}:${config.port}, paying out to ${config.payout.address}`);
+app.log.info(`Wallet Click listening on http://${config.host}:${config.port}, paying out to ${config.payoutBase.address}`);

@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { PAYOUT, fakeFixedFloat, ffOrder, priceAnswer } from './helpers.js';
+import { PAYOUT, PAYOUT_USDT, fakeFixedFloat, ffOrder, priceAnswer } from './helpers.js';
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-orders-'));
 process.env.DATA_DIR = dataDir;
@@ -105,7 +105,7 @@ describe('creating an address', () => {
     const res = await post('/api/orders', { coin: 'ETH', toAddress: '0x000000000000000000000000000000000000dEaD', payoutAddress: '0xdead' });
     expect(res.statusCode).toBe(200);
     const create = fake.calls.find((c) => c.method === 'create')!;
-    expect(create.body).toMatchObject({ type: 'float', fromCcy: 'ETH', toCcy: 'USDT', direction: 'from', toAddress: PAYOUT });
+    expect(create.body).toMatchObject({ type: 'float', fromCcy: 'ETH', toCcy: 'USDCBASE', direction: 'from', toAddress: PAYOUT });
     expect(create.body.amount).toBe(0.015); // 3 x the 0.005 minimum: nominal, any amount above the minimum swaps
     const view = res.json();
     expect(view).toMatchObject({ coin: 'ETH', stage: 'waiting', payoutAddress: PAYOUT, min: '0.005', minUsd: 12.72 });
@@ -142,7 +142,7 @@ describe('creating an address', () => {
     const before = orders.all().length;
     const res = await post('/api/orders', { coin: 'ETH' });
     expect(res.statusCode).toBe(502);
-    expect(res.json().error).toMatch(/payout address is not your Coinbase address/);
+    expect(res.json().error).toMatch(/payout address is not your Coinbase \(USDC on Base\) address/);
     expect(orders.all().length).toBe(before); // nothing stored, no address shown
   });
 
@@ -150,7 +150,10 @@ describe('creating an address', () => {
     setTransport(fakeFixedFloat({ price: () => priceAnswer('ETH'), create: () => ffOrder({ toCode: 'USDTTRC' }) }).transport);
     const res = await post('/api/orders', { coin: 'ETH' });
     expect(res.statusCode).toBe(502);
-    expect(res.json().error).toMatch(/instead of USDT on Ethereum/);
+    expect(res.json().error).toMatch(/instead of USDC on Base/);
+    // The old payout, USDT on Ethereum, is refused too: it isn't what we asked for.
+    setTransport(fakeFixedFloat({ price: () => priceAnswer('ETH'), create: () => ffOrder({ toCode: 'USDT', payout: PAYOUT_USDT }) }).transport);
+    expect((await post('/api/orders', { coin: 'ETH' })).json().error).toMatch(/instead of USDC on Base/);
   });
 
   it('explains when FixedFloat has the coin paused', async () => {
@@ -443,10 +446,10 @@ describe('following an order', () => {
     expect(toBase('abc', 8)).toBeNull();
   });
 
-  it('shows the confirmed USDT amount and payout link when done', async () => {
+  it('shows the confirmed USDC amount and Basescan payout link when done', async () => {
     const { rec } = await createThenAnswer(() => ffOrder({ status: 'DONE', fromTx: { id: '0xin', amount: '0.0213', confirmations: 12 }, toTx: { id: '0xout', amount: '53.77' } }));
     await pollDue();
-    expect(await view(rec.id)).toMatchObject({ stage: 'done', received: '0.0213', usdt: '53.77', usdtFinal: true, payoutTxUrl: 'https://etherscan.io/tx/0xout' });
+    expect(await view(rec.id)).toMatchObject({ stage: 'done', received: '0.0213', usdt: '53.77', usdtFinal: true, toCcy: 'USDCBASE', payoutTxUrl: 'https://basescan.org/tx/0xout' });
   });
 
   it('works out roughly what the swap cost once it is done: dollar value in minus USDT out', async () => {

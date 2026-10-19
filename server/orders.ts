@@ -515,7 +515,7 @@ export interface Expect {
   label: string;
 }
 
-const COINBASE_EXPECT = (): Expect => ({ toCcy: 'USDT', toAddress: config.payout.address, label: config.payout.label });
+const COINBASE_EXPECT = (): Expect => ({ toCcy: config.payoutBase.ccy, toAddress: config.payoutBase.address, label: config.payoutBase.label });
 
 /** Refuses any order that doesn't pay exactly what we asked for: the right coin in, the right payout, to exactly our address. */
 export function checkCreated(o: FfOrder, coin: Coin, expect: Expect = COINBASE_EXPECT()): void {

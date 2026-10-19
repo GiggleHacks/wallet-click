@@ -62,12 +62,12 @@ interface Props {
   walletOk?: boolean;
   /** For one coin (a permanent address); unset on the main window, where it applies to every coin button. */
   coin?: Coin;
-  /** What the destination is paid in ("USDT", "USDC"). */
+  /** What the destination is paid in ("USDC"). */
   sym?: string;
 }
 
 /** Route, wait and pieces: the same three choices on the main window and for a permanent address. */
-export function SendOptionsFields({ value: o, onChange, delays, piecesMax = 4, moneroOk, walletOk = true, coin, sym = 'USDT' }: Props) {
+export function SendOptionsFields({ value: o, onChange, delays, piecesMax = 4, moneroOk, walletOk = true, coin, sym = 'USDC' }: Props) {
   const minimums = useMinimums();
   const set = (patch: Partial<SendOptions>) => onChange({ ...o, ...patch });
   const isXmr = coin === 'XMR';

@@ -4,7 +4,7 @@ import { CoinIcon, HouseIcon, ShieldIcon, WarnIcon } from '../components/art';
 import { DelaySlider } from '../components/DelaySlider';
 import { QrCode } from '../components/QrCode';
 import { MinimumNote, SendOptionsFields } from '../components/SendOptions';
-import { destName, symbolOf } from '../lib/assets';
+import { DEFAULT_DESTINATION, destName, symbolOf } from '../lib/assets';
 import { minimumFor, usdText, useMinimums } from '../lib/minimums';
 import { ModalLayer, Window } from '../components/Win98';
 import { shortAddr, trimAmount, usdt } from '../lib/format';
@@ -121,7 +121,7 @@ function NewForm({
   const coins = (['BTC', 'ETH', 'XMR'] as Coin[]).filter((c) => available[c]);
   const [coin, setCoin] = useState<Coin>(coins[0] ?? 'XMR');
   const [opts, setOpts] = useState<SendOptions>({ route: 'direct', delayHours: 0, pieces: 1 });
-  const [dest, setDest] = useState(destinations[0]?.id ?? 'coinbase');
+  const [dest, setDest] = useState(destinations[0]?.id ?? DEFAULT_DESTINATION);
   const [label, setLabel] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

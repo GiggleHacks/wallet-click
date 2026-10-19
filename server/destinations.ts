@@ -1,14 +1,18 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { PAYOUTS, STABLES, config, isChecksumAddress, type Stable } from './config.js';
+import { PAYOUTS, PAYOUT_CHOICES, config, isChecksumAddress, type Stable } from './config.js';
 import { UserError } from './errors.js';
 import { readJson, writeJsonAtomic } from './store.js';
 
 /**
- * The address book: the addresses swaps may pay out to, each for one asset: USDT on Ethereum (ERC-20) or USDC on
- * Base. "Coinbase" (PAYOUT_ADDRESS, USDT) and "Coinbase (USDC on Base)" (PAYOUT_ADDRESS_USDC_BASE) are built in.
- * Adding or removing one needs the password (checked by the route), and a destination that a permanent address
- * points at can't be removed, so a saved phone-wallet address always lands where it did.
+ * The address book: the addresses swaps may pay out to, all USDC on Base. "Coinbase (USDC on Base)"
+ * (PAYOUT_ADDRESS_USDC_BASE) is built in. Adding or removing one needs the password (checked by the route), and a
+ * destination that a permanent address points at can't be removed, so a saved phone-wallet address always lands
+ * where it did.
+ *
+ * USDT on Ethereum is no longer offered. Entries saved for it earlier stay in the file (and the transfers and
+ * permanent addresses that already pay them keep working, since those carry their own copy), but they are hidden
+ * and can't be picked for anything new. The old built-in id "coinbase" now means the built-in Base destination.
  */
 
 export interface Destination {
@@ -26,9 +30,9 @@ interface DestinationsFile {
   destinations: Destination[];
 }
 
-export const COINBASE_ID = 'coinbase';
+/** The old built-in (USDT) id: browsers and records that still name it get the built-in Base destination. */
+const LEGACY_COINBASE_ID = 'coinbase';
 export const COINBASE_BASE_ID = 'coinbase-base';
-const BUILT_IN = new Set([COINBASE_ID, COINBASE_BASE_ID]);
 const MAX = 50;
 
 const file = () => path.join(config.dataDir, 'destinations.json');
@@ -43,29 +47,30 @@ function load(): DestinationsFile {
 }
 
 const builtIns = (): Destination[] => [
-  { id: COINBASE_ID, label: config.payout.label, address: config.payout.address, ccy: 'USDT', createdAt: 0, builtIn: true },
   { id: COINBASE_BASE_ID, label: config.payoutBase.label, address: config.payoutBase.address, ccy: config.payoutBase.ccy, createdAt: 0, builtIn: true },
 ];
 
 export const destinations = {
-  list: (): Destination[] => [...builtIns(), ...load().destinations],
+  /** The destinations that can be picked now. */
+  list: (): Destination[] => [...builtIns(), ...load().destinations.filter((d) => PAYOUT_CHOICES.includes(d.ccy))],
 
   get(id: string | undefined | null): Destination | null {
-    if (!id) return builtIns()[0];
+    if (!id || id === LEGACY_COINBASE_ID) return builtIns()[0];
     return builtIns().find((d) => d.id === id) ?? load().destinations.find((d) => d.id === id) ?? null;
   },
 
-  /** The destination an order or permanent address will pay out to; refuses unknown ids. */
+  /** The destination an order or permanent address will pay out to; refuses unknown ids, and USDT ones. */
   need(id: string | undefined | null): Destination {
     const d = destinations.get(id);
     if (!d) throw new UserError("That destination isn't in your address book any more.");
+    if (!PAYOUT_CHOICES.includes(d.ccy)) throw new UserError(`${d.label} pays ${PAYOUTS[d.ccy].label}, which isn't offered any more. Pick ${config.payoutBase.label}.`);
     return d;
   },
 
-  add(label: string, address: string, ccy: Stable = 'USDT', now = Date.now()): Destination {
+  add(label: string, address: string, ccy: Stable = 'USDCBASE', now = Date.now()): Destination {
     const name = label.trim().replace(/\s+/g, ' ');
     const addr = address.trim();
-    if (!STABLES.includes(ccy)) throw new UserError('Pick USDT on Ethereum or USDC on Base.');
+    if (!PAYOUT_CHOICES.includes(ccy)) throw new UserError('Swaps pay out USDC on Base now: USDT on Ethereum is no longer offered.');
     const asset = PAYOUTS[ccy].label;
     if (!name || name.length > 40) throw new UserError('Give it a name of up to 40 characters.');
     if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) throw new UserError(`That isn't an Ethereum-style address for ${asset}. It should start with 0x and have 40 more characters.`);
@@ -89,7 +94,7 @@ export const destinations = {
   /** `usedBy` names whatever still pays out here (a permanent address, a transfer in progress), or null. */
   remove(id: string, usedBy: (id: string) => string | null = () => null): void {
     const fixed = builtIns().find((d) => d.id === id);
-    if (fixed || BUILT_IN.has(id)) throw new UserError(`${fixed?.label ?? 'That destination'} is built in and can't be removed.`);
+    if (fixed || id === LEGACY_COINBASE_ID) throw new UserError(`${fixed?.label ?? config.payoutBase.label} is built in and can't be removed.`);
     const list = load().destinations;
     const i = list.findIndex((d) => d.id === id);
     if (i < 0) throw new UserError('That destination is already gone.');

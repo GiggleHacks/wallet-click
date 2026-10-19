@@ -1182,7 +1182,7 @@ export async function refreshPrices(now = Date.now()): Promise<void> {
   if (now - pricedAt < 5 * M) return;
   pricedAt = now;
   const coins = new Set(load().transfers.filter((t) => t.state !== 'done' && t.state !== 'refunded' && (t.received || t.vault?.amount)).map((t) => held(t).coin));
-  for (const coin of coins) await limits(coin, 'USDT', { now, cached: true }).catch(() => {});
+  for (const coin of coins) await limits(coin, 'USDCBASE', { now, cached: true }).catch(() => {});
 }
 
 export function startTransfers(log: FastifyBaseLogger): () => void {

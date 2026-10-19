@@ -12,7 +12,7 @@ import { DragBounds, ModalLayer, Window } from './components/Win98';
 import { DEMO_ID, DEMO_TRANSFER, useDemo, type DemoKind } from './lib/demo';
 import { costText } from './lib/cost';
 import { trimAmount, usdt } from './lib/format';
-import { symbolOf } from './lib/assets';
+import { DEFAULT_DESTINATION, symbolOf } from './lib/assets';
 import { getChoice, setChoice, usePref } from './lib/prefs';
 import { plainAddress, throughMonero, useSendOptions } from './lib/sendOptions';
 import { applyThemeAttr, saveMode, savedMode, saveTheme, savedTheme, ThemeContext, useDark, type Mode, type Theme } from './lib/themes';
@@ -137,7 +137,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
   const [logs, setLogs] = useState(false);
   const [offline, setOffline] = useState(false);
   const [destinations, setDestinations] = useState<Destination[]>([]);
-  const [destinationId, setDestinationId] = useState(() => getChoice('destination') ?? 'coinbase');
+  const [destinationId, setDestinationId] = useState(() => getChoice('destination') ?? DEFAULT_DESTINATION);
   const pickDestination = (id: string) => {
     setDestinationId(id);
     setChoice('destination', id);
@@ -169,7 +169,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
       .catch(() => {});
   }, []);
   // A removed destination falls back to Coinbase.
-  const destination = destinations.find((d) => d.id === destinationId)?.id ?? 'coinbase';
+  const destination = destinations.find((d) => d.id === destinationId)?.id ?? DEFAULT_DESTINATION;
 
   const notify = (title: string, text: string, onClick?: () => void) => setBalloon({ id: Date.now(), title, text, onClick });
 

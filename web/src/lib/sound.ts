@@ -224,7 +224,7 @@ export const sfx = {
   ding: () => voice.ding(),
   /** Coin enters the swap machine. */
   swap: () => voice.swap(),
-  /** USDT heads out to Coinbase. */
+  /** USDC heads out to Coinbase. */
   send: () => voice.send(),
   /** Done: a little fanfare. */
   tada: () => voice.tada(),

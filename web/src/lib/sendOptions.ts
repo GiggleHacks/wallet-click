@@ -3,7 +3,7 @@ import type { Coin } from '../types';
 import { getChoice, setChoice } from './prefs';
 
 /**
- * How the coin buttons send what comes in: straight to USDT or through Monero, an optional wait first, and in one
+ * How the coin buttons send what comes in: straight to USDC or through Monero, an optional wait first, and in one
  * piece or several. Remembered in this browser; a permanent address keeps its own copy.
  */
 export interface SendOptions {
@@ -55,7 +55,7 @@ export const waitText = (h: number) => (h ? `wait ${h} h` : 'no wait');
 export const piecesText = (n: number) => (n > 1 ? `${n} pieces` : '1 piece');
 
 /** "Through Monero · wait 4 h · 4 pieces". */
-export function optionsSummary(o: SendOptions, sym = 'USDT'): string {
+export function optionsSummary(o: SendOptions, sym = 'USDC'): string {
   const route = o.route === 'monero' ? 'Through Monero' : `Straight to ${sym}`;
   return `${route} · ${waitText(o.delayHours)} · ${piecesText(o.pieces)}`;
 }

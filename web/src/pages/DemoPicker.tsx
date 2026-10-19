@@ -11,9 +11,9 @@ interface Flow {
 }
 
 const FRESH: Flow[] = [
-  { kind: 'BTC', icon: <CoinIcon coin="BTC" size={34} />, title: 'Bitcoin', sub: 'Straight to USDT' },
-  { kind: 'ETH', icon: <CoinIcon coin="ETH" size={34} />, title: 'Ethereum', sub: 'Straight to USDT' },
-  { kind: 'XMR', icon: <CoinIcon coin="XMR" size={34} />, title: 'Monero', sub: 'Straight to USDT' },
+  { kind: 'BTC', icon: <CoinIcon coin="BTC" size={34} />, title: 'Bitcoin', sub: 'Straight to USDC' },
+  { kind: 'ETH', icon: <CoinIcon coin="ETH" size={34} />, title: 'Ethereum', sub: 'Straight to USDC' },
+  { kind: 'XMR', icon: <CoinIcon coin="XMR" size={34} />, title: 'Monero', sub: 'Straight to USDC' },
   { kind: 'privacy', icon: <ShieldIcon size={34} />, title: 'Privacy Enhanced', sub: 'Through a Monero vault' },
 ];
 
@@ -28,7 +28,7 @@ const PERMANENT: Flow[] = [
         </span>
       </span>
     ),
-    title: 'Straight to USDT',
+    title: 'Straight to USDC',
     sub: 'You send BTC from your phone',
   },
   {
