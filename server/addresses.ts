@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { DELAYS, PIECES_MAX, config, type Coin } from './config.js';
+import { DELAYS, PIECES_MAX, config, type Coin, type Stable } from './config.js';
 import { destinations } from './destinations.js';
 import { UserError } from './errors.js';
 import { readJson, writeJsonAtomic } from './store.js';
@@ -26,7 +26,7 @@ export interface Route {
   mode: RouteMode;
   destinationId: string;
   /** The destination as it was when the route was made (the payout address is fixed for life). */
-  destination: { label: string; address: string };
+  destination: { label: string; address: string; ccy?: Stable };
   /** Hours a payment waits before it goes on (Privacy Enhanced: in Monero). */
   delayHours: number | null;
   /** How many pieces each payment goes out in (1: all at once). */
@@ -144,7 +144,7 @@ export const addresses = {
       coin: req.coin,
       mode: req.mode,
       destinationId: dest.id,
-      destination: { label: dest.label, address: dest.address },
+      destination: { label: dest.label, address: dest.address, ccy: dest.ccy },
       delayHours: req.delayHours ?? 0,
       pieces,
       index,

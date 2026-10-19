@@ -60,6 +60,19 @@ export function UsdtIcon(p: IconProps) {
   );
 }
 
+export function UsdcIcon(p: IconProps) {
+  return (
+    <Svg {...p} label="USDC">
+      <Rim fill="#2775ca" edge="#194d8c" />
+      <path d="M16 6.2a9.8 9.8 0 1 0 0 19.6 9.8 9.8 0 0 0 0-19.6zm0 2.1a7.7 7.7 0 1 1 0 15.4 7.7 7.7 0 0 1 0-15.4z" fill="#fff" />
+      <path d="M17.3 11.1c1.7.3 2.8 1.2 2.9 2.7h-1.7c-.1-.8-.7-1.2-1.7-1.2-1 0-1.6.4-1.6 1 0 .7.6.9 2 1.2 1.9.4 3 1 3 2.5 0 1.3-1 2.2-2.6 2.5v1.2h-1.5v-1.2c-1.8-.3-2.9-1.2-3-2.8h1.7c.1.9.8 1.4 1.9 1.4 1.1 0 1.8-.4 1.8-1.1 0-.7-.5-.9-2-1.3-1.8-.4-2.9-1-2.9-2.4 0-1.2.9-2.1 2.5-2.4V9.8h1.5z" fill="#fff" />
+    </Svg>
+  );
+}
+
+/** The coin a destination is paid in. */
+export const StableIcon = ({ ccy, ...p }: IconProps & { ccy?: string | null }) => (ccy === 'USDCBASE' ? <UsdcIcon {...p} /> : <UsdtIcon {...p} />);
+
 /** A plain blue "C" coin standing in for Coinbase (not the official artwork). */
 export function CoinbaseIcon(p: IconProps) {
   return (

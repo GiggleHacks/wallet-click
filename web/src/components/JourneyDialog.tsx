@@ -6,7 +6,8 @@ import { COST_HELP, costText, driftText } from '../lib/cost';
 import { sfx } from '../lib/sound';
 import { useTheme } from '../lib/themes';
 import type { Order, Piece, Transfer, TransferStep } from '../types';
-import { AppMark, CheckBadge, CoinIcon, CoinbaseIcon, HouseIcon, Hourglass, ModernPC, ShieldIcon, SwapMachine, UsdtIcon, WarnIcon, XmrIcon } from './art';
+import { isCoinbaseId, networkOf, symbolOf } from '../lib/assets';
+import { AppMark, CheckBadge, CoinIcon, CoinbaseIcon, HouseIcon, Hourglass, ModernPC, ShieldIcon, StableIcon, SwapMachine, WarnIcon, XmrIcon } from './art';
 import { DelaySlider, untilText } from './DelaySlider';
 import { Burst, Flyers, RefundForm, Sparkles, SpinFaces, Station } from './TransferDialog';
 import { ModalLayer, ProgressBar, SpeedGraph, Window } from './Win98';
@@ -196,7 +197,7 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
 
   const size = five ? 48 : 60;
   const machine = (spinning: boolean) => (theme.shell === 'classic' ? <SwapMachine size={size} spinning={spinning} /> : <ModernPC size={size} spinning={spinning} variant={theme.shell} />);
-  const coinbase = t.destinationId === 'coinbase';
+  const coinbase = isCoinbaseId(t.destinationId);
   const holding = shown === 'locked' || shown === 'churn' || shown === 'waiting';
   const coinLabel = shown === 'held' && until ? shortUntil(until - now) : t.coinName;
 
@@ -244,7 +245,7 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
         {shown === 'swap1' && <span className="swap-glow" />}
         {shown === 'swap1' && <Sparkles side="back" />}
         <span className="station-machine">{machine(shown === 'swap1')}</span>
-        {shown === 'swap1' && <SpinFaces front={<CoinIcon coin={t.coin} size={30} />} back={five ? <XmrIcon size={30} /> : <UsdtIcon size={30} />} />}
+        {shown === 'swap1' && <SpinFaces front={<CoinIcon coin={t.coin} size={30} />} back={five ? <XmrIcon size={30} /> : <StableIcon ccy={t.payoutCcy} size={30} />} />}
         {shown === 'swap1' && <Sparkles side="front" />}
         {fx?.phase === 'swap1' && <span key={fx.key} className="swap-flash" />}
         {fx && fx.phase === (five ? 'vault-in' : 'sending') && <Burst key={fx.key} color={five ? '#ff6600' : '#26a17b'} />}
@@ -268,7 +269,7 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
           {shown === 'swap2' && <span className="swap-glow" />}
           {shown === 'swap2' && <Sparkles side="back" />}
           <span className="station-machine">{machine(shown === 'swap2')}</span>
-          {shown === 'swap2' && <SpinFaces front={<XmrIcon size={30} />} back={<UsdtIcon size={30} />} />}
+          {shown === 'swap2' && <SpinFaces front={<XmrIcon size={30} />} back={<StableIcon ccy={t.payoutCcy} size={30} />} />}
           {shown === 'swap2' && <Sparkles side="front" />}
           {fx?.phase === 'swap2' && <span key={fx.key} className="swap-flash" />}
           {fx?.phase === 'sending' && <Burst key={fx.key} color="#26a17b" />}
@@ -276,7 +277,7 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
       )}
 
       <Station x={X.dest} label={t.destinationLabel} pulse={shown === 'done'}>
-        {coinbase ? <CoinbaseIcon size={five ? 40 : 44} /> : <UsdtIcon size={five ? 40 : 44} />}
+        {coinbase ? <CoinbaseIcon size={five ? 40 : 44} /> : <StableIcon ccy={t.payoutCcy} size={five ? 40 : 44} />}
         {fx?.phase === 'done' && <Burst key={fx.key} color="#0052ff" center />}
         {shown === 'done' && (
           <motion.span className="station-badge" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 420, damping: 16 }}>
@@ -288,7 +289,7 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
       {(shown === 'confirming' || (shown === 'swap1' && t.state === 'pieces')) && fly(X.coin, X.swap1, <CoinIcon coin={t.coin} size={22} />)}
       {shown === 'vault-in' && fly(X.swap1, X.vault, <XmrIcon size={22} />)}
       {shown === 'release' && fly(X.vault, X.swap2, <XmrIcon size={22} />)}
-      {shown === 'sending' && fly(five ? X.swap2 : X.swap1, X.dest, <UsdtIcon size={22} />)}
+      {shown === 'sending' && fly(five ? X.swap2 : X.swap1, X.dest, <StableIcon ccy={t.payoutCcy} size={22} />)}
     </div>
   );
 }
@@ -376,9 +377,9 @@ function Steps({ steps, releaseAt }: { steps: TransferStep[]; releaseAt: number 
 }
 
 /** A split payment's pieces: what each one holds, and where it is. */
-function PieceList({ pieces, now }: { pieces: Piece[]; now: number }) {
+function PieceList({ pieces, now, sym }: { pieces: Piece[]; now: number; sym: string }) {
   const state = (p: Piece) => {
-    if (p.stage === 'done') return `Sent: ${p.usdt ? `${usdt(p.usdt)} USDT` : 'USDT'}`;
+    if (p.stage === 'done') return `Sent: ${p.usdt ? `${usdt(p.usdt)} ${sym}` : sym}`;
     if (p.stage === 'refunded') return 'Sent back';
     if (p.stage === 'attention') return `Needs you: ${p.attention ?? ''}`;
     if (p.stage === 'sending') return 'Swapping…';
@@ -481,6 +482,7 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
   const until = wakeAt(t);
   const left = until !== null ? until - now : null;
   const monero = viaMonero(t);
+  const sym = symbolOf(t.payoutCcy);
   const split = (t.pieces ?? 1) > 1;
   const pieceList = t.pieceList ?? [];
   const sentPieces = pieceList.filter((p) => p.stage === 'done').length;
@@ -506,7 +508,7 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
       <>
         <Hourglass size={16} /> Waiting for your {t.coinName} payment…
       </>,
-      t.privacy ? 'It goes through Monero first, then to USDT.' : null,
+      t.privacy ? `It goes through Monero first, then to ${sym}.` : null,
     ],
     confirming: [
       <>
@@ -538,7 +540,7 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
     ],
     swap1: [
       <>
-        Swapping <b>{t.state === 'pieces' ? `piece ${pieceList.find((p) => p.stage === 'sending')?.n ?? ''} of ${pieceList.length}` : paid}</b> to {t.privacy ? 'Monero' : 'USDT'}…
+        Swapping <b>{t.state === 'pieces' ? `piece ${pieceList.find((p) => p.stage === 'sending')?.n ?? ''} of ${pieceList.length}` : paid}</b> to {t.privacy ? 'Monero' : sym}…
       </>,
       t.privacy ? 'FixedFloat pays the Monero into your own wallet.' : 'FixedFloat is exchanging it at the market rate.',
     ],
@@ -566,24 +568,24 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
           </>
         )}
       </>,
-      until ? `${t.state === 'pieces' && sentPieces ? 'Next piece swaps' : 'Swaps'} to USDT at ${new Date(until).toLocaleString()}${split && !sentPieces ? `, in ${t.pieces} pieces` : ''}.` : null,
+      until ? `${t.state === 'pieces' && sentPieces ? 'Next piece swaps' : 'Swaps'} to ${sym} at ${new Date(until).toLocaleString()}${split && !sentPieces ? `, in ${t.pieces} pieces` : ''}.` : null,
     ],
     release: [<>Wait over: opening the vault…</>, `${xmr} heads to the swap.`],
     swap2: [
       <>
-        Swapping <b>{t.state === 'pieces' ? `piece ${pieceList.find((p) => p.stage === 'sending')?.n ?? ''} of ${pieceList.length}` : xmr}</b> to USDT…
+        Swapping <b>{t.state === 'pieces' ? `piece ${pieceList.find((p) => p.stage === 'sending')?.n ?? ''} of ${pieceList.length}` : xmr}</b> to {sym}…
       </>,
       'FixedFloat is exchanging it at the market rate.',
     ],
     sending: [
       <>
-        Sending <b>{out ? `≈ ${usdt(out)} USDT` : 'USDT'}</b> to {t.destinationLabel}…
+        Sending <b>{out ? `≈ ${usdt(out)} ${sym}` : sym}</b> to {t.destinationLabel}…
       </>,
-      `To ${shortAddr(t.destinationAddress)} on Ethereum.`,
+      `To ${shortAddr(t.destinationAddress)} on ${networkOf(t.payoutCcy)}.`,
     ],
     done: [
       <>
-        Done! <b>{out ? `${usdt(out)} USDT` : 'USDT'}</b> sent to {t.destinationLabel}.
+        Done! <b>{out ? `${usdt(out)} ${sym}` : sym}</b> sent to {t.destinationLabel}.
       </>,
       t.payoutTxUrl ? (
         <a href={t.payoutTxUrl} target="_blank" rel="noreferrer">
@@ -645,7 +647,7 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
         )}
 
         <Steps steps={t.steps} releaseAt={t.releaseAt} />
-        {pieceList.length > 0 && <PieceList pieces={pieceList} now={now} />}
+        {pieceList.length > 0 && <PieceList pieces={pieceList} now={now} sym={sym} />}
 
         {t.attention && (
           <div className="attention">

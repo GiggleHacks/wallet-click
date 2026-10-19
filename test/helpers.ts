@@ -7,6 +7,8 @@ import type { Transport } from '../server/fixedfloat.js';
 export const btcAddress = (seed: number | string) => btc.Address(btc.NETWORK).encode({ type: 'wsh', hash: sha256(utf8ToBytes(`wc-test-${seed}`)) });
 
 export const PAYOUT = '0x7E577e577e577E577e577E577E577E577e577E57';
+/** Coinbase's USDC-on-Base deposit address (the built-in "Coinbase (USDC on Base)" destination). */
+export const PAYOUT_BASE = '0xBA5eba5EBa5EbA5eBA5EBA5eBa5EBa5ebA5ebA5E';
 /** A well-formed (fake) Monero subaddress: 8 + 94 base58 characters. */
 export const xmrAddress = (seed: number | string, lead = '8') => `${lead}${String(seed).replace(/[^1-9A-HJ-NP-Za-km-z]/g, '').padEnd(94, 'x').slice(0, 94)}`;
 
@@ -82,8 +84,8 @@ export function ffOrder(over: {
     to: {
       code: over.toCode ?? 'USDT',
       coin: over.toCode === 'XMR' ? 'XMR' : 'USDT',
-      network: over.toNetwork ?? (over.toCode === 'XMR' ? 'XMR' : 'ETH'),
-      name: over.toCode === 'XMR' ? 'Monero' : 'Tether (ERC20)',
+      network: over.toNetwork ?? (over.toCode === 'XMR' ? 'XMR' : over.toCode === 'USDCBASE' ? 'BASE' : 'ETH'),
+      name: over.toCode === 'XMR' ? 'Monero' : over.toCode === 'USDCBASE' ? 'USD Coin (Base)' : 'Tether (ERC20)',
       alias: over.toCode === 'XMR' ? 'xmr' : 'usdt',
       amount: over.toAmount ?? '37.86900000',
       address: over.payout ?? PAYOUT,
@@ -101,13 +103,13 @@ const PRICES = {
   XMR: { amount: 0.1, min: 0.0184, usd: 54.17, out: 53.9 },
 };
 /** FixedFloat's answer to `price` for the probe amount. Into XMR, the minimum is about $109 (as on the real exchange). */
-export const priceAnswer = (coin: 'ETH' | 'BTC' | 'XMR', to: 'USDT' | 'XMR' = 'USDT') => {
+export const priceAnswer = (coin: 'ETH' | 'BTC' | 'XMR', to: 'USDT' | 'USDCBASE' | 'XMR' = 'USDT') => {
   const p = PRICES[coin];
   const min = to === 'XMR' ? Math.round((109 / (p.usd / p.amount)) * 1e8) / 1e8 : p.min;
   const out = to === 'XMR' ? Math.round((p.usd / 541.68) * 1e8) / 1e8 : p.out;
   return {
     from: { code: coin, network: coin, coin, amount: p.amount, rate: out / p.amount, precision: 8, min, max: 45, usd: p.usd },
-    to: { code: to, network: to === 'XMR' ? 'XMR' : 'ETH', coin: to, amount: out, rate: p.amount / out, precision: 8, min: 10, max: 113866, usd: p.usd },
+    to: { code: to, network: to === 'XMR' ? 'XMR' : to === 'USDCBASE' ? 'BASE' : 'ETH', coin: to, amount: out, rate: p.amount / out, precision: 8, min: 10, max: 113866, usd: p.usd },
     errors: [] as string[],
   };
 };

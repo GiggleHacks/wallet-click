@@ -25,6 +25,11 @@ const payoutAddress = env.PAYOUT_ADDRESS?.trim() || '0x7E577e577e577E577e577E577
 if (!isChecksumAddress(payoutAddress)) {
   throw new Error(`PAYOUT_ADDRESS "${payoutAddress}" is not a valid checksummed Ethereum address. Copy it again from Coinbase.`);
 }
+/** The same Coinbase account's USDC-on-Base deposit address: a second built-in destination. */
+const payoutBaseAddress = env.PAYOUT_ADDRESS_USDC_BASE?.trim() || '0xBA5eba5EBa5EbA5eBA5EBA5eBa5EBa5ebA5ebA5E';
+if (!isChecksumAddress(payoutBaseAddress)) {
+  throw new Error(`PAYOUT_ADDRESS_USDC_BASE "${payoutBaseAddress}" is not a valid checksummed address. Copy it again from Coinbase.`);
+}
 
 export const COINS = {
   BTC: {
@@ -56,12 +61,21 @@ export const COINS = {
 export type Coin = keyof typeof COINS;
 export const COIN_IDS = Object.keys(COINS) as Coin[];
 
-/** What a FixedFloat order can pay out: USDT (ERC-20) to a saved destination, or XMR to one of our own subaddresses. */
+/**
+ * What a FixedFloat order can pay out: a stablecoin (USDT on Ethereum, or USDC on Base) to a saved destination, or
+ * XMR to one of our own subaddresses. The keys are FixedFloat's own currency codes, which name the network too.
+ */
 export const PAYOUTS = {
-  USDT: { network: 'ETH', label: 'USDT on Ethereum', explorerTx: (h: string) => `https://etherscan.io/tx/${h}` },
-  XMR: { network: 'XMR', label: 'Monero', explorerTx: (h: string) => `https://xmrchain.net/tx/${h}` },
+  USDT: { network: 'ETH', symbol: 'USDT', label: 'USDT on Ethereum', explorerTx: (h: string) => `https://etherscan.io/tx/${h}` },
+  USDCBASE: { network: 'BASE', symbol: 'USDC', label: 'USDC on Base', explorerTx: (h: string) => `https://basescan.org/tx/${h}` },
+  XMR: { network: 'XMR', symbol: 'XMR', label: 'Monero', explorerTx: (h: string) => `https://xmrchain.net/tx/${h}` },
 } as const;
 export type PayoutCcy = keyof typeof PAYOUTS;
+/** The payouts that go to an address book destination (the others are our own Monero). */
+export type Stable = 'USDT' | 'USDCBASE';
+export const STABLES: readonly Stable[] = ['USDT', 'USDCBASE'];
+/** Both are worth one US dollar here, for prices and costs. */
+export const isStable = (c: string): c is Stable => c === 'USDT' || c === 'USDCBASE';
 
 /** How long a payment waits before it goes on (hours). Privacy Enhanced: in Monero, between the two swaps. */
 export const DELAYS = [0, 4, 12, 24, 42] as const;
@@ -107,6 +121,8 @@ export const config = {
     network: 'Ethereum (ERC-20)',
     explorerTx: (h: string) => `https://etherscan.io/tx/${h}`,
   },
+  /** The built-in Coinbase destination for USDC on Base. */
+  payoutBase: { address: payoutBaseAddress, ccy: 'USDCBASE' as const, label: 'Coinbase (USDC on Base)', network: 'Base' },
 
   /** The VPS's monero-wallet-rpc. Unset = Monero wallet features (Privacy Enhanced, permanent XMR addresses) are off. */
   monero: {

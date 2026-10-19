@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 import { addresses, type Route } from './addresses.js';
 import { DECIMALS, fromBase, toBase } from './chain.js';
-import { COINS, DELAYS, PAYOUTS, PIECE_MIN_FACTOR, PIECES_MAX, config, type Coin } from './config.js';
+import { COINS, DELAYS, PAYOUTS, PIECE_MIN_FACTOR, PIECES_MAX, config, type Coin, type Stable } from './config.js';
 import { destinations } from './destinations.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
 import { FfError } from './fixedfloat.js';
@@ -86,7 +86,7 @@ export interface TransferRecord {
   jitterMs: number;
   destinationId: string;
   /** Where the USDT goes, as it was when the transfer started. */
-  destination: { label: string; address: string };
+  destination: { label: string; address: string; ccy?: Stable };
   /** The permanent address it came in through (null: a fresh FixedFloat address). */
   routeId: string | null;
   state: TransferState;
@@ -223,6 +223,10 @@ const newGap = () => {
 };
 const refOf = (r: Route): RouteRef => ({ coin: r.coin, index: r.index, address: r.address });
 const shortTx = (h: string) => `${h.slice(0, 8)}…`;
+/** What the destination is paid in (older records: USDT on Ethereum), its short name ("USDT", "USDC"), and its explorer. */
+const ccyOf = (t: TransferRecord): Stable => t.destination.ccy ?? 'USDT';
+const symOf = (t: TransferRecord) => PAYOUTS[ccyOf(t)].symbol;
+const txUrl = (t: TransferRecord, hash: string) => PAYOUTS[ccyOf(t)].explorerTx(hash);
 const finishedState = (t: TransferRecord) => t.state === 'done' || t.state === 'refunded';
 /** Whether a transfer's money waits in our Monero wallet (rather than going straight on). */
 const inMonero = (t: TransferRecord) => t.monero ?? t.privacy;
@@ -278,8 +282,8 @@ export function planPieces(total: bigint, n: number, min: bigint): bigint[] {
 }
 
 /** FixedFloat's minimum for a piece of `coin` → USDT, with room for the fees on the way and price moves (base units). */
-async function pieceMin(coin: Coin, now: number): Promise<bigint> {
-  const lim = await limits(coin, 'USDT', { now });
+async function pieceMin(coin: Coin, ccy: Stable, now: number): Promise<bigint> {
+  const lim = await limits(coin, ccy, { now });
   return toBase((lim.min * PIECE_MIN_FACTOR).toFixed(8), DECIMALS[coin]) ?? 0n;
 }
 
@@ -365,12 +369,12 @@ function finish(t: TransferRecord, v: OrderView, now: number): void {
   t.payoutTx = v.payoutTx;
   t.doneAt = now;
   t.settledAt ??= now;
-  advance(t, 'done', `${v.usdt ? `${v.usdt} USDT` : 'USDT'} sent to ${t.destination.label}`, now);
+  advance(t, 'done', `${v.usdt ? `${v.usdt} ${symOf(t)}` : symOf(t)} sent to ${t.destination.label}`, now);
   t.nextAt = Number.MAX_SAFE_INTEGER;
 }
 
 function usdtExpect(t: TransferRecord): Expect {
-  return { toCcy: 'USDT', toAddress: t.destination.address, label: t.destination.label };
+  return { toCcy: ccyOf(t), toAddress: t.destination.address, label: t.destination.label };
 }
 
 /** Where Privacy XMR sits while waiting: the churn subaddress once it's been moved, the vault before that. */
@@ -419,7 +423,7 @@ async function collect(t: TransferRecord, now: number): Promise<void> {
     if (now < at) return later(t, now, Math.min(at - now, 5 * M), null);
   }
 
-  const to = t.privacy ? 'XMR' : 'USDT';
+  const to = t.privacy ? 'XMR' : ccyOf(t);
   const lim = await limits(route.coin, to, { now, cached: true });
   const q = await w.quote(src, exclude);
   if (!q) return later(t, now, 30 * S, `confirmations (${s.confirmations} of ${s.required})`);
@@ -494,7 +498,7 @@ async function ethPieces(t: TransferRecord, route: Route, q: { amount: bigint; f
   const want = piecesOf(t);
   // Every piece pays its own gas, so keep that back for all of them.
   const total = q.amount - BigInt(want - 1) * q.fee;
-  const plan = total > 0n ? planPieces(total, want, await pieceMin(route.coin, now)) : [q.amount];
+  const plan = total > 0n ? planPieces(total, want, await pieceMin(route.coin, ccyOf(t), now)) : [q.amount];
   if (plan.length < 2) {
     note(t, `Too little to split into ${want} pieces: it goes in one`, now);
     t.pieces = 1;
@@ -515,7 +519,7 @@ async function splitStep(t: TransferRecord, now: number): Promise<void> {
     let n = piecesOf(t);
     let q = await w.quoteSplit(refOf(route), n, spentBy(route.id, now));
     if (!q) return later(t, now, 30 * S, 'the coins to confirm');
-    const min = await pieceMin(route.coin, now);
+    const min = await pieceMin(route.coin, ccyOf(t), now);
     let plan = planPieces(q.amount, n, min);
     if (plan.length < n && plan.length > 1) {
       n = plan.length;
@@ -573,7 +577,7 @@ async function piecesStep(t: TransferRecord, now: number): Promise<void> {
     t.usdt = String(Math.round(sent.reduce((s, k) => s + Number(k.usdt ?? 0), 0) * 1e6) / 1e6);
     t.payoutTx = sent[sent.length - 1].payoutTx;
     t.doneAt = now;
-    advance(t, 'done', `${t.usdt} USDT sent to ${t.destination.label} in ${sent.length} piece${sent.length === 1 ? '' : 's'}`, now);
+    advance(t, 'done', `${t.usdt} ${symOf(t)} sent to ${t.destination.label} in ${sent.length} piece${sent.length === 1 ? '' : 's'}`, now);
     t.nextAt = Number.MAX_SAFE_INTEGER;
     return;
   }
@@ -587,7 +591,7 @@ async function open1(t: TransferRecord, now: number): Promise<void> {
   const route = addresses.get(t.routeId)!;
   const w = hotWallet(route.coin);
   if (!w) return later(t, now, 5 * M, `the ${COINS[route.coin].name} hot wallet to be unlocked`);
-  const to = t.privacy ? 'XMR' : 'USDT';
+  const to = t.privacy ? 'XMR' : ccyOf(t);
   const blocker = pairBusy(route.coin, to, now);
   if (blocker) return later(t, now, M, `FixedFloat order ${blocker.id} (${route.coin} → ${to}) to finish first (FixedFloat's rules)`);
   const exclude = spentBy(route.id, now);
@@ -612,7 +616,7 @@ async function open1(t: TransferRecord, now: number): Promise<void> {
   t.forwardAmount = toBase(amount, DECIMALS[route.coin])!.toString();
   t.forwardInputs = q.inputs;
   persist();
-  advance(t, 'send1', `FixedFloat order ${o.id}: ${amount} ${route.coin} → ${to === 'XMR' ? 'Monero' : `USDT for ${t.destination.label}`}`, now);
+  advance(t, 'send1', `FixedFloat order ${o.id}: ${amount} ${route.coin} → ${to === 'XMR' ? 'Monero' : `${symOf(t)} for ${t.destination.label}`}`, now);
 }
 
 /** Our hot wallet pays the order: signed, saved, then broadcast. */
@@ -731,7 +735,7 @@ async function splitMonero(t: TransferRecord, now: number): Promise<void> {
     if (planned !== b.unlocked) {
       // First time, or more Monero arrived before it was signed: plan the pieces for what's there now.
       const want = t.split?.outs.length ?? piecesOf(t);
-      const plan = planPieces(b.unlocked, want, await pieceMin('XMR', now));
+      const plan = planPieces(b.unlocked, want, await pieceMin('XMR', ccyOf(t), now));
       if (plan.length < 2) {
         note(t, `Too little to split into ${want} pieces: it goes in one`, now);
         t.pieces = 1;
@@ -778,22 +782,22 @@ async function wait(t: TransferRecord, now: number): Promise<void> {
   later(t, now, M, `the Monero to unlock (${b.blocksToUnlock} blocks left)`);
 }
 
-/** The FixedFloat order XMR → USDT, for exactly what the wallet can send. */
+/** The FixedFloat order XMR → USDT (or USDC), for exactly what the wallet can send. */
 async function open2(t: TransferRecord, now: number): Promise<void> {
   if (t.leg2) return advance(t, 'send2', 'FixedFloat order ready', now);
-  const blocker = pairBusy('XMR', 'USDT', now);
-  if (blocker) return later(t, now, M, `FixedFloat order ${blocker.id} (XMR → USDT) to finish first (FixedFloat's rules)`);
+  const blocker = pairBusy('XMR', ccyOf(t), now);
+  if (blocker) return later(t, now, M, `FixedFloat order ${blocker.id} (XMR → ${ccyOf(t)}) to finish first (FixedFloat's rules)`);
   const h = hold(t);
   const b = await xmr.balance(h.index);
   if (b.unlocked === 0n || b.unlocked < b.total) return later(t, now, M, 'the Monero to unlock');
   // A sweep to ourselves, never relayed, tells the exact fee.
   const dry = await xmr.prepareSweep(h.index, h.address);
-  const lim = await limits('XMR', 'USDT', { now });
+  const lim = await limits('XMR', ccyOf(t), { now });
   const amount = floorDec(xmr.formatXmr(dry.amount), lim.precision);
   const o = await openSwap({ from: 'XMR', amount: Number(amount), expect: usdtExpect(t), transferId: t.id, ownRefund: h.address, destinationId: t.destinationId }, now);
   t.leg2 = o.id;
   persist();
-  advance(t, 'send2', `FixedFloat order ${o.id}: ${amount} XMR → USDT for ${t.destination.label}`, now);
+  advance(t, 'send2', `FixedFloat order ${o.id}: ${amount} XMR → ${symOf(t)} for ${t.destination.label}`, now);
 }
 
 async function send2(t: TransferRecord, now: number): Promise<void> {
@@ -977,7 +981,7 @@ function blank(
   privacy: boolean,
   delayHours: number | null,
   destinationId: string,
-  destination: { label: string; address: string },
+  destination: { label: string; address: string; ccy?: Stable },
   routeId: string | null,
   state: TransferState,
   now: number,
@@ -1024,14 +1028,14 @@ export async function createPrivacyTransfer(coin: Coin, delayHours: number, dest
   checkDelay(delayHours);
   checkPieces(pieces);
   const dest = destinations.need(destinationId);
-  const t = blank(coin, true, delayHours, dest.id, { label: dest.label, address: dest.address }, null, 'swap1', now);
+  const t = blank(coin, true, delayHours, dest.id, { label: dest.label, address: dest.address, ccy: dest.ccy }, null, 'swap1', now);
   t.pieces = pieces;
   const v = await xmr.newSubaddress(`wallet-click ${t.id} vault`);
   t.vault = { index: v.index, address: v.address, amount: null, confirmations: 0, unlockedAt: null };
   const o = await createOrder(coin, { now, expect: { toCcy: 'XMR', toAddress: v.address, label: 'Monero vault' }, transferId: t.id });
   t.leg1 = o.id;
   const split = pieces > 1 ? ` in ${pieces} pieces` : '';
-  note(t, `Privacy Enhanced: FixedFloat order ${o.id} pays ${COINS[coin].name} → Monero, then USDT to ${dest.label} after ${delayHours} h${split}`, now);
+  note(t, `Privacy Enhanced: FixedFloat order ${o.id} pays ${COINS[coin].name} → Monero, then ${PAYOUTS[dest.ccy].symbol} to ${dest.label} after ${delayHours} h${split}`, now);
   load().transfers.push(t);
   persist();
   return t;
@@ -1295,7 +1299,7 @@ function stepsOf(t: TransferRecord, leg1: OrderView | null, leg2: OrderView | nu
   }
 
   if (t.privacy || (!monero && !split)) {
-    const swapTo = t.privacy ? 'Monero' : 'USDT';
+    const swapTo = t.privacy ? 'Monero' : symOf(t);
     steps.push({
       key: 'swap1',
       label: `Swap to ${swapTo}`,
@@ -1329,11 +1333,11 @@ function stepsOf(t: TransferRecord, leg1: OrderView | null, leg2: OrderView | nu
       link: null,
     });
     if (split) {
-      steps.push({ key: 'pieces', label: `Swap ${n} pieces to USDT, at random times`, status: piecesStatus(), detail: kids.length ? `${sent.length} of ${kids.length} sent` : null, link: null });
+      steps.push({ key: 'pieces', label: `Swap ${n} pieces to ${symOf(t)}, at random times`, status: piecesStatus(), detail: kids.length ? `${sent.length} of ${kids.length} sent` : null, link: null });
     } else {
       steps.push({
         key: 'swap2',
-        label: 'Swap Monero to USDT',
+        label: `Swap Monero to ${symOf(t)}`,
         status: status('open2', 'swap2'),
         detail: leg2 ? `FixedFloat order ${leg2.id}${t.sweep ? `: ${t.sweep.amount} XMR` : ''}` : null,
         link: null,
@@ -1345,10 +1349,10 @@ function stepsOf(t: TransferRecord, leg1: OrderView | null, leg2: OrderView | nu
   const soFar = sent.reduce((s, k) => s + Number(k.usdt ?? 0), 0);
   steps.push({
     key: 'out',
-    label: `USDT to ${t.destination.label}`,
+    label: `${symOf(t)} to ${t.destination.label}`,
     status: t.state === 'done' ? 'done' : split ? (sent.length ? 'active' : 'pending') : last?.stage === 'sending' ? 'active' : 'pending',
-    detail: t.usdt ? `${t.usdt} USDT` : split && sent.length ? `${Math.round(soFar * 100) / 100} USDT so far` : null,
-    link: t.payoutTx ? PAYOUTS.USDT.explorerTx(t.payoutTx) : null,
+    detail: t.usdt ? `${t.usdt} ${symOf(t)}` : split && sent.length ? `${Math.round(soFar * 100) / 100} ${symOf(t)} so far` : null,
+    link: t.payoutTx ? txUrl(t, t.payoutTx) : null,
   });
   return steps;
 }
@@ -1373,7 +1377,7 @@ function pieceView(k: TransferRecord, now: number) {
     stage,
     releaseAt: k.releaseAt,
     usdt: k.usdt,
-    payoutTxUrl: k.payoutTx ? PAYOUTS.USDT.explorerTx(k.payoutTx) : null,
+    payoutTxUrl: k.payoutTx ? txUrl(k, k.payoutTx) : null,
     attention: k.attention,
     waitingFor: k.waitingFor,
   };
@@ -1423,7 +1427,9 @@ export function transferView(t: TransferRecord, now = Date.now()) {
     stage,
     received: t.received,
     usdt: t.usdt,
-    payoutTxUrl: t.payoutTx ? PAYOUTS.USDT.explorerTx(t.payoutTx) : null,
+    payoutTxUrl: t.payoutTx ? txUrl(t, t.payoutTx) : null,
+    /** What the destination is paid in: FixedFloat's code ('USDT' or 'USDCBASE'). */
+    payoutCcy: ccyOf(t),
     releaseAt: t.releaseAt,
     heldAt: t.heldAt ?? null,
     unlockedAt: t.vault?.unlockedAt ?? null,

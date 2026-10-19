@@ -21,11 +21,16 @@ export interface Meta {
   version: string;
 }
 
-/** A saved USDT (ERC-20) payout address. */
+/** What a destination is paid in: FixedFloat's currency code. */
+export type Stable = 'USDT' | 'USDCBASE';
+
+/** A saved payout address: USDT on Ethereum (ERC-20), or USDC on Base. */
 export interface Destination {
   id: string;
   label: string;
   address: string;
+  /** Older servers send none: USDT. */
+  ccy?: Stable;
   createdAt: number;
   builtIn?: boolean;
 }
@@ -67,8 +72,8 @@ export interface Order {
   payoutTx: string | null;
   payoutTxUrl: string | null;
   payoutAddress: string;
-  /** What comes out ('USDT' or 'XMR') and the name of where it goes ("Coinbase"). */
-  toCcy?: 'USDT' | 'XMR';
+  /** What comes out ('USDT', 'USDCBASE' or 'XMR') and the name of where it goes ("Coinbase"). */
+  toCcy?: Stable | 'XMR';
   payoutLabel?: string;
   destinationId?: string | null;
   transferId?: string | null;
@@ -126,6 +131,8 @@ export interface Transfer {
   coin: Coin;
   coinName: string;
   privacy: boolean;
+  /** What the destination is paid in. */
+  payoutCcy?: Stable;
   /** The money waits in Monero (Privacy Enhanced, or a Monero payment with a wait or pieces). */
   monero?: boolean;
   delayHours: number | null;
@@ -188,6 +195,7 @@ export interface Route {
   destinationId: string;
   destinationLabel: string;
   destinationAddress: string;
+  destinationCcy?: Stable;
   address: string;
   createdAt: number;
   archived: boolean;

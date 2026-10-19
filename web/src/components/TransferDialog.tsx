@@ -6,7 +6,8 @@ import { COST_HELP, costText } from '../lib/cost';
 import { sfx } from '../lib/sound';
 import { useTheme } from '../lib/themes';
 import type { Order, Stage } from '../types';
-import { AppMark, CheckBadge, CoinIcon, CoinbaseIcon, Hourglass, ModernPC, SwapMachine, UsdtIcon, WarnIcon } from './art';
+import { networkOf, symbolOf, isCoinbaseId } from '../lib/assets';
+import { AppMark, CheckBadge, CoinIcon, CoinbaseIcon, Hourglass, ModernPC, StableIcon, SwapMachine, WarnIcon } from './art';
 import { PasswordField } from './PasswordField';
 import { ModalLayer, ProgressBar, SpeedGraph, Window } from './Win98';
 
@@ -77,7 +78,7 @@ export function SpinFaces({ front, back }: { front: ReactNode; back: ReactNode }
   );
 }
 
-const SpinCoin = ({ coin }: { coin: Order['coin'] }) => <SpinFaces front={<CoinIcon coin={coin} size={30} />} back={<UsdtIcon size={30} />} />;
+const SpinCoin = ({ coin, ccy }: { coin: Order['coin']; ccy?: string }) => <SpinFaces front={<CoinIcon coin={coin} size={30} />} back={<StableIcon ccy={ccy} size={30} />} />;
 
 /** Sparks orbiting the machine on a tilted ring: a back half (behind the machine) and a front half. */
 export function Sparkles({ side, count = 6 }: { side: 'back' | 'front'; count?: number }) {
@@ -115,9 +116,9 @@ export function Station({ x, label, children, pulse, dim, working }: { x: number
 
 type Fx = { key: number; kind: 'in' | 'out' | 'done' };
 
-/** Where the USDT goes: "Coinbase" unless another destination was picked. */
+/** Where the payout goes: "Coinbase" unless another destination was picked. */
 export const payoutName = (order: Order) => order.payoutLabel ?? 'Coinbase';
-const isCoinbase = (order: Order) => !order.destinationId || order.destinationId === 'coinbase';
+const isCoinbase = (order: Order) => isCoinbaseId(order.destinationId);
 
 export function TransferStrip({ order, shown }: { order: Order; shown: Stage }) {
   const theme = useTheme();
@@ -155,13 +156,13 @@ export function TransferStrip({ order, shown }: { order: Order; shown: Stage }) 
         <span className="station-machine">
           {theme.shell === 'classic' ? <SwapMachine size={60} spinning={busy} /> : <ModernPC size={60} spinning={busy} variant={theme.shell} />}
         </span>
-        {swapping && <SpinCoin coin={order.coin} />}
+        {swapping && <SpinCoin coin={order.coin} ccy={order.toCcy} />}
         {swapping && <Sparkles side="front" />}
         {fx?.kind === 'in' && <span key={fx.key} className="swap-flash" />}
         {fx?.kind === 'out' && <Burst key={fx.key} color="#26a17b" />}
       </Station>
       <Station x={X.coinbase} label={payoutName(order)} pulse={done}>
-        {isCoinbase(order) ? <CoinbaseIcon size={44} /> : <UsdtIcon size={44} />}
+        {isCoinbase(order) ? <CoinbaseIcon size={44} /> : <StableIcon ccy={order.toCcy} size={44} />}
         {fx?.kind === 'done' && <Burst key={fx.key} color="#0052ff" center />}
         {done && (
           <motion.span className="station-badge" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 420, damping: 16 }}>
@@ -176,7 +177,7 @@ export function TransferStrip({ order, shown }: { order: Order; shown: Stage }) 
       )}
       {shown === 'sending' && (
         <Flyers from={X.swap + 6} to={X.coinbase - 5}>
-          <UsdtIcon size={24} />
+          <StableIcon ccy={order.toCcy} size={24} />
         </Flyers>
       )}
     </div>
@@ -286,7 +287,7 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
       return (
         <>
           <p className="line-main">
-            Swapping <b>{paid}</b> to USDT…
+            Swapping <b>{paid}</b> to {symbolOf(order.toCcy)}…
           </p>
           <p className="line-sub">FixedFloat is exchanging it at the market rate.</p>
         </>
@@ -295,16 +296,16 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
       return (
         <>
           <p className="line-main">
-            Sending <b>{order.usdt ? `≈ ${usdt(order.usdt)} USDT` : 'USDT'}</b> to {payoutName(order)}…
+            Sending <b>{order.usdt ? `≈ ${usdt(order.usdt)} ${symbolOf(order.toCcy)}` : symbolOf(order.toCcy)}</b> to {payoutName(order)}…
           </p>
-          <p className="line-sub">To {order.payoutAddress ? shortAddr(order.payoutAddress) : payoutName(order)} on Ethereum.</p>
+          <p className="line-sub">To {order.payoutAddress ? shortAddr(order.payoutAddress) : payoutName(order)} on {networkOf(order.toCcy)}.</p>
         </>
       );
     case 'done':
       return (
         <>
           <p className="line-main">
-            Done! <b>{order.usdt ? `${usdt(order.usdt)} USDT` : 'USDT'}</b> sent to {payoutName(order)}.
+            Done! <b>{order.usdt ? `${usdt(order.usdt)} ${symbolOf(order.toCcy)}` : symbolOf(order.toCcy)}</b> sent to {payoutName(order)}.
           </p>
           {order.cost && (
             <p className="line-cost" title={COST_HELP}>
@@ -312,7 +313,7 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
             </p>
           )}
           <p className="line-sub">
-            {paid} in, USDT out to {order.payoutAddress ? shortAddr(order.payoutAddress) : payoutName(order)}.{' '}
+            {paid} in, {symbolOf(order.toCcy)} out to {order.payoutAddress ? shortAddr(order.payoutAddress) : payoutName(order)}.{' '}
             {order.payoutTxUrl && (
               <a href={order.payoutTxUrl} target="_blank" rel="noreferrer">
                 View payout
@@ -439,7 +440,7 @@ export function TransferDialog({ order, autoplay, onClose, onUpdate }: DialogPro
   const showProgress = shown !== 'attention' && shown !== 'expired';
   // Windows 10/11 copy dialogs title themselves with the percentage.
   const title =
-    shown === 'done' ? 'Transfer complete' : modern && showProgress && shown !== 'waiting' ? `${Math.round(percent)}% complete` : `Swapping ${order.coinName} to USDT`;
+    shown === 'done' ? 'Transfer complete' : modern && showProgress && shown !== 'waiting' ? `${Math.round(percent)}% complete` : `Swapping ${order.coinName} to ${symbolOf(order.toCcy)}`;
 
   return (
     <ModalLayer>

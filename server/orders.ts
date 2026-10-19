@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 import { ChainUnavailable, depositTotal, findSender, formatBase } from './chain.js';
-import { COINS, PAYOUTS, config, isChecksumAddress, type Coin, type PayoutCcy } from './config.js';
+import { COINS, PAYOUTS, config, isChecksumAddress, isStable, type Coin, type PayoutCcy } from './config.js';
 import { destinations } from './destinations.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
 import { FfError, budgetLeft, ff, type FfOrder } from './fixedfloat.js';
@@ -64,7 +64,7 @@ export interface OrderRecord {
   chainBase?: string;
   /** When to look at the deposit address on-chain again (runtime only). */
   chainNextAt?: number;
-  /** What FixedFloat must pay out ('USDT' on Ethereum or 'XMR'), where to, and the name shown for it. Checked at creation. */
+  /** What FixedFloat must pay out ('USDT' on Ethereum, 'USDCBASE' or 'XMR'), where to, and the name shown for it. Checked at creation. */
   toCcy: PayoutCcy;
   toAddress: string;
   toLabel: string;
@@ -473,11 +473,11 @@ export function startPoller(log: FastifyBaseLogger): () => void {
 const EXCHANGED = new Set(['EXCHANGE', 'WITHDRAW', 'DONE']);
 const priceTriedAt = new Map<string, number>();
 
-/** A float order's rate is set when FixedFloat starts the exchange: note both coins' dollar prices then (USDT = $1). */
+/** A float order's rate is set when FixedFloat starts the exchange: note both coins' dollar prices then (USDT and USDC = $1). */
 async function notePrices(r: OrderRecord, now: number): Promise<void> {
   if (r.prices || !EXCHANGED.has(r.ff.status) || now - (priceTriedAt.get(r.id) ?? 0) < M) return;
   priceTriedAt.set(r.id, now);
-  const usd = async (c: Coin | PayoutCcy) => (c === 'USDT' ? 1 : (usdPrice(c, now, 5 * M) ?? (await limits(c, 'USDT', { now, cached: true })).usdPerCoin));
+  const usd = async (c: Coin | PayoutCcy) => (isStable(c) ? 1 : (usdPrice(c, now, 5 * M) ?? (await limits(c, 'USDT', { now, cached: true })).usdPerCoin));
   try {
     const [from, to] = [await usd(r.coin), await usd(r.toCcy)];
     if (!from || !to) return;
@@ -524,12 +524,12 @@ export function checkCreated(o: FfOrder, coin: Coin, expect: Expect = COINBASE_E
   if (!o.token) problems.push('it came without an access token');
   if (!o.from?.address) problems.push('it has no deposit address');
   if (o.from?.code !== COINS[coin].code) problems.push(`it expects ${o.from?.code} instead of ${COINS[coin].code}`);
-  // FixedFloat codes name the network too ("USDT" is ERC-20; Tron is "USDTTRC"), so the code is the main check.
-  if (o.to?.code !== expect.toCcy || (expect.toCcy === 'USDT' && o.to?.network && o.to.network !== want.network)) {
+  // FixedFloat codes name the network too ("USDT" is ERC-20; Tron is "USDTTRC"; "USDCBASE" is Base), so the code is the main check.
+  if (o.to?.code !== expect.toCcy || (isStable(expect.toCcy) && o.to?.network && o.to.network !== want.network)) {
     problems.push(`it pays out ${o.to?.code} on ${o.to?.network} instead of ${want.label}`);
   }
   const paidTo = String(o.to?.address ?? '');
-  const same = expect.toCcy === 'USDT' ? paidTo.toLowerCase() === expect.toAddress.toLowerCase() : paidTo === expect.toAddress;
+  const same = isStable(expect.toCcy) ? paidTo.toLowerCase() === expect.toAddress.toLowerCase() : paidTo === expect.toAddress;
   if (!same) problems.push(`its payout address is not your ${expect.label} address`);
   if (o.type !== 'float') problems.push('it is not a float-rate order');
   if (problems.length) throw new Error(`Refusing FixedFloat order ${o.id ?? ''}: ${problems.join('; ')}.`);
@@ -629,7 +629,7 @@ export async function createOrder(
   if (recentCreates.length >= CREATES_PER_MINUTE) throw new HttpError(429, 'Easy there: three new addresses a minute at most. Try again in a few seconds.');
 
   const dest = opts.expect ? null : destinations.need(opts.destinationId);
-  const expect: Expect = opts.expect ?? { toCcy: 'USDT', toAddress: dest!.address, label: dest!.label };
+  const expect: Expect = opts.expect ?? { toCcy: dest!.ccy, toAddress: dest!.address, label: dest!.label };
   const lim = await limits(coin, expect.toCcy, { now });
   const nominal = ceilTo(Math.min(lim.min * 3, lim.max), lim.precision);
   recentCreates.push(now);

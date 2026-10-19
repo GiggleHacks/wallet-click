@@ -3,7 +3,8 @@ import { useEffect, useReducer, useRef } from 'react';
 import { trimAmount, usdt } from '../lib/format';
 import { sfx } from '../lib/sound';
 import type { Transfer } from '../types';
-import { BombIcon, BoomBurst, UsdtIcon } from './art';
+import { symbolOf } from '../lib/assets';
+import { BombIcon, BoomBurst, StableIcon } from './art';
 
 /**
  * A transfer with a long wait (in Monero, or held at our own address) shows up on the desktop as a cartoon time
@@ -129,14 +130,14 @@ const label = (b: Bomb) => {
   const what = `${kind}${t.received ? ` of ${trimAmount(t.received)} ${t.coin}` : ''} to ${t.destinationLabel}`;
   const piece = t.state === 'pieces' ? ' until the next piece' : '';
   if (b.phase === 'attention') return `${what}: needs you`;
-  if (b.phase === 'swapping') return `${what}: the wait is over, swapping to USDT`;
+  if (b.phase === 'swapping') return `${what}: the wait is over, swapping to ${symbolOf(t.payoutCcy)}`;
   if (b.phase === 'armed') return `${what}: a ${countdown(b.left)} wait starts once ${viaMonero(t) ? 'the Monero unlocks' : 'the payment is confirmed'}`;
   return `${what}: ${countdown(b.left)} left${piece}`;
 };
 
 function Art({ b, size }: { b: Bomb; size: number }) {
   if (b.boom) return <BoomBurst size={size} />;
-  if (b.phase === 'swapping') return <UsdtIcon size={Math.round(size * 0.8)} />;
+  if (b.phase === 'swapping') return <StableIcon ccy={b.transfer.payoutCcy} size={Math.round(size * 0.8)} />;
   return <BombIcon size={size} lit={b.phase === 'ticking'} />;
 }
 

@@ -1,6 +1,6 @@
 # Wallet Click
 
-Get paid in **Bitcoin**, **Ethereum** or **Monero**: at a brand-new address every time, or at a **permanent address** you save in your phone wallet. Whatever arrives is swapped to **USDT** and sent to **Coinbase** (or another USDT address in your address book). **Send options** can route it through Monero first, make it wait before it goes on, and split it into 2–4 pieces sent at random times. You watch it all happen in a retro "copying files" style window, in one of four desktop themes.
+Get paid in **Bitcoin**, **Ethereum** or **Monero**: at a brand-new address every time, or at a **permanent address** you save in your phone wallet. Whatever arrives is swapped to **USDT** (on Ethereum) or **USDC** (on Base) and sent to **Coinbase** (or another address in your address book). **Send options** can route it through Monero first, make it wait before it goes on, and split it into 2–4 pieces sent at random times. You watch it all happen in a retro "copying files" style window, in one of four desktop themes.
 
 ## How it works
 
@@ -16,7 +16,9 @@ The server polls FixedFloat and the chain for every order, so payments are picke
 
 ### Address Book
 
-The USDT (ERC-20) addresses swaps may pay out to. **Coinbase** is built in. Adding or removing one asks for the password again, and the address must carry its EIP-55 checksum (copy it from the exchange's deposit page). Pick the destination for new addresses on the main window.
+The addresses swaps may pay out to, each for one asset: **USDT on Ethereum** (ERC-20) or **USDC on Base**. **Coinbase** (USDT) and **Coinbase (USDC on Base)** are built in; set their addresses with `PAYOUT_ADDRESS` and `PAYOUT_ADDRESS_USDC_BASE`. Adding or removing one asks for the password again, and the address must carry its EIP-55 checksum (copy it from the exchange's deposit page for that asset: an address on the wrong network can lose the money). The same address may be saved once per asset. Pick the destination for new addresses on the main window. FixedFloat pays USDC on Base as `USDCBASE`, and every order is checked to pay exactly that, on Base, to exactly the saved address.
+
+Base network fees are much lower than Ethereum's, so USDC on Base is usually the cheaper payout, most of all with pieces (each piece is its own payout).
 
 ### Send options
 
@@ -81,9 +83,9 @@ Backgrounds can be changed on their own on the **Background** tab. All wallpaper
 ## Safety
 
 **Payouts**
-- The payout address is fixed on the server: the built-in Coinbase address, or `PAYOUT_ADDRESS`. Its EIP-55 checksum is checked at boot.
+- The payout addresses are fixed on the server: the built-in Coinbase addresses, or `PAYOUT_ADDRESS` and `PAYOUT_ADDRESS_USDC_BASE`. Their EIP-55 checksums are checked at boot.
 - The browser only ever says "BTC" or "ETH".
-- Every new FixedFloat order is checked before its address is shown. It must be a float-rate order from the coin you picked, paying USDT on Ethereum to exactly that address. Anything else is refused.
+- Every new FixedFloat order is checked before its address is shown. It must be a float-rate order from the coin you picked, paying the chosen asset (USDT on Ethereum, or USDC on Base) on the right network to exactly that address. Anything else is refused.
 - The FixedFloat order token, which could redirect a refund, never leaves the server.
 
 **Late or unusual payments.** FixedFloat flags these as an "emergency", and the server answers as follows.

@@ -14,11 +14,13 @@ interface Props {
   /** The Bitcoin/Ethereum hot wallet is unlocked. */
   walletOk: boolean;
   testDelayMin: number | null;
+  /** What the destination is paid in ("USDT", "USDC"). */
+  sym?: string;
   onClose(): void;
 }
 
 /** How the coin buttons send what comes in: straight or through Monero, a wait, and how many pieces. */
-export function SendOptionsDialog({ value, delays, piecesMax, moneroOk, walletOk, testDelayMin, onClose }: Props) {
+export function SendOptionsDialog({ value, delays, piecesMax, moneroOk, walletOk, testDelayMin, sym, onClose }: Props) {
   const [o, setO] = useState<SendOptions>(value.route === 'monero' && !moneroOk ? { ...value, route: 'direct' } : value);
   const save = () => {
     saveSendOptions(o);
@@ -32,7 +34,7 @@ export function SendOptionsDialog({ value, delays, piecesMax, moneroOk, walletOk
           <ClockIcon size={36} />
           <p>How the coin buttons send what you're paid. Your choice stays until you change it; each permanent address keeps its own.</p>
         </div>
-        <SendOptionsFields value={o} onChange={setO} delays={delays} piecesMax={piecesMax} moneroOk={moneroOk} walletOk={walletOk} />
+        <SendOptionsFields value={o} onChange={setO} delays={delays} piecesMax={piecesMax} moneroOk={moneroOk} walletOk={walletOk} sym={sym} />
         {testDelayMin !== null && (
           <p className="line-sub">
             <b>Test mode on this server:</b> every wait is {testDelayMin} minutes, and pieces are seconds apart.

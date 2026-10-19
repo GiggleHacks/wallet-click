@@ -4,6 +4,7 @@ import { CoinIcon, HouseIcon, ShieldIcon, WarnIcon } from '../components/art';
 import { DelaySlider } from '../components/DelaySlider';
 import { QrCode } from '../components/QrCode';
 import { MinimumNote, SendOptionsFields } from '../components/SendOptions';
+import { destName, symbolOf } from '../lib/assets';
 import { minimumFor, usdText, useMinimums } from '../lib/minimums';
 import { ModalLayer, Window } from '../components/Win98';
 import { shortAddr, trimAmount, usdt } from '../lib/format';
@@ -48,7 +49,7 @@ function SendForm({ route }: { route: Route }) {
     setBusy(true);
     setError('');
     try {
-      setQuote(await api.quote(route.coin, Number(usd), route.mode));
+      setQuote(await api.quote(route.coin, Number(usd), route.mode, route.destinationCcy));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't get a price");
     } finally {
@@ -74,7 +75,7 @@ function SendForm({ route }: { route: Route }) {
             ≈ <b>
               {trimAmount(quote.amount)} {route.coin}
             </b>{' '}
-            → about <b>{usdt(quote.usdtEstimate)} USDT</b> in {route.destinationLabel}
+            → about <b>{usdt(quote.usdtEstimate)} {symbolOf(route.destinationCcy)}</b> in {route.destinationLabel}
           </p>
           {need && !below && Number(usd) < need.min && (
             <p className="error-text">
@@ -125,6 +126,7 @@ function NewForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const privacy = coin !== 'XMR' && available.privacy && opts.route === 'monero';
+  const sym = symbolOf(destinations.find((d) => d.id === dest)?.ccy);
 
   async function go() {
     setBusy(true);
@@ -158,14 +160,14 @@ function NewForm({
             </button>
           ))}
         </div>
-        <SendOptionsFields value={opts} onChange={setOpts} delays={delays} moneroOk={available.privacy} coin={coin} />
+        <SendOptionsFields value={opts} onChange={setOpts} delays={delays} moneroOk={available.privacy} coin={coin} sym={sym} />
         {privacy && <p className="line-sub">Payments collect here until they reach FixedFloat's ≈ $110 minimum for swapping into Monero.</p>}
         <label className="field">
-          <span className="lbl">USDT goes to (fixed for this address):</span>
+          <span className="lbl">{sym} goes to (fixed for this address):</span>
           <select className="input98 select98" value={dest} onChange={(e) => setDest(e.target.value)}>
             {destinations.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.label} ({shortAddr(d.address)})
+                {destName(d)} ({shortAddr(d.address)})
               </option>
             ))}
           </select>
@@ -290,7 +292,7 @@ export function Addresses({ delays, destinations, seedBackupPending, onClose }: 
               </div>
               <div className="receive-info">
                 <span className="lbl">
-                  {NAMES[current.coin]} → {current.mode === 'privacy' ? 'Monero → ' : ''}USDT in <b>{current.destinationLabel}</b> · {waitText(current.delayHours ?? 0)} · {piecesText(current.pieces ?? 1)}
+                  {NAMES[current.coin]} → {current.mode === 'privacy' ? 'Monero → ' : ''}{symbolOf(current.destinationCcy)} in <b>{current.destinationLabel}</b> · {waitText(current.delayHours ?? 0)} · {piecesText(current.pieces ?? 1)}
                 </span>
                 <div className="address-box" onClick={() => void copyText(current.address).then((ok) => ok && (sfx.copy(), setCopied(true)))} title="Click to copy">
                   {current.address}

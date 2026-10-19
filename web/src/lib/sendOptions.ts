@@ -55,8 +55,8 @@ export const waitText = (h: number) => (h ? `wait ${h} h` : 'no wait');
 export const piecesText = (n: number) => (n > 1 ? `${n} pieces` : '1 piece');
 
 /** "Through Monero · wait 4 h · 4 pieces". */
-export function optionsSummary(o: SendOptions): string {
-  const route = o.route === 'monero' ? 'Through Monero' : 'Straight to USDT';
+export function optionsSummary(o: SendOptions, sym = 'USDT'): string {
+  const route = o.route === 'monero' ? 'Through Monero' : `Straight to ${sym}`;
   return `${route} · ${waitText(o.delayHours)} · ${piecesText(o.pieces)}`;
 }
 

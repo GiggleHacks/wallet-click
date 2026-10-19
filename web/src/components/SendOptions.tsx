@@ -62,10 +62,12 @@ interface Props {
   walletOk?: boolean;
   /** For one coin (a permanent address); unset on the main window, where it applies to every coin button. */
   coin?: Coin;
+  /** What the destination is paid in ("USDT", "USDC"). */
+  sym?: string;
 }
 
 /** Route, wait and pieces: the same three choices on the main window and for a permanent address. */
-export function SendOptionsFields({ value: o, onChange, delays, piecesMax = 4, moneroOk, walletOk = true, coin }: Props) {
+export function SendOptionsFields({ value: o, onChange, delays, piecesMax = 4, moneroOk, walletOk = true, coin, sym = 'USDT' }: Props) {
   const minimums = useMinimums();
   const set = (patch: Partial<SendOptions>) => onChange({ ...o, ...patch });
   const isXmr = coin === 'XMR';
@@ -78,7 +80,7 @@ export function SendOptionsFields({ value: o, onChange, delays, piecesMax = 4, m
           <legend>Route</legend>
           <div className="seg98" role="radiogroup" aria-label="Route">
             <button type="button" role="radio" aria-checked={!monero} className={`btn98 seg-btn ${!monero ? 'is-pressed' : ''}`} onClick={() => set({ route: 'direct' })}>
-              Straight to USDT
+              Straight to {sym}
             </button>
             <button
               type="button"

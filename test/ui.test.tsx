@@ -79,6 +79,14 @@ let serverOrders: Order[] = [];
 let serverTransfers: Transfer[] = [];
 let transferBody: unknown = null;
 let onceBody: unknown = null;
+let destinationBody: unknown = null;
+/** The address book request fails (a failing call for the Logs window to show). */
+let destinationsDown = false;
+const BASE_ADDR = '0xBA5eba5EBa5EbA5eBA5EBA5eBa5EBa5ebA5ebA5E';
+const coinbaseDest = { id: 'coinbase', label: 'Coinbase', address: PAYOUT, ccy: 'USDT' as const, createdAt: 0, builtIn: true };
+const coinbaseBaseDest = { id: 'coinbase-base', label: 'Coinbase (USDC on Base)', address: BASE_ADDR, ccy: 'USDCBASE' as const, createdAt: 0, builtIn: true };
+/** What GET /api/destinations answers (a test can leave only Coinbase, as an older server would). */
+let serverDestinations: { id: string; label: string; address: string; ccy: 'USDT' | 'USDCBASE'; createdAt: number; builtIn?: boolean }[] = [coinbaseDest, coinbaseBaseDest];
 const serverLog = [
   { id: 1, run: 1, count: 1, at: Date.now() - 60_000, first: Date.now() - 60_000, level: 'info', msg: '[order K7Q2XZ] FixedFloat: NEW → PENDING, received 0.0015 BTC' },
   { id: 2, run: 2, count: 3, at: Date.now() - 30_000, first: Date.now() - 50_000, level: 'warn', msg: "[order K7Q2XZ] couldn't check with FixedFloat: timeout" },
@@ -138,6 +146,13 @@ function route(method: string, path: string, body: unknown): [number, unknown] {
     transferBody = body;
     serverTransfers = [privacyTransfer()];
     return [200, serverTransfers[0]];
+  }
+  if (path === '/api/destinations' && method === 'GET') return destinationsDown ? [404, { error: 'unmocked GET /api/destinations' }] : [200, { destinations: serverDestinations }];
+  if (path === '/api/destinations' && method === 'POST') {
+    destinationBody = body;
+    const b = body as { label: string; address: string; ccy: 'USDT' | 'USDCBASE' };
+    serverDestinations = [...serverDestinations, { id: 'd_new', label: b.label, address: b.address, ccy: b.ccy, createdAt: Date.now() }];
+    return [200, { destinations: serverDestinations }];
   }
   if (path === '/api/minimums') return [200, { BTC: { direct: 10.42, intoMonero: 109 }, ETH: { direct: 12.72, intoMonero: 109 }, XMR: { direct: 9.97, intoMonero: null }, pieceFactor: 1.5 }];
   if (path === '/api/addresses/once' && method === 'POST') {
@@ -580,6 +595,7 @@ describe('Wallet Click UI', () => {
 
   it('shows the server log and this browser’s errors in a Logs window', async () => {
     status = { ...status, authed: true };
+    destinationsDown = true;
     serverOrders = [];
     serverTransfers = [];
     await mount();
@@ -597,7 +613,91 @@ describe('Wallet Click UI', () => {
     expect(text()).toContain('at createOrder (orders.js:12)');
     await click(button('Close'), 'close');
     await waitFor(() => !host.querySelector('.win-logs'), 'Logs closed', 3000);
+    destinationsDown = false;
   });
+
+  it('offers Coinbase for USDC on Base, and sends the one-time address and Privacy orders to it', async () => {
+    status = { ...status, authed: true };
+    serverOrders = [];
+    serverTransfers = [];
+    localStorage.removeItem('wc.sendOptions');
+    localStorage.removeItem('wc.destination');
+    await mount();
+    await waitFor(() => !!host.querySelector('#dest-pick'), 'destination menu');
+    const menu = host.querySelector('#dest-pick') as HTMLSelectElement;
+    expect([...menu.options].map((o) => o.textContent)).toEqual(['Coinbase', 'Coinbase (USDC on Base)']);
+    expect(text()).toContain('Everything arrives as USDT in');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(menu, 'coinbase-base');
+      menu.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(text()).toContain('Everything arrives as USDC in');
+    expect(text()).toContain('Straight to USDC · no wait · 1 piece');
+    expect(host.querySelector('.payout-line svg[aria-label="USDC"]')).toBeTruthy();
+
+    // A coin button with a wait names the Base destination (never an address) and the one-time address says USDC.
+    localStorage.setItem('wc.sendOptions', JSON.stringify({ route: 'direct', delayHours: 4, pieces: 1 }));
+    act(() => window.dispatchEvent(new Event('wc:prefs')));
+    await click(button('Bitcoin'), 'Bitcoin');
+    expect(onceBody).toEqual({ coin: 'BTC', delayHours: 4, pieces: 1, destinationId: 'coinbase-base' });
+    await waitFor(() => text().includes('bc1qonetimeaddress'), 'one-time address');
+    localStorage.removeItem('wc.sendOptions');
+    localStorage.removeItem('wc.destination');
+  });
+
+  it('saves a USDC-on-Base address in the Address Book, with the password and the asset', async () => {
+    status = { ...status, authed: true };
+    serverOrders = [];
+    serverTransfers = [];
+    serverDestinations = [coinbaseDest, coinbaseBaseDest];
+    await mount();
+    await waitFor(() => !!desktopIcon('Address Book'), 'Address Book icon');
+    await click(desktopIcon('Address Book'), 'Address Book');
+    await waitFor(() => !!host.querySelector('.win-book'), 'Address Book');
+    expect(text()).toContain('USDC on Base');
+    await click(button('Add…'), 'Add…');
+    const inBook = (label: string) => [...host.querySelectorAll('.win-book button')].find((b) => b.textContent?.includes(label));
+    expect(text()).toContain('USDT on Ethereum deposit address');
+    await click(inBook('USDC on Base'), 'USDC on Base');
+    expect(text()).toContain('USDC on Base deposit address');
+    const inputs = [...host.querySelectorAll('.win-book input')] as HTMLInputElement[];
+    await setInput(inputs[0], 'Kraken');
+    await setInput(inputs[1], '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed');
+    await setInput(host.querySelector('.win-book input.pw-input') as HTMLInputElement, 'my password 123');
+    await click(inBook('Save'), 'Save');
+    expect(destinationBody).toEqual({ label: 'Kraken', address: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed', ccy: 'USDCBASE', password: 'my password 123' });
+    await waitFor(() => [...host.querySelectorAll('.win-book .book-name')].some((e) => e.textContent === 'Kraken'), 'new destination listed');
+    serverDestinations = [coinbaseDest, coinbaseBaseDest];
+  });
+
+  it('shows USDC on a finished transfer to a Base destination, with its Basescan link', async () => {
+    status = { ...status, authed: true };
+    serverOrders = [];
+    serverTransfers = [
+      privacyTransfer({
+        id: 't_base',
+        state: 'done',
+        stage: 'done',
+        payoutCcy: 'USDCBASE',
+        destinationId: 'coinbase-base',
+        destinationLabel: 'Coinbase (USDC on Base)',
+        destinationAddress: BASE_ADDR,
+        received: '0.05',
+        usdt: '99.10',
+        payoutTxUrl: 'https://basescan.org/tx/0xbase',
+        steps: [{ key: 'out', label: 'USDC to Coinbase (USDC on Base)', status: 'done', detail: '99.10 USDC', link: 'https://basescan.org/tx/0xbase' }],
+      }),
+    ];
+    await mount();
+    await waitFor(() => host.querySelectorAll('.listview tbody tr').length > 0, 'transfer row');
+    await click(host.querySelector('.listview tbody tr') ?? undefined, 'transfer row');
+    await waitFor(() => text().includes('Transfer complete'), 'transfer window', 20_000);
+    await waitFor(() => text().includes('sent to Coinbase (USDC on Base)'), 'done line', 20_000);
+    expect(text()).toContain('99.10 USDC');
+    expect(text()).not.toContain('99.10 USDT');
+    expect(host.querySelector('a[href="https://basescan.org/tx/0xbase"]')).toBeTruthy();
+    serverTransfers = [];
+  }, 45_000);
 
   it('always shows the version in the taskbar', async () => {
     status = { ...status, authed: true };

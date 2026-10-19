@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { addresses } from '../addresses.js';
-import { COINS, DELAYS, PIECE_MIN_FACTOR, PIECES_MAX, config, type Coin, type PayoutCcy } from '../config.js';
+import { COINS, DELAYS, PIECE_MIN_FACTOR, PIECES_MAX, STABLES, config, type Coin, type PayoutCcy, type Stable } from '../config.js';
 import { UserError } from '../errors.js';
 import { limits } from '../orders.js';
 import { changeDelay, createPrivacyTransfer, releaseNow, retry, transferView, transfers } from '../transfers.js';
@@ -13,13 +13,13 @@ const pieces = z.number().int().min(1).max(PIECES_MAX);
 const coin = z.enum(['BTC', 'ETH', 'XMR']);
 
 /** Rough "what arrives" for paying `usd` worth of a coin into a route, using FixedFloat's current rates. */
-async function quote(c: Coin, usd: number, privacy: boolean) {
-  const first = await limits(c, privacy ? 'XMR' : 'USDT', { cached: true });
+async function quote(c: Coin, usd: number, privacy: boolean, ccy: Stable) {
+  const first = await limits(c, privacy ? 'XMR' : ccy, { cached: true });
   if (!first.usdPerCoin || !first.outPerCoin) throw new UserError("FixedFloat didn't give a rate just now. Try again shortly.");
   const amount = usd / first.usdPerCoin;
   let out = amount * first.outPerCoin;
   if (privacy) {
-    const second = await limits('XMR', 'USDT', { cached: true });
+    const second = await limits('XMR', ccy, { cached: true });
     out = out * (second.outPerCoin ?? 0);
   }
   return {
@@ -75,6 +75,7 @@ export function registerTransfers(app: FastifyInstance): void {
     destinationId: r.destinationId,
     destinationLabel: r.destination.label,
     destinationAddress: r.destination.address,
+    destinationCcy: r.destination.ccy ?? 'USDT',
     address: r.address,
     createdAt: r.createdAt,
     archived: r.archived,
@@ -132,8 +133,10 @@ export function registerTransfers(app: FastifyInstance): void {
     };
   });
 
-  app.get<{ Querystring: { coin?: string; usd?: string; mode?: string } }>('/api/quote', async (req) => {
-    const q = z.object({ coin, usd: z.coerce.number().positive().max(1_000_000), mode: z.enum(['direct', 'privacy']).default('direct') }).parse(req.query);
-    return quote(q.coin, q.usd, q.mode === 'privacy');
+  app.get<{ Querystring: { coin?: string; usd?: string; mode?: string; ccy?: string } }>('/api/quote', async (req) => {
+    const q = z
+      .object({ coin, usd: z.coerce.number().positive().max(1_000_000), mode: z.enum(['direct', 'privacy']).default('direct'), ccy: z.enum(STABLES as [Stable, ...Stable[]]).default('USDT') })
+      .parse(req.query);
+    return quote(q.coin, q.usd, q.mode === 'privacy', q.ccy);
   });
 }

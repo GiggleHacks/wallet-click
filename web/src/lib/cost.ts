@@ -9,7 +9,7 @@ export function costText(c: Cost): string {
   return `Swap cost ≈ ${money(c.usd)} (${pct})${c.usd < 0 ? ': the price rose while it swapped' : ''}`;
 }
 
-export const COST_HELP = "FixedFloat's cut plus network fees: the dollar value of what was paid in, when the swap ran, minus the USDT that arrived.";
+export const COST_HELP = "FixedFloat's cut plus network fees: the dollar value of what was paid in, when the swap ran, minus what arrived (USDT or USDC).";
 
 /** Privacy Enhanced: how much the Monero price moved during the wait (not a cost, so it's shown apart). */
 export function driftText(c: Cost): string | null {

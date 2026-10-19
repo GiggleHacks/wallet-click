@@ -6,6 +6,7 @@ import { clock, trimAmount, usdt } from '../lib/format';
 import { sfx } from '../lib/sound';
 import type { Order, Route, Transfer } from '../types';
 import { transferStatus } from '../components/JourneyDialog';
+import { symbolOf } from '../lib/assets';
 import { MinimumNote } from '../components/SendOptions';
 import { useMinimums } from '../lib/minimums';
 import { STAGE_LABEL } from './Home';
@@ -87,7 +88,7 @@ export function ReceiveOnce({ route, transfer, offline, creating, onNew, onBack,
               {route.coin === 'ETH' && ' Not Base, Arbitrum or any other network.'}
             </li>
             <li>
-              A one-time address of your own wallet. The payment {wait}, then goes to <b>{route.destinationLabel}</b> as USDT{pieces}.
+              A one-time address of your own wallet. The payment {wait}, then goes to <b>{route.destinationLabel}</b> as {symbolOf(route.destinationCcy)}{pieces}.
             </li>
             <li>It's watched for 30 days.</li>
           </ul>
@@ -136,6 +137,8 @@ interface Props {
   order: Order;
   /** A Privacy transfer that goes on in pieces: how many. */
   pieces?: number;
+  /** A Privacy transfer: what its destination is paid in. */
+  payoutCcy?: string;
   /** The browser can't reach the server right now. */
   offline?: boolean;
   /** The "How it works" run: fake address, nothing to pay. */
@@ -146,7 +149,7 @@ interface Props {
   onShowProgress(): void;
 }
 
-export function Receive({ order, pieces = 1, demo, offline, creating, onNew, onBack, onShowProgress }: Props) {
+export function Receive({ order, pieces = 1, payoutCcy, demo, offline, creating, onNew, onBack, onShowProgress }: Props) {
   const [copied, setCopied] = useState(false);
   const minimums = useMinimums();
   const [now, setNow] = useState(Date.now());
@@ -219,7 +222,7 @@ export function Receive({ order, pieces = 1, demo, offline, creating, onNew, onB
                 ? "Less than the minimum can't be swapped; Monero hides who paid, so you'd give a refund address."
                 : 'Less than the minimum is sent back to the sender.'}
             </li>
-            <li>{order.toCcy === 'XMR' ? `Becomes Monero first, then USDT (Privacy Enhanced)${pieces > 1 ? `, in ${pieces} pieces` : ''}.` : `Arrives as USDT in ${payout}.`}</li>
+            <li>{order.toCcy === 'XMR' ? `Becomes Monero first, then ${symbolOf(payoutCcy)} (Privacy Enhanced)${pieces > 1 ? `, in ${pieces} pieces` : ''}.` : `Arrives as ${symbolOf(order.toCcy)} in ${payout}.`}</li>
             <li>
               {left !== null && left > 0 ? (
                 <>
@@ -246,7 +249,7 @@ export function Receive({ order, pieces = 1, demo, offline, creating, onNew, onB
             <CoinIcon coin={order.coin} size={18} />
             <span>
               {order.stage === 'done'
-                ? `Done: ${order.usdt ? `${usdt(order.usdt)} USDT` : 'USDT'} sent to ${payout}.`
+                ? `Done: ${order.usdt ? `${usdt(order.usdt)} ${symbolOf(order.toCcy)}` : symbolOf(order.toCcy)} sent to ${payout}.`
                 : `${STAGE_LABEL[order.stage]}${order.received ? `: ${trimAmount(order.received)} ${order.coin}` : ''}`}
             </span>
             <button type="button" className="btn98" onClick={onShowProgress}>

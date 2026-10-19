@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { AppMark, BookIcon, ClockIcon, CoinIcon, EyeIcon, HouseIcon, PlayIcon, ShieldIcon, UsdtIcon } from '../components/art';
+import { AppMark, BookIcon, ClockIcon, CoinIcon, EyeIcon, HouseIcon, PlayIcon, ShieldIcon, StableIcon } from '../components/art';
+import { destName, symbolOf } from '../lib/assets';
 import { transferStatus } from '../components/JourneyDialog';
 import { Window } from '../components/Win98';
 import { setPref, usePref } from '../lib/prefs';
@@ -119,7 +120,7 @@ function OrderList({ orders, transfers, onOpen, onOpenTransfer }: { orders: Orde
           <tr>
             <th>Coin</th>
             <th>Paid</th>
-            <th>USDT</th>
+            <th>Paid out</th>
             <th>Status</th>
             <th>When</th>
           </tr>
@@ -189,6 +190,7 @@ export function Home({ meta, orders, transfers, onOpenTransfer, sendOptions, onS
   const safe = safeForAll(useMinimums(), sendOptions);
   const toggleHide = () => setPref('hideFigures', !hideFigures);
   const dest = destinations.find((d) => d.id === destinationId) ?? destinations[0];
+  const sym = symbolOf(dest?.ccy);
   const payoutAddress = dest?.address ?? meta?.payout.address;
   const active =
     orders.filter((o) => ['waiting', 'received', 'swapping', 'sending'].includes(o.stage)).length +
@@ -239,7 +241,7 @@ export function Home({ meta, orders, transfers, onOpenTransfer, sendOptions, onS
           {sendOptions.route === 'monero' ? <ShieldIcon size={30} /> : <ClockIcon size={30} />}
           <span className="send-box-text">
             <b>Send options</b>
-            <small>{optionsSummary(sendOptions)}</small>
+            <small>{optionsSummary(sendOptions, sym)}</small>
             {safe !== null && <small className="send-box-min">To be safe, send at least {usdText(safe)}</small>}
           </span>
           <button type="button" className="btn98 btn-small" onClick={onSendOptions}>
@@ -255,15 +257,15 @@ export function Home({ meta, orders, transfers, onOpenTransfer, sendOptions, onS
         </button>
       </div>
       <div className="payout-line">
-        <UsdtIcon size={20} />
+        <StableIcon ccy={dest?.ccy} size={20} />
         <label htmlFor="dest-pick">
-          Everything arrives as <b>USDT</b> in
+          Everything arrives as <b>{sym}</b> in
         </label>
         {destinations.length > 1 ? (
           <select id="dest-pick" className="input98 select98" value={dest?.id ?? ''} onChange={(e) => onDestination(e.target.value)}>
             {destinations.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.label}
+                {destName(d)}
               </option>
             ))}
           </select>

@@ -12,6 +12,7 @@ import { DragBounds, ModalLayer, Window } from './components/Win98';
 import { DEMO_ID, DEMO_TRANSFER, useDemo, type DemoKind } from './lib/demo';
 import { costText } from './lib/cost';
 import { trimAmount, usdt } from './lib/format';
+import { symbolOf } from './lib/assets';
 import { getChoice, setChoice, usePref } from './lib/prefs';
 import { plainAddress, throughMonero, useSendOptions } from './lib/sendOptions';
 import { applyThemeAttr, saveMode, savedMode, saveTheme, savedTheme, ThemeContext, useDark, type Mode, type Theme } from './lib/themes';
@@ -186,7 +187,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
         pStages.current.set(p.id, p.stage);
         if (loaded.current && was && was !== 'done' && p.stage === 'done' && t.stage !== 'done' && !showing) {
           sfx.ding();
-          notify(`Piece ${p.n} of ${p.of} sent`, `${p.usdt ? `${usdt(p.usdt)} USDT` : 'USDT'} to ${t.destinationLabel}.`, open);
+          notify(`Piece ${p.n} of ${p.of} sent`, `${p.usdt ? `${usdt(p.usdt)} ${symbolOf(t.payoutCcy)}` : symbolOf(t.payoutCcy)} to ${t.destinationLabel}.`, open);
         }
       }
       if (!loaded.current || prev === t.stage) continue;
@@ -199,14 +200,14 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
         else sfx.ding();
       } else if (t.stage === 'done') {
         sfx.tada();
-        if (!showing) notify(`USDT sent to ${t.destinationLabel}`, t.usdt ? `${usdt(t.usdt)} USDT from ${trimAmount(t.received)} ${t.coin}.${t.cost ? ` ${costText(t.cost)}.` : ''}` : 'Transfer finished.', open);
+        if (!showing) notify(`${symbolOf(t.payoutCcy)} sent to ${t.destinationLabel}`, t.usdt ? `${usdt(t.usdt)} ${symbolOf(t.payoutCcy)} from ${trimAmount(t.received)} ${t.coin}.${t.cost ? ` ${costText(t.cost)}.` : ''}` : 'Transfer finished.', open);
       } else if (t.stage === 'attention') {
         sfx.error();
         if (!showing) notify('A transfer needs you', t.attention ?? 'Click to see why.', open);
       } else if (t.stage === 'holding' && prev !== 'sending' && !showing) {
         const pieces = (t.pieces ?? 1) > 1 ? ` in ${t.pieces} pieces` : '';
-        if (t.monero ?? t.privacy) notify('Holding in Monero', `${t.xmr ? `${trimAmount(t.xmr)} XMR` : 'The Monero'} waits about ${t.delayHours} h, then goes to ${t.destinationLabel} as USDT${pieces}.`, open);
-        else notify('Holding the payment', `${trimAmount(t.received)} ${t.coin} ${t.delayHours ? `waits about ${t.delayHours} h, then goes` : 'goes'} to ${t.destinationLabel} as USDT${pieces}.`, open);
+        if (t.monero ?? t.privacy) notify('Holding in Monero', `${t.xmr ? `${trimAmount(t.xmr)} XMR` : 'The Monero'} waits about ${t.delayHours} h, then goes to ${t.destinationLabel} as ${symbolOf(t.payoutCcy)}${pieces}.`, open);
+        else notify('Holding the payment', `${trimAmount(t.received)} ${t.coin} ${t.delayHours ? `waits about ${t.delayHours} h, then goes` : 'goes'} to ${t.destinationLabel} as ${symbolOf(t.payoutCcy)}${pieces}.`, open);
       }
     }
     setTransfers(tList);
@@ -230,7 +231,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
         }
       } else if (!showing && o.stage === 'done') {
         sfx.tada();
-        notify(`USDT sent to ${o.payoutLabel ?? 'Coinbase'}`, o.usdt ? `${usdt(o.usdt)} USDT from ${trimAmount(o.received)} ${o.coin}.${o.cost ? ` ${costText(o.cost)}.` : ''}` : `${o.coinName} swap finished.`, open);
+        notify(`${symbolOf(o.toCcy)} sent to ${o.payoutLabel ?? 'Coinbase'}`, o.usdt ? `${usdt(o.usdt)} ${symbolOf(o.toCcy)} from ${trimAmount(o.received)} ${o.coin}.${o.cost ? ` ${costText(o.cost)}.` : ''}` : `${o.coinName} swap finished.`, open);
       } else if (!showing && o.stage === 'attention') {
         sfx.error();
         const flags = o.emergency?.flags ?? [];
@@ -403,6 +404,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
               key={`r-${current.id}`}
               order={current}
               pieces={current.transferId ? (transfers.find((t) => t.id === current.transferId)?.pieces ?? 1) : 1}
+              payoutCcy={current.transferId ? transfers.find((t) => t.id === current.transferId)?.payoutCcy : undefined}
               demo={isDemo}
               offline={offline}
               creating={creating !== null}
@@ -486,6 +488,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
             moneroOk={meta?.features?.monero !== false}
             walletOk={meta?.features?.wallet !== false}
             testDelayMin={meta?.privacy?.testDelayMin ?? null}
+            sym={symbolOf(destinations.find((d) => d.id === destination)?.ccy)}
             onClose={() => setOptionsOpen(false)}
           />
         )}
