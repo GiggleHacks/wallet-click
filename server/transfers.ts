@@ -412,6 +412,12 @@ async function collect(t: TransferRecord, now: number): Promise<void> {
   }
   if (s.busy) return later(t, now, 30 * S, 'the previous forward from this address to confirm');
   if (s.spendable === 0n) return later(t, now, 30 * S, `confirmations (${s.confirmations} of ${s.required})`);
+  if (!t.parentId && s.seen < DUST[route.coin]) {
+    // Started by a scan that ran just after a forward left the address: only gas leftovers remain, and they would wait forever.
+    load().transfers.splice(load().transfers.indexOf(t), 1);
+    markDirty();
+    return;
+  }
 
   if (t.parentId) {
     const at = pieceRelease(t);

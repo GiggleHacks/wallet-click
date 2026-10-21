@@ -536,6 +536,18 @@ describe('permanent addresses', () => {
     expect(ff.creates()).toHaveLength(0);
   });
 
+  it('drops a transfer whose coins turned out to be only gas leftovers (a scan right after a forward)', async () => {
+    await post('/api/addresses', { coin: 'BTC', mode: 'direct' });
+    chain.utxos = [{ txid: 'c1'.repeat(32), vout: 0, value: 60_000, status: { confirmed: true, block_height: chain.tip } }];
+    await scanRoutes();
+    expect(transfers.all()).toHaveLength(1);
+    // The payment was forwarded meanwhile: all that is left is dust, which no amount of waiting will make big enough.
+    chain.utxos = [{ txid: 'c2'.repeat(32), vout: 0, value: 1_000, status: { confirmed: true, block_height: chain.tip } }];
+    await stepTransfer(transfers.all()[0]);
+    expect(transfers.all()).toHaveLength(0);
+    expect(ff.creates()).toHaveLength(0);
+  });
+
   it('keeps the address and destination fixed: only the name, wait and pieces change', async () => {
     const r = (await post('/api/addresses', { coin: 'XMR', mode: 'direct' })).json();
     const changed = (await post(`/api/addresses/${r.id}`, { label: 'Rent', address: 'x', destinationId: 'd_other' })).json();
