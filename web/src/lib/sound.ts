@@ -251,6 +251,11 @@ export const sfx = {
   },
   /** A countdown's last seconds. */
   tick: () => tone(2400, 0, 0.025, { type: 'square', gain: 0.02, lowpass: 4200 }),
+  /** One more confirmation: a soft two-note twinkle. */
+  block: () => {
+    tone(1975.5, 0, 0.22, { type: 'triangle', gain: 0.035 });
+    tone(2637, 0.06, 0.18, { type: 'triangle', gain: 0.02 });
+  },
   /** The countdown ran out: a cartoon explosion (a falling rumble and a deep thump), then coins. */
   boom: () => {
     whoosh(0, 1.1, 1400, 70, 0.3);

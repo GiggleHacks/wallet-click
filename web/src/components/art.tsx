@@ -70,8 +70,8 @@ export function UsdcIcon(p: IconProps) {
   );
 }
 
-/** The coin a destination is paid in. */
-export const StableIcon = ({ ccy, ...p }: IconProps & { ccy?: string | null }) => (ccy === 'USDT' ? <UsdtIcon {...p} /> : <UsdcIcon {...p} />);
+/** The coin a destination is paid in (Monero for the first leg of a Privacy Enhanced transfer). */
+export const StableIcon = ({ ccy, ...p }: IconProps & { ccy?: string | null }) => (ccy === 'USDT' ? <UsdtIcon {...p} /> : ccy === 'XMR' ? <XmrIcon {...p} /> : <UsdcIcon {...p} />);
 
 /** A plain blue "C" coin standing in for Coinbase (not the official artwork). */
 export function CoinbaseIcon(p: IconProps) {
@@ -202,13 +202,16 @@ export function SwapMachine({ size = 56, spinning = false }: IconProps & { spinn
   );
 }
 
+/** An hourglass whose sand really runs: the top drains, a thin stream falls, the bottom fills, then it turns over. */
 export function Hourglass({ size = 20 }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" width={size} height={size} className="hourglass" aria-hidden="true">
       <path d="M3 1h10v1.6H12c0 2.6-1.4 4.2-3 5.4 1.6 1.2 3 2.8 3 5.4h1V15H3v-1.6h1c0-2.6 1.4-4.2 3-5.4-1.6-1.2-3-2.8-3-5.4H3z" fill="currentColor" />
       <path d="M5.4 2.6h5.2c0 2-1.1 3.4-2.6 4.4-1.5-1-2.6-2.4-2.6-4.4z" fill="#fff" />
-      <path d="M5.4 13.4c0-1.6 1-2.8 2.6-3.9 1.6 1.1 2.6 2.3 2.6 3.9z" fill="#c8a24a" />
-      <path d="M6.6 4.2h2.8c-.3.8-.8 1.4-1.4 1.9-.6-.5-1.1-1.1-1.4-1.9z" fill="#c8a24a" />
+      <path d="M5.4 13.4c0-1.6 1-2.8 2.6-3.9 1.6 1.1 2.6 2.3 2.6 3.9z" fill="#fff" />
+      <path className="hg-bottom" d="M5.4 13.4c0-1.6 1-2.8 2.6-3.9 1.6 1.1 2.6 2.3 2.6 3.9z" fill="#c8a24a" />
+      <path className="hg-top" d="M6.2 3.6h3.6c-.3 1.1-.9 1.9-1.8 2.6-.9-.7-1.5-1.5-1.8-2.6z" fill="#c8a24a" />
+      <rect className="hg-stream" x="7.65" y="6.4" width=".7" height="6.4" fill="#c8a24a" />
     </svg>
   );
 }

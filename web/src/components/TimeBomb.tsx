@@ -5,6 +5,7 @@ import { sfx } from '../lib/sound';
 import type { Transfer } from '../types';
 import { symbolOf } from '../lib/assets';
 import { BombIcon, BoomBurst, StableIcon } from './art';
+import { FX, ParticleLayer, type EmitOptions, type ParticleApi } from './Particles';
 
 /**
  * A transfer with a long wait (in Monero, or held at our own address) shows up on the desktop as a cartoon time
@@ -135,6 +136,22 @@ const label = (b: Bomb) => {
   return `${what}: ${countdown(b.left)} left${piece}`;
 };
 
+const FUSE_SPARK: EmitOptions = { count: 1, colors: ['#ffd23a', '#ff8a1f', '#ffffff'], shape: 'spark', speed: [40, 110], angle: -70, spread: 120, gravity: 260, life: [180, 380], size: [1.4, 2.2], drag: 1.5 };
+const BOOM_COLORS = ['#ff4d00', '#ff9a1f', '#ffd23a', '#ffffff', '#5b5b5b'];
+
+/** Sparks off a lit fuse; a real explosion on BOOM. */
+function BombParticles({ b }: { b: Bomb }) {
+  const ref = useRef<ParticleApi>(null);
+  useEffect(() => {
+    if (!b.boom) return;
+    ref.current?.emit(50, 24, { ...FX.burst(BOOM_COLORS), count: 46, speed: [120, 320] });
+    ref.current?.emit(50, 24, { ...FX.glow(BOOM_COLORS), count: 24, speed: [40, 160] });
+  }, [b.boom]);
+  const lit = b.phase === 'ticking' && !b.boom;
+  const critical = lit && b.left <= 60_000;
+  return <ParticleLayer ref={ref} ambient={lit ? [{ ...FUSE_SPARK, x: 76, y: 4, rate: critical ? 40 : 14 }] : undefined} />;
+}
+
 function Art({ b, size }: { b: Bomb; size: number }) {
   if (b.boom) return <BoomBurst size={size} />;
   if (b.phase === 'swapping') return <StableIcon ccy={b.transfer.payoutCcy} size={Math.round(size * 0.8)} />;
@@ -164,6 +181,7 @@ export function DesktopBombs({ bombs, onOpen }: { bombs: Bomb[]; onOpen(t: Trans
               {countdown(b.left)}
             </b>
             <em className="bomb-art" aria-hidden="true">
+              <BombParticles b={b} />
               <motion.i key={b.boom ? 'boom' : b.phase} initial={b.boom ? { scale: 0.2, rotate: -20 } : false} animate={{ scale: b.boom ? 1.35 : 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 12 }}>
                 <Art b={b} size={48} />
               </motion.i>

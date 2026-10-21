@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
-type PrefKey = 'sound' | 'remember' | 'hideFigures';
-const DEFAULTS: Record<PrefKey, boolean> = { sound: true, remember: true, hideFigures: false };
+type PrefKey = 'sound' | 'remember' | 'hideFigures' | 'calm';
+const DEFAULTS: Record<PrefKey, boolean> = { sound: true, remember: true, hideFigures: false, calm: false };
 
 export function getPref(key: PrefKey): boolean {
   try {

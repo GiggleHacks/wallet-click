@@ -50,8 +50,8 @@ export function Window({ title, icon, children, className = '', onClose, full, i
     controls.start(e);
   };
   const recenter = () => {
-    void animate(x, 0, { duration: 0.2 });
-    void animate(y, 0, { duration: 0.2 });
+    void animate(x, 0, { type: 'spring', stiffness: 380, damping: 30 });
+    void animate(y, 0, { type: 'spring', stiffness: 380, damping: 30 });
   };
 
   return (
@@ -67,10 +67,11 @@ export function Window({ title, icon, children, className = '', onClose, full, i
       dragMomentum={false}
       dragElastic={0}
       dragConstraints={bounds ?? undefined}
-      initial={{ opacity: 0, scale: 0.96 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.16, ease: 'easeOut' }}
+      // Pops open on a spring (a hint of overshoot), drops away quickly when closed.
+      initial={{ opacity: 0, scale: 0.94, translateY: 10 }}
+      animate={{ opacity: 1, scale: 1, translateY: 0 }}
+      exit={{ opacity: 0, scale: 0.96, translateY: 6, transition: { duration: 0.14, ease: 'easeIn' } }}
+      transition={{ type: 'spring', stiffness: 460, damping: 30, mass: 0.8, opacity: { duration: 0.16, ease: 'easeOut' } }}
     >
       <header className={`titlebar ${inactive ? 'is-inactive' : ''}`} onPointerDown={startDrag} onDoubleClick={recenter}>
         {icon && <span className="titlebar-icon">{icon}</span>}
@@ -116,7 +117,8 @@ export function ProgressBar({ percent, blocks = 26 }: { percent: number; blocks?
   if (theme.shell !== 'classic') {
     return (
       <div className="progress-modern" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(clamped)}>
-        <span style={{ width: `${clamped}%` }} />
+        {/* scaleX rather than width: the GPU moves it, nothing is laid out again */}
+        <span style={{ transform: `scaleX(${clamped / 100})` }} />
       </div>
     );
   }

@@ -65,10 +65,13 @@ html[data-shell='win11'] .glyph-modern {
 }
 
 .progress-modern span {
+  position: relative;
   display: block;
   height: 100%;
   background: #06b025;
-  transition: width 0.5s ease;
+  transform-origin: 0 50%;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
 }
 
 .speed-graph {
@@ -2125,6 +2128,7 @@ html[data-shell='win11'] .check98 input:checked + .check98-box {
   pointer-events: none;
 }
 
+/* runner: steady slide across (X) › arc: up and down (Y) › pop: grows in, shrinks out › coin: static art + streak */
 .lane-runner {
   position: absolute;
   inset: 0;
@@ -2132,18 +2136,61 @@ html[data-shell='win11'] .check98 input:checked + .check98-box {
   will-change: transform, opacity;
 }
 
-.lane-coin {
+.lane-arc {
   position: absolute;
-  left: 0;
+  left: -12px;
   top: 0;
+  width: 24px;
+  height: 24px;
+  animation: lane-arc var(--dur) var(--delay) infinite;
+  will-change: transform;
+}
+
+.lane-pop {
+  display: block;
+  width: 24px;
+  height: 24px;
+  animation: lane-pop var(--dur) ease-in-out var(--delay) infinite;
+  will-change: transform;
+}
+
+.lane-coin {
+  position: relative;
   display: grid;
   place-items: center;
   width: 24px;
   height: 24px;
-  margin-left: -12px;
-  animation: lane-pop var(--dur) ease-in-out var(--delay) infinite;
-  /* a faint speed trail behind each coin */
-  filter: drop-shadow(-7px 0 2px rgba(255, 255, 255, 0.45)) drop-shadow(1px 2px 0 rgba(0, 0, 0, 0.22));
+  filter: drop-shadow(1px 2px 0 rgba(0, 0, 0, 0.22));
+}
+
+/* A motion-blur streak trailing each coin (blurred once: it never changes, only its layer moves). */
+.lane-coin::before {
+  content: '';
+  position: absolute;
+  right: 45%;
+  top: 50%;
+  z-index: -1;
+  width: 26px;
+  height: 9px;
+  margin-top: -4.5px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.7));
+  filter: blur(2.5px);
+}
+
+/* Up eased out, down eased in: with the steady slide, a parabola. */
+@keyframes lane-arc {
+  0% {
+    transform: translate3d(0, 0, 0);
+    animation-timing-function: cubic-bezier(0.33, 0.67, 0.67, 1);
+  }
+  50% {
+    transform: translate3d(0, var(--arc, -16px), 0);
+    animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0.33);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 @keyframes lane-run {
@@ -2490,28 +2537,7 @@ html[data-shell='win11'] .sparkles i {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .lane-runner,
-  .lane-coin,
-  .spin3d-coin,
-  .spin3d-face::after,
-  .sparkles i,
-  .swap-glow,
-  .swap-flash,
-  .burst-ring,
-  .burst i,
-  .station.is-working .station-machine {
-    animation: none !important;
-  }
-  .lane-runner {
-    transform: translate3d(50%, 0, 0);
-  }
-  .sparkles,
-  .burst,
-  .swap-flash {
-    display: none;
-  }
-}
+/* Calm (and paused tabs) live in motion.css. */
 
 /* ---------------------------------------------------------------- version tag */
 

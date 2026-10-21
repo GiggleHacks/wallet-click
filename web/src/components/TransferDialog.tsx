@@ -1,6 +1,8 @@
-import { motion } from 'motion/react';
+import { motion, useAnimate } from 'motion/react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { api } from '../api';
+import { isCalm } from '../lib/motion';
+import { FX, ParticleLayer, type ParticleApi } from './Particles';
 import { minutesText, shortAddr, trimAmount, usdt } from '../lib/format';
 import { COST_HELP, costText } from '../lib/cost';
 import { sfx } from '../lib/sound';
@@ -48,17 +50,29 @@ const STAGE_SOUND: Partial<Record<Stage, () => void>> = {
 
 // Station positions across the animation strip, in percent.
 const X = { coin: 13, swap: 50, coinbase: 87 };
+/** The middle of a station's icon, in px from the top of the strip (where the track runs). */
+export const ICON_Y = 36;
 
 /**
- * Coins travelling straight down a lane at a steady speed. Each runner is as wide as the lane and slides
- * by its own width (translateX 100%): a pure GPU transform, so it stays smooth at full frame rate.
+ * Coins flying down a lane on an arc. Each runner is as wide as the lane and slides by its own width
+ * (translateX 100%) at a steady speed while an inner layer rises and falls (translateY, eased out then in): together
+ * a parabola, all GPU transforms, so it stays smooth at full frame rate. `onLand` fires as each coin arrives.
  */
-export function Flyers({ from, to, children, count = 4, duration = 1.6 }: { from: number; to: number; children: ReactNode; count?: number; duration?: number }) {
+export function Flyers({ from, to, children, count = 4, duration = 1.6, arc = 16, onLand }: { from: number; to: number; children: ReactNode; count?: number; duration?: number; arc?: number; onLand?(): void }) {
   return (
     <div className="lane" style={{ left: `${from}%`, width: `${to - from}%` }}>
       {Array.from({ length: count }, (_, i) => (
-        <span key={i} className="lane-runner" style={{ '--dur': `${duration}s`, '--delay': `${(-i * duration) / count}s` } as CSSProperties}>
-          <span className="lane-coin">{children}</span>
+        <span
+          key={i}
+          className="lane-runner"
+          style={{ '--dur': `${duration}s`, '--delay': `${(-i * duration) / count}s`, '--arc': `${-arc}px` } as CSSProperties}
+          onAnimationIteration={onLand ? (e) => e.animationName === 'lane-run' && e.target === e.currentTarget && onLand() : undefined}
+        >
+          <span className="lane-arc">
+            <span className="lane-pop">
+              <span className="lane-coin">{children}</span>
+            </span>
+          </span>
         </span>
       ))}
     </div>
@@ -103,15 +117,71 @@ export function Burst({ color, center }: { color: string; center?: boolean }) {
   );
 }
 
-export function Station({ x, label, children, pulse, dim, working }: { x: number; label: string; children: ReactNode; pulse?: boolean; dim?: boolean; working?: boolean }) {
+/**
+ * A stop on the strip. `pulse` pops it once; `catches` (a counter) squashes it like it just caught a coin;
+ * `idle` makes it bob gently while it waits; `ping` sends radar rings out while it waits for money.
+ */
+export function Station({ x, label, children, pulse, dim, working, catches, idle, ping, glow }: { x: number; label: ReactNode; children: ReactNode; pulse?: boolean; dim?: boolean; working?: boolean; catches?: number; idle?: boolean; ping?: boolean; glow?: string }) {
+  const [scope, animate] = useAnimate();
+  useEffect(() => {
+    if (pulse && !isCalm()) void animate(scope.current, { scale: [1, 1.18, 0.97, 1] }, { duration: 0.55, ease: [0.22, 1, 0.36, 1] });
+  }, [pulse, animate, scope]);
+  useEffect(() => {
+    if (catches && !isCalm()) void animate(scope.current, { scaleX: [1, 1.14, 0.96, 1], scaleY: [1, 0.84, 1.06, 1] }, { duration: 0.38, ease: 'easeOut' });
+  }, [catches, animate, scope]);
   return (
-    <div className={`station ${dim ? 'is-dim' : ''} ${working ? 'is-working' : ''}`} style={{ left: `${x}%` }}>
-      <motion.div className="station-icon" animate={pulse ? { scale: [1, 1.15, 1] } : { scale: 1 }} transition={{ duration: 0.45, ease: 'easeOut' }}>
-        {children}
-      </motion.div>
+    <div className={`station ${dim ? 'is-dim' : ''} ${working ? 'is-working' : ''} ${idle ? 'is-idle' : ''}`} style={{ left: `${x}%`, ...(glow ? ({ '--station-glow': glow } as CSSProperties) : null) }}>
+      {ping && (
+        <span className="station-ping" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+      )}
+      {glow && <span className="station-halo" aria-hidden="true" />}
+      <div ref={scope} className="station-icon">
+        <span className="station-bob">{children}</span>
+      </div>
       <span className="station-label">{label}</span>
     </div>
   );
+}
+
+/** The track between stations: lit where the money has been, flowing where it's going now. */
+export function Track({ from, to, flowFrom, flowTo, litTo, slow }: { from: number; to: number; flowFrom?: number; flowTo?: number; litTo?: number; slow?: boolean }) {
+  return (
+    <>
+      <div className="track" style={{ left: `${from}%`, right: `${100 - to}%` }} />
+      {litTo !== undefined && litTo > from && <div className="track-lit" style={{ left: `${from}%`, width: `${litTo - from}%` }} />}
+      {flowFrom !== undefined && flowTo !== undefined && flowTo > flowFrom && (
+        <div className={`track-flow ${slow ? 'is-slow' : ''}`} style={{ left: `${flowFrom}%`, width: `${flowTo - flowFrom}%` }}>
+          <span />
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Coin colours for particles. */
+export const COIN_COLORS: Record<string, string[]> = {
+  BTC: ['#f7931a', '#ffc46b', '#ffffff'],
+  ETH: ['#7b8ff7', '#b6c2ff', '#ffffff'],
+  XMR: ['#ff6600', '#ffa25c', '#ffffff'],
+  USDC: ['#2775ca', '#7fb3ef', '#ffffff'],
+  USDT: ['#26a17b', '#7ad6b6', '#ffffff'],
+  DONE: ['#0052ff', '#2775ca', '#ffc83a', '#26a17b', '#ff6600', '#ffffff'],
+};
+export const stableColors = (ccy?: string | null) => (ccy === 'USDT' ? COIN_COLORS.USDT : ccy === 'XMR' ? COIN_COLORS.XMR : COIN_COLORS.USDC);
+
+/** Fires `fn` every `ms` while `on` (for little moments inside a long phase). */
+export function useEvery(on: boolean, ms: number, fn: () => void) {
+  const cb = useRef(fn);
+  cb.current = fn;
+  useEffect(() => {
+    if (!on) return;
+    const iv = setInterval(() => !document.hidden && cb.current(), ms);
+    return () => clearInterval(iv);
+  }, [on, ms]);
 }
 
 type Fx = { key: number; kind: 'in' | 'out' | 'done' };
@@ -127,6 +197,11 @@ export function TransferStrip({ order, shown }: { order: Order; shown: Stage }) 
   const swapping = shown === 'swapping';
   const after = (s: Stage) => FLOW.indexOf(shown) > FLOW.indexOf(s);
 
+  const parts = useRef<ParticleApi>(null);
+  const [caught, setCaught] = useState({ swap: 0, dest: 0 });
+  const coinColors = COIN_COLORS[order.coin] ?? COIN_COLORS.ETH;
+  const outColors = stableColors(order.toCcy);
+
   // One-shot effects on the moments that matter: the coin going in, the USDC popping out, arrival.
   const prev = useRef(shown);
   const [fx, setFx] = useState<Fx | null>(null);
@@ -134,9 +209,19 @@ export function TransferStrip({ order, shown }: { order: Order; shown: Stage }) 
     const from = prev.current;
     prev.current = shown;
     if (from === shown) return;
-    if (shown === 'swapping') setFx({ key: Date.now(), kind: 'in' });
-    else if (shown === 'sending') setFx({ key: Date.now(), kind: 'out' });
-    else if (shown === 'done') setFx({ key: Date.now(), kind: 'done' });
+    const p = parts.current;
+    if (shown === 'swapping') {
+      setFx({ key: Date.now(), kind: 'in' });
+      p?.emit(X.swap, ICON_Y, FX.glow(coinColors));
+    } else if (shown === 'sending') {
+      setFx({ key: Date.now(), kind: 'out' });
+      p?.emit(X.swap, ICON_Y, FX.burst(outColors));
+    } else if (shown === 'done') {
+      setFx({ key: Date.now(), kind: 'done' });
+      p?.emit(X.coinbase, ICON_Y, FX.burst(COIN_COLORS.DONE));
+      p?.emit(X.coinbase, ICON_Y - 8, FX.confetti(COIN_COLORS.DONE));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shown]);
   useEffect(() => {
     if (!fx) return;
@@ -144,13 +229,20 @@ export function TransferStrip({ order, shown }: { order: Order; shown: Stage }) 
     return () => clearTimeout(t);
   }, [fx]);
 
+  const land = (at: 'swap' | 'dest') => () => {
+    parts.current?.emit(at === 'swap' ? X.swap - 4 : X.coinbase - 3, ICON_Y + 4, FX.land(at === 'swap' ? coinColors : outColors));
+    setCaught((c) => ({ ...c, [at]: c[at] + 1 }));
+  };
+  const flow = shown === 'waiting' || shown === 'received' ? [X.coin, X.swap] : shown === 'swapping' || shown === 'sending' ? [X.swap, X.coinbase] : null;
+
   return (
     <div className={`strip stage-${shown}`} aria-hidden="true">
-      <div className="track" />
-      <Station x={X.coin} label={order.coinName} dim={after('received')}>
+      <Track from={X.coin} to={X.coinbase} litTo={done ? X.coinbase : after('received') ? X.swap : undefined} flowFrom={flow?.[0]} flowTo={flow?.[1]} />
+      <ParticleLayer ref={parts} ambient={swapping ? [{ x: X.swap, y: ICON_Y, rate: 24, ...FX.swirl([...coinColors, ...outColors]) }] : undefined} />
+      <Station x={X.coin} label={order.coinName} dim={after('received')} ping={shown === 'waiting'} idle={shown === 'waiting'}>
         <CoinIcon coin={order.coin} size={44} />
       </Station>
-      <Station x={X.swap} label="Swap" working={swapping}>
+      <Station x={X.swap} label="Swap" working={swapping} catches={caught.swap}>
         {swapping && <span className="swap-glow" />}
         {swapping && <Sparkles side="back" />}
         <span className="station-machine">
@@ -161,22 +253,22 @@ export function TransferStrip({ order, shown }: { order: Order; shown: Stage }) 
         {fx?.kind === 'in' && <span key={fx.key} className="swap-flash" />}
         {fx?.kind === 'out' && <Burst key={fx.key} color="#26a17b" />}
       </Station>
-      <Station x={X.coinbase} label={payoutName(order)} pulse={done}>
+      <Station x={X.coinbase} label={payoutName(order)} pulse={done} catches={caught.dest} glow={done ? '#2775ca' : undefined}>
         {isCoinbase(order) ? <CoinbaseIcon size={44} /> : <StableIcon ccy={order.toCcy} size={44} />}
         {fx?.kind === 'done' && <Burst key={fx.key} color="#0052ff" center />}
         {done && (
-          <motion.span className="station-badge" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 420, damping: 16 }}>
+          <motion.span className="station-badge" initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 420, damping: 14 }}>
             <CheckBadge />
           </motion.span>
         )}
       </Station>
       {shown === 'received' && (
-        <Flyers from={X.coin + 5} to={X.swap - 6}>
+        <Flyers from={X.coin + 5} to={X.swap - 6} onLand={land('swap')}>
           <CoinIcon coin={order.coin} size={24} />
         </Flyers>
       )}
       {shown === 'sending' && (
-        <Flyers from={X.swap + 6} to={X.coinbase - 5}>
+        <Flyers from={X.swap + 6} to={X.coinbase - 5} onLand={land('dest')}>
           <StableIcon ccy={order.toCcy} size={24} />
         </Flyers>
       )}
@@ -444,7 +536,7 @@ export function TransferDialog({ order, autoplay, onClose, onUpdate }: DialogPro
 
   return (
     <ModalLayer>
-      <Window title={title} icon={<AppMark />} onClose={onClose} className="win-dialog" role="dialog">
+      <Window title={title} icon={<AppMark />} onClose={onClose} className={`win-dialog ${shown === 'done' ? 'is-done' : ''}`} role="dialog">
         {modern && (
           <p className="modern-head">
             Swapping {order.received ? `${trimAmount(order.received)} ${order.coin}` : order.coinName} from <b>{order.coinName}</b> to <b>{payoutName(order)}</b>
@@ -452,7 +544,9 @@ export function TransferDialog({ order, autoplay, onClose, onUpdate }: DialogPro
         )}
         <TransferStrip order={order} shown={shown} />
         <div className="lines">
-          <Lines order={order} shown={shown} onUpdate={onUpdate} />
+          <motion.div key={shown} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}>
+            <Lines order={order} shown={shown} onUpdate={onUpdate} />
+          </motion.div>
         </div>
         {showProgress && (
           <>

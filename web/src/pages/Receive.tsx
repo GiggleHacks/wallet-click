@@ -69,7 +69,7 @@ export function ReceiveOnce({ route, transfer, offline, creating, onNew, onBack,
       }
     >
       <div className="receive-grid">
-        <div className="qr-box">
+        <div className={`qr-box ${transfer ? 'is-got' : 'is-scanning'}`}>
           <QrCode value={route.address} size={200} logo={<CoinIcon coin={route.coin} size={40} />} />
         </div>
         <div className="receive-info">
@@ -196,7 +196,7 @@ export function Receive({ order, pieces = 1, payoutCcy, demo, offline, creating,
         </div>
       )}
       <div className="receive-grid">
-        <div className="qr-box">
+        <div className={`qr-box ${waiting ? 'is-scanning' : 'is-got'}`}>
           <QrCode value={demo ? 'Wallet Click demo: not a real address' : order.address} size={200} logo={<CoinIcon coin={order.coin} size={40} />} />
         </div>
         <div className="receive-info">

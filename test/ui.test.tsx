@@ -25,6 +25,7 @@ vi.mock('../web/src/lib/sound', () => {
       shuffle: count('shuffle'),
       vaultOpen: count('vaultOpen'),
       tick() {},
+      block() {},
       boom: count('boom'),
     },
     audioState: () => 'ready',

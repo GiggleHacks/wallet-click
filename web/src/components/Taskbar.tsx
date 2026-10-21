@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useState, type ReactNode } from 'react';
-import { getPref, setPref } from '../lib/prefs';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { getPref, setPref, usePref } from '../lib/prefs';
 import { audioState, sfx } from '../lib/sound';
 import { useTheme, type Theme } from '../lib/themes';
 import type { Coin } from '../types';
@@ -76,7 +76,7 @@ function useAudioState() {
 }
 
 function ClassicMenu({ theme, entries }: { theme: Theme; entries: Entry[] }) {
-  const sepAfter = new Set(['eth', 'sound']);
+  const sepAfter = new Set(['eth', 'motion']);
   return (
     <>
       <div className="start-banner">
@@ -85,8 +85,8 @@ function ClassicMenu({ theme, entries }: { theme: Theme; entries: Entry[] }) {
         </span>
       </div>
       <ul>
-        {entries.map((e) => (
-          <li key={e.key} className={sepAfter.has(e.key) ? 'has-sep' : undefined}>
+        {entries.map((e, i) => (
+          <li key={e.key} className={sepAfter.has(e.key) ? 'has-sep' : undefined} style={{ '--i': i } as CSSProperties}>
             <button type="button" onClick={e.onClick}>
               {e.icon(24)} {e.label}
             </button>
@@ -102,7 +102,7 @@ function ClassicMenu({ theme, entries }: { theme: Theme; entries: Entry[] }) {
 
 function Win10Menu({ entries }: { entries: Entry[] }) {
   const byKey = Object.fromEntries(entries.map((e) => [e.key, e]));
-  const rail = ['themes', 'sound', 'lock'].map((k) => byKey[k]);
+  const rail = ['themes', 'sound', 'motion', 'lock'].map((k) => byKey[k]);
   const tiles = ['btc', 'eth', 'demo', 'themes'].map((k) => byKey[k]);
   return (
     <>
@@ -119,8 +119,8 @@ function Win10Menu({ entries }: { entries: Entry[] }) {
       </div>
       <div className="s10-list">
         <p className="s10-letter">W</p>
-        {entries.map((e) => (
-          <button key={e.key} type="button" className="s10-item" onClick={e.onClick}>
+        {entries.map((e, i) => (
+          <button key={e.key} type="button" className="s10-item" onClick={e.onClick} style={{ '--i': i } as CSSProperties}>
             <span className="s10-item-icon">{e.icon(22)}</span>
             {e.label}
           </button>
@@ -151,8 +151,8 @@ function Win11Menu({ entries }: { entries: Entry[] }) {
       <input className="s11-search" placeholder="Search for apps, settings, and documents" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search" />
       <p className="s11-head">Pinned</p>
       <div className="s11-grid">
-        {pinned.map((e) => (
-          <button key={e.key} type="button" className="s11-app" onClick={e.onClick}>
+        {pinned.map((e, i) => (
+          <button key={e.key} type="button" className="s11-app" onClick={e.onClick} style={{ '--i': i } as CSSProperties}>
             {e.icon(32)}
             <span>{e.short}</span>
           </button>
@@ -180,6 +180,7 @@ export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, on
   const [menu, setMenu] = useState(false);
   const { time, date } = useClock();
   const audio = useAudioState();
+  const calm = usePref('calm');
   const classic = theme.shell === 'classic';
 
   useEffect(() => {
@@ -223,6 +224,7 @@ export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, on
     { key: 'themes', label: 'Themes and background…', short: 'Themes', icon: (s) => <DisplayIcon size={s} />, onClick: pick(onDisplay), tile: '#0063b1' },
     { key: 'logs', label: 'Logs', short: 'Logs', icon: (s) => <LogIcon size={s} />, onClick: pick(onLogs), tile: '#4c4a48' },
     { key: 'sound', label: `Sound: ${audio === 'off' ? 'Off' : 'On'}`, short: 'Sound', icon: (s) => SpeakerIcon(s, audio === 'off'), onClick: pick(toggleSound), tile: '#00796b' },
+    { key: 'motion', label: `Animations: ${calm ? 'Calm' : 'Full'}`, short: calm ? 'Calm' : 'Animations', icon: (s) => <PlayIcon size={s} />, onClick: pick(() => setPref('calm', !calm)), tile: '#b4009e' },
     { key: 'lock', label: 'Log off…', short: 'Log off', icon: (s) => <KeyIcon size={s} />, onClick: pick(onLock), tile: '#b03030' },
   ];
 
@@ -235,10 +237,10 @@ export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, on
             <motion.nav
               className={`start-menu start-${theme.shell}`}
               aria-label="Start menu"
-              initial={{ opacity: 0, y: theme.shell === 'win11' ? 40 : 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: theme.shell === 'win11' ? 40 : 14 }}
-              transition={{ duration: theme.shell === 'classic' ? 0.12 : 0.2, ease: 'easeOut' }}
+              initial={{ opacity: 0, y: theme.shell === 'win11' ? 40 : 14, scale: theme.shell === 'classic' ? 1 : 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: theme.shell === 'win11' ? 40 : 14, transition: { duration: 0.14, ease: 'easeIn' } }}
+              transition={theme.shell === 'classic' ? { duration: 0.12, ease: 'easeOut' } : { type: 'spring', stiffness: 520, damping: 34, mass: 0.8 }}
             >
               {theme.shell === 'classic' && <ClassicMenu theme={theme} entries={entries} />}
               {theme.shell === 'win10' && <Win10Menu entries={entries} />}
@@ -254,9 +256,10 @@ export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, on
             key={balloon.id}
             type="button"
             className="balloon"
-            initial={{ opacity: 0, y: classic ? 10 : 0, x: classic ? 0 : 40 }}
-            animate={{ opacity: 1, y: 0, x: 0 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0, y: classic ? 12 : 0, x: classic ? 0 : 60, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: classic ? 0 : 40, transition: { duration: 0.18, ease: 'easeIn' } }}
+            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
             onClick={() => {
               balloon.onClick?.();
               onDismissBalloon();

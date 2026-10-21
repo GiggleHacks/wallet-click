@@ -195,9 +195,15 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
         // Money arrived (at a permanent address, or a Privacy Enhanced address): ring and show its journey.
         demoRef.current?.stop();
         flashTitle(`Payment detected: ${trimAmount(t.received)} ${t.coin}`);
-        // The transfer window plays the whole flow from the start (it rings itself); otherwise just ring.
-        if (!showing && !dialogRef.current) setJourney({ id: t.id, auto: true });
-        else sfx.ding();
+        // The transfer window plays the whole flow from the start (it rings itself); otherwise just ring. It never
+        // takes over a window that's already showing another real payment (a leftover demo window doesn't count).
+        const j = journeyRef.current;
+        const busy = (dialogRef.current && dialogRef.current.id !== DEMO_ID) || (j && j.id !== t.id && j.id !== DEMO_TRANSFER && tList.some((x) => x.id === j.id));
+        if (!showing && !busy) setJourney({ id: t.id, auto: true });
+        else {
+          sfx.ding();
+          if (!showing) notify('Payment detected', `${trimAmount(t.received)} ${t.coin}: click to watch it.`, open);
+        }
       } else if (t.stage === 'done') {
         sfx.tada();
         if (!showing) notify(`${symbolOf(t.payoutCcy)} sent to ${t.destinationLabel}`, t.usdt ? `${usdt(t.usdt)} ${symbolOf(t.payoutCcy)} from ${trimAmount(t.received)} ${t.coin}.${t.cost ? ` ${costText(t.cost)}.` : ''}` : 'Transfer finished.', open);
@@ -211,6 +217,9 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
       }
     }
     setTransfers(tList);
+    // A window for a transfer the server has since dropped closes, so the next payment can open its own.
+    const j = journeyRef.current;
+    if (j && j.id !== DEMO_TRANSFER && !tList.some((x) => x.id === j.id)) setJourney(null);
     for (const o of list) {
       const prev = stages.current.get(o.id);
       stages.current.set(o.id, o.stage);

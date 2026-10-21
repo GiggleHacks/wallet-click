@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AppMark, BookIcon, ClockIcon, CoinIcon, EyeIcon, HouseIcon, PlayIcon, ShieldIcon, StableIcon } from '../components/art';
 import { destName, symbolOf } from '../lib/assets';
 import { transferStatus } from '../components/JourneyDialog';
@@ -187,6 +187,7 @@ interface Props {
 
 export function Home({ meta, orders, transfers, onOpenTransfer, sendOptions, onSendOptions, onAddresses, destinations, destinationId, onDestination, onAddressBook, creating, offline, pressing, onCreate, onOpen, onDemo }: Props) {
   const hideFigures = usePref('hideFigures');
+  const [ripple, setRipple] = useState<{ coin: Coin; x: number; y: number; key: number } | null>(null);
   const safe = safeForAll(useMinimums(), sendOptions);
   const toggleHide = () => setPref('hideFigures', !hideFigures);
   const dest = destinations.find((d) => d.id === destinationId) ?? destinations[0];
@@ -217,19 +218,28 @@ export function Home({ meta, orders, transfers, onOpenTransfer, sendOptions, onS
         </button>
       </div>
       <div className="coin-grid">
-        {COINS.map((c) => (
+        {COINS.map((c, i) => (
           <motion.button
             key={c}
             type="button"
             data-coin={c}
             className={`btn98 coin-btn ${pressing === c ? 'is-pressed' : ''}`}
             onClick={() => onCreate(c)}
+            onPointerDown={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setRipple({ coin: c, x: e.clientX - r.left, y: e.clientY - r.top, key: Date.now() });
+            }}
             disabled={creating !== null}
             whileHover="hover"
             whileTap="tap"
           >
+            <span className="coin-fx" aria-hidden="true">
+              {ripple?.coin === c && <i key={ripple.key} className="coin-ripple" style={{ left: ripple.x, top: ripple.y }} />}
+            </span>
             <motion.span className="coin-art" variants={{ hover: { y: -5, rotate: TILT[c] }, tap: { y: 0, scale: 0.94 } }} transition={{ type: 'spring', stiffness: 500, damping: 14 }}>
-              <CoinIcon coin={c} size={60} />
+              <span className="coin-float" style={{ animationDelay: `${-i * 0.9}s` }}>
+                <CoinIcon coin={c} size={60} />
+              </span>
             </motion.span>
             <span className="coin-name">{creating === c ? 'Getting address…' : COIN_NAME[c]}</span>
             <span className="coin-sub">{coinSub(sendOptions, c)}</span>

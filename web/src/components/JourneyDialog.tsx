@@ -1,4 +1,4 @@
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { minutesText, shortAddr, trimAmount, usdt } from '../lib/format';
@@ -9,7 +9,8 @@ import type { Order, Piece, Transfer, TransferStep } from '../types';
 import { isCoinbaseId, networkOf, symbolOf } from '../lib/assets';
 import { AppMark, CheckBadge, CoinIcon, CoinbaseIcon, HouseIcon, Hourglass, ModernPC, ShieldIcon, StableIcon, SwapMachine, WarnIcon, XmrIcon } from './art';
 import { DelaySlider, untilText } from './DelaySlider';
-import { Burst, Flyers, RefundForm, Sparkles, SpinFaces, Station } from './TransferDialog';
+import { FX, ParticleLayer, type Ambient, type ParticleApi } from './Particles';
+import { Burst, COIN_COLORS, Flyers, ICON_Y, RefundForm, Sparkles, SpinFaces, Station, Track, stableColors } from './TransferDialog';
 import { ModalLayer, ProgressBar, SpeedGraph, Window } from './Win98';
 
 /**
@@ -119,15 +120,58 @@ function LockBadge() {
   );
 }
 
-/** The Monero vault: its door swings shut and open, the dial turns, a ring counts the unlock and the wait. */
-function Vault({ door, turning, coins, churning, ring }: { door: 'open' | 'closed'; turning: boolean; coins: boolean; churning: boolean; ring: { fraction: number; kind: 'unlock' | 'wait' } | null }) {
-  const C = 2 * Math.PI * 29;
+/** Text that rolls over when it changes: a countdown, a block count. Changing faster than it can roll (the time-lapse), it just changes. */
+function Roll({ text }: { text: string }) {
+  const last = useRef({ text, at: 0, fast: false });
+  if (last.current.text !== text) {
+    const now = Date.now();
+    last.current = { text, at: now, fast: now - last.current.at < 700 };
+  }
+  if (last.current.fast) return <span className="roll">{text}</span>;
   return (
-    <span className={`vault3d is-${door} ${turning ? 'is-turning' : ''} ${coins ? 'has-coins' : ''}`}>
+    <span className="roll">
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.span key={text} initial={{ y: '-85%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '85%', opacity: 0 }} transition={{ type: 'spring', stiffness: 520, damping: 34 }}>
+          {text}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
+interface VaultProps {
+  door: 'open' | 'closed';
+  /** The dial spins hard (locking, shuffling, opening) or turns slowly while it waits. */
+  turning: boolean;
+  idle: boolean;
+  coins: boolean;
+  churning: boolean;
+  /** A warm glow breathing behind it and light sweeping its door: there's money inside. */
+  alive: boolean;
+  ring: { fraction: number; kind: 'unlock' | 'wait' } | null;
+  /** Bumped on every new confirmation: the ring flashes. */
+  flash: number;
+}
+
+/** The Monero vault: its door swings shut and open, the dial turns, a ring counts the unlock and the wait. */
+function Vault({ door, turning, idle, coins, churning, alive, ring, flash }: VaultProps) {
+  const C = 2 * Math.PI * 29;
+  const f = ring ? Math.min(1, Math.max(0, ring.fraction)) : 0;
+  return (
+    <span className={`vault3d is-${door} ${turning ? 'is-turning' : idle ? 'is-idling' : ''} ${coins ? 'has-coins' : ''} ${alive ? 'is-alive' : ''}`}>
+      {alive && <span className="vault-aura" />}
       {ring && (
         <svg className={`vault-ring is-${ring.kind}`} viewBox="0 0 64 64" width="64" height="64">
           <circle className="vault-ring-track" cx="32" cy="32" r="29" />
-          <circle className="vault-ring-fill" cx="32" cy="32" r="29" strokeDasharray={C} strokeDashoffset={C * (1 - Math.min(1, Math.max(0, ring.fraction)))} />
+          {/* a faint comet running round the track, so the ring is never still */}
+          <g className="vault-ring-comet">
+            <circle cx="32" cy="32" r="29" strokeDasharray={`14 ${C}`} />
+          </g>
+          <circle className="vault-ring-fill" cx="32" cy="32" r="29" strokeDasharray={C} strokeDashoffset={C * (1 - f)} />
+          <g className="vault-ring-tip" style={{ transform: `rotate(${f * 360}deg)` }}>
+            <circle cx="61" cy="32" r="2.8" />
+          </g>
+          {flash > 0 && <circle key={flash} className="vault-ring-flash" cx="32" cy="32" r="29" />}
         </svg>
       )}
       <svg className="vault-body" viewBox="0 0 48 44" width="48" height="44">
@@ -138,6 +182,8 @@ function Vault({ door, turning, coins, churning, ring }: { door: 'open' | 'close
           <circle cx="17" cy="29" r="5" fill="#e65c00" />
           <circle cx="29" cy="29.5" r="5" fill="#ff6600" />
           <circle cx="23" cy="24" r="5" fill="#ff7a1f" stroke="#b34700" strokeWidth=".6" />
+          <path className="vault-glint" d="M20.6 21.2l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z" fill="#fff" />
+          <path className="vault-glint is-late" d="M30.4 26.4l.4 1 1 .4-1 .4-.4 1-.4-1-1-.4 1-.4z" fill="#fff" />
         </g>
         <rect x="8" y="41" width="6" height="3" fill="#3a3a3a" />
         <rect x="34" y="41" width="6" height="3" fill="#3a3a3a" />
@@ -152,6 +198,7 @@ function Vault({ door, turning, coins, churning, ring }: { door: 'open' | 'close
           </g>
           <rect x="30" y="10" width="3" height="10" rx="1" fill="#4c4c4c" />
         </svg>
+        <span className="vault-door-shine" />
       </span>
       {churning && (
         <span className="churn-hop">
@@ -180,6 +227,12 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
   const X = five ? { coin: 9, swap1: 29.5, vault: 50, swap2: 70.5, dest: 91 } : { coin: 13, swap1: 50, vault: 50, swap2: 50, dest: 87 };
   const at = flow.indexOf(shown);
   const after = (p: Phase) => at >= 0 && at > flow.indexOf(p);
+  const parts = useRef<ParticleApi>(null);
+  const coinColors = COIN_COLORS[t.coin] ?? COIN_COLORS.ETH;
+  const xmrColors = COIN_COLORS.XMR;
+  const outColors = stableColors(t.payoutCcy);
+  const [caught, setCaught] = useState({ swap1: 0, vault: 0, swap2: 0, dest: 0 });
+  const [flash, setFlash] = useState(0);
 
   // One-shot effects on the moments that matter.
   const prev = useRef(shown);
@@ -188,6 +241,25 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
     if (prev.current === shown) return;
     prev.current = shown;
     setFx({ key: Date.now(), phase: shown });
+    const p = parts.current;
+    if (!p) return;
+    const Y = ICON_Y;
+    if (shown === 'swap1') p.emit(X.swap1, Y, FX.glow(coinColors));
+    if (shown === 'vault-in') p.emit(X.swap1, Y, FX.burst(xmrColors));
+    if (shown === 'churn') p.emit(X.vault, Y - 12, FX.glow(xmrColors));
+    if (shown === 'release') p.emit(X.vault, Y, FX.burst(xmrColors));
+    if (shown === 'swap2') p.emit(X.swap2, Y, FX.glow(xmrColors));
+    if (shown === 'sending') p.emit(five ? X.swap2 : X.swap1, Y, FX.burst(outColors));
+    if (shown === 'done') {
+      p.emit(X.dest, Y, FX.burst(COIN_COLORS.DONE));
+      p.emit(X.dest, Y - 8, FX.confetti(COIN_COLORS.DONE));
+    }
+    if (shown === 'locked') {
+      // The door slams first, then the dust flies.
+      const timer = setTimeout(() => parts.current?.emit(X.vault, Y + 8, FX.glow(xmrColors)), 420);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shown]);
   useEffect(() => {
     if (!fx) return;
@@ -195,37 +267,99 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
     return () => clearTimeout(timer);
   }, [fx]);
 
+  // Every new confirmation is a little moment of its own: a twinkle, a chime, the ring flashes.
+  const confs = shown === 'locked' ? Math.min(t.xmrConfirmations ?? 0, 10) : shown === 'confirming' && t.leg1 && !t.routeId ? t.leg1.confirmations : null;
+  const lastConfs = useRef(confs);
+  useEffect(() => {
+    const was = lastConfs.current;
+    lastConfs.current = confs;
+    if (confs === null || was === null || confs <= was) return;
+    parts.current?.emit(shown === 'locked' ? X.vault : X.coin, ICON_Y, FX.tick(shown === 'locked' ? xmrColors : coinColors));
+    if (shown === 'locked') setFlash((n) => n + 1);
+    sfx.block();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confs]);
+
+  // A split payment: each piece that lands flies to the destination on its own.
+  const sentPieces = (t.pieceList ?? []).filter((p) => p.stage === 'done').length;
+  const lastSent = useRef(sentPieces);
+  const [pieceFly, setPieceFly] = useState(0);
+  useEffect(() => {
+    const was = lastSent.current;
+    lastSent.current = sentPieces;
+    if (sentPieces <= was || t.state !== 'pieces') return;
+    setPieceFly(Date.now());
+    sfx.send();
+    const timer = setTimeout(() => setPieceFly(0), 2400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sentPieces]);
+
+  const land = (at: keyof typeof caught, x: number, colors: string[]) => () => {
+    parts.current?.emit(x - 3, ICON_Y + 4, FX.land(colors));
+    setCaught((c) => ({ ...c, [at]: c[at] + 1 }));
+  };
+
+  // Slow, steady life for the long phases: motes rising from whatever holds the money; a swirl into a working machine.
+  const ambient: Ambient[] = [];
+  if (shown === 'swap1') ambient.push({ x: X.swap1, y: ICON_Y, rate: 24, ...FX.swirl([...coinColors, ...(five ? xmrColors : outColors)]) });
+  if (shown === 'swap2') ambient.push({ x: X.swap2, y: ICON_Y, rate: 24, ...FX.swirl([...xmrColors, ...outColors]) });
+  if (shown === 'locked' || shown === 'waiting') ambient.push({ x: X.vault, y: ICON_Y + 8, rate: shown === 'locked' ? 4 : 2.6, jitter: 16, ...FX.mote(xmrColors) });
+  if (shown === 'churn') ambient.push({ x: X.vault, y: ICON_Y - 6, rate: 16, jitter: 12, ...FX.mote(xmrColors) });
+  if (shown === 'held') ambient.push({ x: X.coin, y: ICON_Y + 8, rate: 2.4, jitter: 14, ...FX.mote(coinColors) });
+
+  // The track: lit up to where the money is, flowing toward where it goes next.
+  const stops = five ? [X.coin, X.swap1, X.vault, X.swap2, X.dest] : [X.coin, X.swap1, X.dest];
+  const SEG: Partial<Record<Phase, [number, number]>> = five
+    ? { paying: [0, 1], confirming: [0, 1], held: [0, 1], swap1: [1, 2], 'vault-in': [1, 2], locked: [2, 3], churn: [2, 3], waiting: [2, 3], release: [2, 3], swap2: [3, 4], sending: [3, 4] }
+    : { paying: [0, 1], confirming: [0, 1], held: [0, 1], swap1: [1, 2], swap2: [1, 2], sending: [1, 2] };
+  const seg = SEG[shown];
+  const lit = shown === 'done' ? X.dest : seg && seg[0] > 0 ? stops[seg[0]] : undefined;
+  const slow = shown === 'paying' || shown === 'held' || shown === 'locked' || shown === 'waiting';
+
   const size = five ? 48 : 60;
   const machine = (spinning: boolean) => (theme.shell === 'classic' ? <SwapMachine size={size} spinning={spinning} /> : <ModernPC size={size} spinning={spinning} variant={theme.shell} />);
   const coinbase = isCoinbaseId(t.destinationId);
   const holding = shown === 'locked' || shown === 'churn' || shown === 'waiting';
-  const coinLabel = shown === 'held' && until ? shortUntil(until - now) : t.coinName;
+  const coinLabel = shown === 'held' && until ? <Roll text={shortUntil(until - now)} /> : t.coinName;
 
   // The ring around the vault: filling while it unlocks, draining while it waits.
   let ring: { fraction: number; kind: 'unlock' | 'wait' } | null = null;
   if (shown === 'locked') ring = { fraction: Math.min(t.xmrConfirmations ?? 0, 10) / 10, kind: 'unlock' };
   if (shown === 'waiting' && until && t.unlockedAt) ring = { fraction: (until - now) / Math.max(1, until - t.unlockedAt), kind: 'wait' };
   const vaultLabel =
-    shown === 'locked'
-      ? 'Unlocking'
-      : shown === 'churn'
-        ? 'Shuffling'
-        : shown === 'waiting' && until
-          ? shortUntil(until - now)
-          : shown === 'release'
-            ? 'Opening'
-            : 'Vault';
+    shown === 'locked' ? (
+      <>
+        Unlocking <Roll text={`${Math.min(t.xmrConfirmations ?? 0, 10)}/10`} />
+      </>
+    ) : shown === 'churn' ? (
+      'Shuffling'
+    ) : shown === 'waiting' && until ? (
+      <Roll text={shortUntil(until - now)} />
+    ) : shown === 'release' ? (
+      'Opening'
+    ) : (
+      'Vault'
+    );
 
-  const fly = (from: number, to: number, icon: React.ReactNode) => (
-    <Flyers from={from + 5} to={to - 6} count={3}>
+  const fly = (from: number, to: number, icon: React.ReactNode, onLand?: () => void) => (
+    <Flyers from={from + 5} to={to - 6} count={3} arc={five ? 14 : 18} onLand={onLand}>
       {icon}
     </Flyers>
   );
 
   return (
     <div className={`strip journey-strip ${five ? 'is-five' : ''} phase-${shown}`} aria-hidden="true">
-      <div className="track" style={{ left: `${X.coin}%`, right: `${100 - X.dest}%` }} />
-      <Station x={X.coin} label={coinLabel} dim={after(flow.includes('held') ? 'held' : 'confirming')} pulse={shown === 'confirming' || shown === 'held'}>
+      <Track from={X.coin} to={X.dest} litTo={lit} flowFrom={seg ? stops[seg[0]] : undefined} flowTo={seg ? stops[seg[1]] : undefined} slow={slow} />
+      <ParticleLayer ref={parts} ambient={ambient} />
+      <Station
+        x={X.coin}
+        label={coinLabel}
+        dim={after(flow.includes('held') ? 'held' : 'confirming')}
+        pulse={shown === 'confirming' || shown === 'held'}
+        ping={shown === 'paying'}
+        idle={shown === 'paying' || shown === 'held'}
+      >
         <span className="stack-icon">
           <CoinIcon coin={t.coin} size={five ? 40 : 44} />
           {shown === 'held' && (
@@ -241,7 +375,7 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
         </span>
       </Station>
 
-      <Station x={X.swap1} label="Swap" working={shown === 'swap1'} dim={after('swap1')}>
+      <Station x={X.swap1} label="Swap" working={shown === 'swap1'} dim={after('swap1')} catches={caught.swap1}>
         {shown === 'swap1' && <span className="swap-glow" />}
         {shown === 'swap1' && <Sparkles side="back" />}
         <span className="station-machine">{machine(shown === 'swap1')}</span>
@@ -252,20 +386,23 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
       </Station>
 
       {five && (
-        <Station x={X.vault} label={vaultLabel} working={shown === 'churn'} pulse={shown === 'locked' || shown === 'release'} dim={after('release')}>
+        <Station x={X.vault} label={vaultLabel} working={shown === 'churn'} pulse={shown === 'locked' || shown === 'release'} dim={after('release')} catches={caught.vault}>
           <Vault
             door={holding ? 'closed' : 'open'}
-            turning={shown === 'locked' || shown === 'churn' || shown === 'release'}
+            turning={shown === 'churn' || shown === 'release' || (shown === 'locked' && fx?.phase === 'locked')}
+            idle={shown === 'locked' || shown === 'waiting'}
             coins={holding || shown === 'vault-in' || shown === 'release'}
             churning={shown === 'churn'}
+            alive={shown === 'locked' || shown === 'waiting'}
             ring={ring}
+            flash={flash}
           />
           {fx?.phase === 'release' && <Burst key={fx.key} color="#ff6600" />}
         </Station>
       )}
 
       {five && (
-        <Station x={X.swap2} label="Swap" working={shown === 'swap2'} dim={after('swap2')}>
+        <Station x={X.swap2} label="Swap" working={shown === 'swap2'} dim={after('swap2')} catches={caught.swap2}>
           {shown === 'swap2' && <span className="swap-glow" />}
           {shown === 'swap2' && <Sparkles side="back" />}
           <span className="station-machine">{machine(shown === 'swap2')}</span>
@@ -276,20 +413,20 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
         </Station>
       )}
 
-      <Station x={X.dest} label={t.destinationLabel} pulse={shown === 'done'}>
+      <Station x={X.dest} label={t.destinationLabel} pulse={shown === 'done'} catches={caught.dest} glow={shown === 'done' ? '#2775ca' : undefined}>
         {coinbase ? <CoinbaseIcon size={five ? 40 : 44} /> : <StableIcon ccy={t.payoutCcy} size={five ? 40 : 44} />}
         {fx?.phase === 'done' && <Burst key={fx.key} color="#0052ff" center />}
         {shown === 'done' && (
-          <motion.span className="station-badge" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 420, damping: 16 }}>
+          <motion.span className="station-badge" initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 420, damping: 14 }}>
             <CheckBadge />
           </motion.span>
         )}
       </Station>
 
-      {(shown === 'confirming' || (shown === 'swap1' && t.state === 'pieces')) && fly(X.coin, X.swap1, <CoinIcon coin={t.coin} size={22} />)}
-      {shown === 'vault-in' && fly(X.swap1, X.vault, <XmrIcon size={22} />)}
-      {shown === 'release' && fly(X.vault, X.swap2, <XmrIcon size={22} />)}
-      {shown === 'sending' && fly(five ? X.swap2 : X.swap1, X.dest, <StableIcon ccy={t.payoutCcy} size={22} />)}
+      {(shown === 'confirming' || (shown === 'swap1' && t.state === 'pieces')) && fly(X.coin, X.swap1, <CoinIcon coin={t.coin} size={22} />, land('swap1', X.swap1, coinColors))}
+      {shown === 'vault-in' && fly(X.swap1, X.vault, <XmrIcon size={22} />, land('vault', X.vault, xmrColors))}
+      {shown === 'release' && fly(X.vault, X.swap2, <XmrIcon size={22} />, land('swap2', X.swap2, xmrColors))}
+      {(shown === 'sending' || pieceFly > 0) && fly(five ? X.swap2 : X.swap1, X.dest, <StableIcon ccy={t.payoutCcy} size={22} />, land('dest', X.dest, outColors))}
     </div>
   );
 }
@@ -599,7 +736,7 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
 
   return (
     <ModalLayer>
-      <Window title={title} icon={monero ? <ShieldIcon size={16} /> : <AppMark />} onClose={onClose} className="win-dialog win-journey" role="dialog">
+      <Window title={title} icon={monero ? <ShieldIcon size={16} /> : <AppMark />} onClose={onClose} className={`win-dialog win-journey ${shown === 'done' ? 'is-done' : ''}`} role="dialog">
         {modern && (
           <p className="modern-head">
             {monero ? (
@@ -620,14 +757,17 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
         )}
         <JourneyStrip t={t} shown={shown} now={now} />
         <div className="lines">
-          {main && <p className="line-main">{main}</p>}
-          {shown === 'done' && t.cost && (
-            <p className="line-cost" title={COST_HELP}>
-              {costText(t.cost)}
-              {driftText(t.cost) && <span className="line-drift">{driftText(t.cost)}</span>}
-            </p>
-          )}
-          {sub && <p className="line-sub">{sub}</p>}
+          {/* each moment's words slide in as it starts (no exit: they never lag behind the strip) */}
+          <motion.div key={shown} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}>
+            {main && <p className="line-main">{main}</p>}
+            {shown === 'done' && t.cost && (
+              <p className="line-cost" title={COST_HELP}>
+                {costText(t.cost)}
+                {driftText(t.cost) && <span className="line-drift">{driftText(t.cost)}</span>}
+              </p>
+            )}
+            {sub && <p className="line-sub">{sub}</p>}
+          </motion.div>
           {(shown === 'waiting' || shown === 'held') && timeLapse && (
             <p className="line-sub timelapse">
               <FastForward /> Time-lapse: a day in a few seconds.

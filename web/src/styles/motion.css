@@ -1,0 +1,767 @@
+/*
+ * Motion: the life between the big moments, and the switches that stop it.
+ *
+ * Everything that runs for long only moves transform and opacity (the GPU composites it; nothing is laid out or
+ * repainted per frame). html[data-motion='calm'] (Start menu › Animations) stills it all; html[data-hidden] (a
+ * background tab) pauses it.
+ */
+
+/* ---------------------------------------------------------------- strips: the canvas, stations, track */
+
+.strip {
+  contain: layout style;
+}
+
+.particles {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.station-icon {
+  will-change: transform;
+}
+
+.station-bob {
+  display: grid;
+  place-items: center;
+}
+
+/* Waiting for something: a gentle bob. */
+.station.is-idle .station-bob {
+  animation: bob 2.8s ease-in-out infinite;
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -4px, 0);
+  }
+}
+
+/* Radar rings going out from a coin that's waiting for its payment. */
+.station-ping {
+  position: absolute;
+  left: 50%;
+  top: 32px;
+  z-index: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.station-ping i {
+  position: absolute;
+  left: -30px;
+  top: -30px;
+  width: 60px;
+  height: 60px;
+  border: 2px solid var(--navy);
+  border-radius: 50%;
+  opacity: 0;
+  animation: ping 2.7s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+  will-change: transform, opacity;
+}
+
+.station-ping i:nth-child(2) {
+  animation-delay: 0.9s;
+}
+
+.station-ping i:nth-child(3) {
+  animation-delay: 1.8s;
+}
+
+@keyframes ping {
+  0% {
+    transform: scale(0.35);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+}
+
+/* A soft halo behind the destination once the money is there. */
+.station-halo {
+  position: absolute;
+  left: 50%;
+  top: 32px;
+  z-index: 0;
+  width: 92px;
+  height: 92px;
+  margin: -46px 0 0 -46px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--station-glow, #2775ca) 42%, transparent), transparent 64%);
+  animation:
+    halo-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both,
+    halo 2.8s ease-in-out 0.6s infinite;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+@keyframes halo-in {
+  from {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes halo {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.65;
+  }
+}
+
+/* The track: lit where the money has been, a comet of light running where it's going. */
+.track-lit {
+  position: absolute;
+  top: 35px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--navy);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--navy) 55%, transparent);
+  opacity: 0.85;
+  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+.track-flow {
+  position: absolute;
+  top: 30px;
+  height: 14px;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+.track-flow span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 38%;
+  height: 100%;
+  background: radial-gradient(ellipse 50% 35% at center, color-mix(in srgb, var(--navy) 95%, #fff) 0, color-mix(in srgb, var(--navy) 45%, transparent) 45%, transparent 75%);
+  animation: flow 1.35s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  will-change: transform;
+}
+
+.track-flow.is-slow span {
+  opacity: 0.55;
+  animation-duration: 3.4s;
+}
+
+@keyframes flow {
+  from {
+    transform: translate3d(-100%, 0, 0);
+  }
+  to {
+    transform: translate3d(265%, 0, 0);
+  }
+}
+
+/* The particle canvas does the flying dots now; the CSS burst keeps its shockwave ring. */
+.burst i {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- the vault, alive while it holds money */
+
+.vault-aura {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 0;
+  width: 96px;
+  height: 96px;
+  margin: -48px 0 0 -48px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 102, 0, 0.36), rgba(255, 102, 0, 0) 62%);
+  animation: aura 3.8s ease-in-out infinite;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+@keyframes aura {
+  0%,
+  100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+/* Waiting: the dial turns slowly round. */
+.vault3d.is-idling .vault-dial {
+  animation: dial-idle 16s linear infinite;
+}
+
+@keyframes dial-idle {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Light sweeping across the closed door every few seconds. */
+.vault-door {
+  overflow: hidden;
+}
+
+.vault-door-shine {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, 0.6) 50%, transparent 68%);
+  transform: translate3d(-130%, 0, 0);
+  pointer-events: none;
+}
+
+.vault3d.is-alive .vault-door-shine {
+  animation: door-shine 6.5s cubic-bezier(0.45, 0, 0.55, 1) 1.2s infinite;
+}
+
+@keyframes door-shine {
+  0%,
+  72% {
+    transform: translate3d(-130%, 0, 0);
+  }
+  92%,
+  100% {
+    transform: translate3d(130%, 0, 0);
+  }
+}
+
+/* Glints off the coins inside (seen while the door is open). */
+.vault-glint {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.vault3d.has-coins .vault-glint {
+  animation: glint 2.6s ease-in-out infinite;
+}
+
+.vault3d.has-coins .vault-glint.is-late {
+  animation-delay: 1.3s;
+}
+
+@keyframes glint {
+  0%,
+  55%,
+  100% {
+    opacity: 0;
+    transform: scale(0.3) rotate(0deg);
+  }
+  72% {
+    opacity: 1;
+    transform: scale(1.25) rotate(45deg);
+  }
+}
+
+/* The ring: it eases to each new confirmation; a bright tip marks where it is; a faint comet keeps going round. */
+.vault-ring-fill {
+  transition: stroke-dashoffset 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.vault-ring-comet {
+  transform-box: view-box;
+  transform-origin: 32px 32px;
+  animation: comet 3.4s linear infinite;
+  will-change: transform;
+}
+
+.vault-ring-comet circle {
+  fill: none;
+  stroke: #ff6600;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  opacity: 0.35;
+}
+
+.vault-ring.is-unlock .vault-ring-comet circle {
+  stroke: var(--navy);
+}
+
+@keyframes comet {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.vault-ring-tip {
+  transform-box: view-box;
+  transform-origin: 32px 32px;
+  transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.vault-ring-tip circle {
+  fill: #fff;
+  stroke: #ff6600;
+  stroke-width: 1.6;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tip 1.7s ease-in-out infinite;
+}
+
+.vault-ring.is-unlock .vault-ring-tip circle {
+  stroke: var(--navy);
+}
+
+@keyframes tip {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.4);
+  }
+}
+
+/* A new confirmation: the whole ring flashes outwards. */
+.vault-ring-flash {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 5;
+  transform-box: view-box;
+  transform-origin: 32px 32px;
+  animation: ring-flash 0.75s ease-out forwards;
+}
+
+@keyframes ring-flash {
+  from {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.2);
+  }
+}
+
+/* Countdown digits and block counts roll over. */
+.roll {
+  position: relative;
+  display: inline-flex;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.roll > span {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- hourglass: the sand runs */
+
+.hourglass {
+  animation: hourglass-turn 3.2s ease-in-out infinite;
+}
+
+@keyframes hourglass-turn {
+  0%,
+  82% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(180deg);
+  }
+}
+
+.hg-top,
+.hg-bottom {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+.hg-top {
+  animation: hg-top 3.2s linear infinite;
+}
+
+.hg-bottom {
+  animation: hg-bottom 3.2s linear infinite;
+}
+
+.hg-stream {
+  animation: hg-stream 3.2s linear infinite;
+}
+
+@keyframes hg-top {
+  0% {
+    transform: scaleY(1);
+  }
+  80%,
+  100% {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes hg-bottom {
+  0% {
+    transform: scaleY(0.04);
+  }
+  80%,
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes hg-stream {
+  0%,
+  78% {
+    opacity: 1;
+  }
+  80%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- progress */
+
+.progress-modern {
+  position: relative;
+}
+
+.progress-modern span {
+  overflow: hidden;
+}
+
+.progress-modern span::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: translate3d(-100%, 0, 0);
+  animation: bar-shine 2.4s ease-in-out infinite;
+}
+
+@keyframes bar-shine {
+  0% {
+    transform: translate3d(-100%, 0, 0);
+  }
+  65%,
+  100% {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+/* The 9x bar: each block lights up with a flash, and the leading block glows. */
+.progress98 .seg.is-on {
+  animation: seg-on 0.4s ease-out;
+}
+
+.progress98 .seg.is-on:has(+ .seg:not(.is-on)) {
+  animation:
+    seg-on 0.4s ease-out,
+    seg-head 1.3s ease-in-out 0.4s infinite;
+}
+
+@keyframes seg-on {
+  from {
+    opacity: 0.2;
+    transform: scaleY(0.5);
+  }
+}
+
+@keyframes seg-head {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ---------------------------------------------------------------- steps */
+
+.step.is-active .step-mark::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  border-radius: 50%;
+  opacity: 0.6;
+  animation: step-spin 0.9s linear infinite;
+}
+
+@keyframes step-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A step that just finished: its tick springs in. */
+.step.is-done .step-mark::before {
+  animation: tick-in 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+
+@keyframes tick-in {
+  from {
+    transform: translateY(-1px) rotate(45deg) scale(0);
+  }
+}
+
+/* ---------------------------------------------------------------- windows, menus, buttons */
+
+/* Done: a light sweeps once across the title bar. */
+.win.is-done .titlebar {
+  position: relative;
+  overflow: hidden;
+}
+
+.win.is-done .titlebar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.55) 50%, transparent 70%);
+  transform: translate3d(-110%, 0, 0);
+  animation: title-shine 1.2s cubic-bezier(0.45, 0, 0.55, 1) 0.25s forwards;
+  pointer-events: none;
+}
+
+@keyframes title-shine {
+  to {
+    transform: translate3d(110%, 0, 0);
+  }
+}
+
+/* The Start menu's items arrive one after another. */
+.start-menu li,
+.s10-item,
+.s11-app {
+  animation: menu-in 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.08) both;
+  animation-delay: calc(var(--i, 0) * 16ms + 30ms);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+}
+
+html[data-shell='classic'] .start-menu li {
+  animation-name: menu-in-classic;
+  animation-duration: 0.18s;
+  animation-delay: calc(var(--i, 0) * 10ms);
+}
+
+@keyframes menu-in-classic {
+  from {
+    opacity: 0;
+    transform: translate3d(-6px, 0, 0);
+  }
+}
+
+/* Home coin buttons: each coin floats, light sweeps across on hover, a ripple where you press. */
+.coin-btn {
+  position: relative;
+}
+
+.coin-art {
+  filter: none;
+}
+
+.coin-float {
+  display: inline-flex;
+  filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.25));
+  animation: coin-float 3.6s ease-in-out infinite;
+  will-change: transform;
+}
+
+html[data-theme='win10'] .coin-float {
+  filter: none;
+}
+
+@keyframes coin-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, -4px, 0) rotate(2deg);
+  }
+}
+
+.coin-fx {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.coin-fx::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.5) 50%, transparent 65%);
+  transform: translate3d(-120%, 0, 0);
+}
+
+.coin-btn:hover:not(:disabled) .coin-fx::after {
+  animation: coin-shine 0.8s cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+@keyframes coin-shine {
+  to {
+    transform: translate3d(120%, 0, 0);
+  }
+}
+
+.coin-ripple {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  margin: -110px 0 0 -110px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 60%);
+  animation: ripple 0.6s ease-out forwards;
+}
+
+@keyframes ripple {
+  from {
+    transform: scale(0.05);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- receive: the QR code scans, then lights up */
+
+.qr-box {
+  position: relative;
+  overflow: hidden;
+}
+
+.qr-box.is-scanning::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 34px;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--navy) 22%, transparent) 70%, color-mix(in srgb, var(--navy) 60%, transparent) 96%, transparent);
+  animation: qr-scan 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+  pointer-events: none;
+  will-change: transform;
+}
+
+@keyframes qr-scan {
+  from {
+    transform: translate3d(0, -34px, 0);
+  }
+  to {
+    transform: translate3d(0, 216px, 0);
+  }
+}
+
+.qr-box.is-got::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 3px #2bd13a;
+  animation: qr-got 1.4s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes qr-got {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.wait-row.is-live {
+  animation: live-in 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes live-in {
+  from {
+    opacity: 0.4;
+    transform: translate3d(0, 4px, 0);
+  }
+}
+
+/* ---------------------------------------------------------------- time bomb */
+
+.bomb-art {
+  position: relative;
+}
+
+/* ---------------------------------------------------------------- Calm: everything still */
+
+html[data-motion='calm'] *,
+html[data-motion='calm'] *::before,
+html[data-motion='calm'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0s !important;
+}
+
+/* What only makes sense moving goes away; the flyers leave one coin parked halfway. */
+html[data-motion='calm'] .particles,
+html[data-motion='calm'] .sparkles,
+html[data-motion='calm'] .burst,
+html[data-motion='calm'] .swap-flash,
+html[data-motion='calm'] .swap-glow,
+html[data-motion='calm'] .station-ping,
+html[data-motion='calm'] .track-flow,
+html[data-motion='calm'] .vault-aura,
+html[data-motion='calm'] .vault-ring-comet,
+html[data-motion='calm'] .vault-ring-flash,
+html[data-motion='calm'] .vault-door-shine,
+html[data-motion='calm'] .coin-fx,
+html[data-motion='calm'] .qr-box::after,
+html[data-motion='calm'] .progress-modern span::after,
+html[data-motion='calm'] .win.is-done .titlebar::after {
+  display: none;
+}
+
+html[data-motion='calm'] .lane-runner,
+html[data-motion='calm'] .lane-arc,
+html[data-motion='calm'] .lane-pop {
+  animation: none !important;
+}
+
+html[data-motion='calm'] .lane-runner {
+  transform: translate3d(50%, 0, 0);
+}
+
+html[data-motion='calm'] .lane-runner:not(:first-child) {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- a hidden tab pauses */
+
+html[data-hidden] *,
+html[data-hidden] *::before,
+html[data-hidden] *::after {
+  animation-play-state: paused !important;
+}

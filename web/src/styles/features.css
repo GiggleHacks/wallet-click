@@ -431,7 +431,7 @@ html[data-theme='win11'] .extra-btn small {
     display: none;
   }
   .journey-strip.is-five .station-icon {
-    transform: scale(0.82);
+    scale: 0.82; /* its own property: the catch/pulse springs animate transform on top */
   }
   .send-pay {
     flex-direction: column;
@@ -634,18 +634,7 @@ html[data-theme='win11'] .extra-btn small {
   color: var(--navy);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .vault-door,
-  .vault3d.is-closed .vault-door {
-    transition: none;
-  }
-  .vault3d.is-closed .vault-body,
-  .vault3d.is-turning .vault-dial,
-  .churn-hop i,
-  .vault-lock {
-    animation: none;
-  }
-}
+/* Calm (and paused tabs) live in motion.css. */
 
 /* ---------------------------------------------------------------- "How it works" picker */
 

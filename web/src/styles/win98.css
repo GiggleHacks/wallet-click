@@ -1109,11 +1109,4 @@ tr:hover .stage-pill {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .spin,
-  .hourglass,
-  .blink,
-  .dots::after {
-    animation: none;
-  }
-}
+/* Calm (and paused tabs) live in motion.css. */
