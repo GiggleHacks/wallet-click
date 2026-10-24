@@ -2,6 +2,8 @@
 
 Get paid in **Bitcoin**, **Ethereum** or **Monero**: at a brand-new address every time, or at a **permanent address** you save in your phone wallet. Whatever arrives is swapped to **USDC on Base** and sent to **Coinbase** (or another USDC-on-Base address in your address book). **Send options** can route it through Monero first, make it wait before it goes on, and split it into 2–4 pieces sent at random times. You watch it all happen in a retro "copying files" style window, in one of four desktop themes.
 
+**New here? Start with [HOW-TO.md](HOW-TO.md)**: a step-by-step guide from zero to your first payment.
+
 ## How it works
 
 1. Click **Bitcoin**, **Ethereum** or **Monero**. With the default Send options (straight to USDC, no wait, one piece), the server creates a FixedFloat float-rate order and shows its deposit address as a QR code. Every order has its own address.
@@ -16,7 +18,7 @@ The server polls FixedFloat and the chain for every order, so payments are picke
 
 ### Address Book
 
-The addresses swaps may pay out to. Everything pays out **USDC on Base**: **Coinbase (USDC on Base)** is built in (set its address with `PAYOUT_ADDRESS_USDC_BASE`), and you can add more. Adding or removing one asks for the password again, and the address must carry its EIP-55 checksum (copy it from the exchange's USDC-on-Base deposit page: an address on the wrong network can lose the money). Pick the destination for new addresses on the main window. FixedFloat pays USDC on Base as `USDCBASE`, and every order is checked to pay exactly that, on Base, to exactly the saved address.
+The addresses swaps may pay out to. Everything pays out **USDC on Base**: **Coinbase (USDC on Base)** is built in (its address is your `PAYOUT_ADDRESS_USDC_BASE`, which is required), and you can add more. Adding or removing one asks for the password again, and the address must carry its EIP-55 checksum (copy it from the exchange's USDC-on-Base deposit page: an address on the wrong network can lose the money). Pick the destination for new addresses on the main window. FixedFloat pays USDC on Base as `USDCBASE`, and every order is checked to pay exactly that, on Base, to exactly the saved address.
 
 Base network fees are much lower than Ethereum's, so this is usually the cheaper payout, most of all with pieces (each piece is its own payout).
 
@@ -85,7 +87,7 @@ Backgrounds can be changed on their own on the **Background** tab. All wallpaper
 ## Safety
 
 **Payouts**
-- The payout address is fixed on the server: the built-in Coinbase (USDC on Base) address, or `PAYOUT_ADDRESS_USDC_BASE`. Its EIP-55 checksum is checked at boot. (`PAYOUT_ADDRESS`, the old USDT address, is only kept to read old records.)
+- The payout address is fixed on the server: `PAYOUT_ADDRESS_USDC_BASE`. The server won't start without it, and its EIP-55 checksum is checked at boot. (`PAYOUT_ADDRESS`, the old USDT address, is only kept to read old records.)
 - The browser only ever says "BTC" or "ETH".
 - Every new FixedFloat order is checked before its address is shown. It must be a float-rate order from the coin you picked, paying USDC on Base, on the Base network, to exactly that address. Anything else is refused.
 - The FixedFloat order token, which could redirect a refund, never leaves the server.
@@ -124,7 +126,7 @@ Backgrounds can be changed on their own on the **Background** tab. All wallpaper
 
 ```bash
 npm install
-cp .env.example .env   # set APP_PASSWORD, FF_API_KEY, FF_API_SECRET
+cp .env.example .env   # set APP_PASSWORD, FF_API_KEY, FF_API_SECRET, PAYOUT_ADDRESS_USDC_BASE
 npm run build && npm start
 ```
 
@@ -157,7 +159,7 @@ docker compose restart
 
 `npm test` covers:
 - FixedFloat request signing.
-- Payouts always going to the Coinbase address, whatever the browser sends.
+- Payouts always going to the configured payout address, whatever the browser sends.
 - Refusing foreign payout addresses and tokens.
 - The token never reaching the browser.
 - Emergency handling: continue, retries, below-minimum refunds, the "not safe to refund" cases, RPC outages, and new deposits.
@@ -168,4 +170,3 @@ docker compose restart
 - The transfer engine against a fake monero-wallet-rpc, Esplora and Ethereum RPC: Privacy Enhanced end to end (vault, churn, wait, second swap), release and change of the wait, relaying the saved transaction after a failed relay, the one-order-per-pair rule, permanent Monero/Bitcoin/Ethereum forwards (BIP84/BIP44 test vectors, exact amounts and inputs), collecting below the minimum, and no secrets in any API answer.
 - Waits and pieces: random unequal amounts, the Monero split (fee out of the pieces, refused on an old wallet) with each piece moving and swapping on its own, the random gaps after each piece, fewer pieces when there's too little, Change wait and Release now reaching the pieces, the direct wait taking in later payments, the Bitcoin split to change-chain addresses (BIP84 change test vector), Ethereum pieces from one address, and one-time addresses (hidden, expiring).
 
-The previous Burner wallet app is kept in `archive/burner-v1/`.

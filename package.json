@@ -1,7 +1,7 @@
 {
   "name": "wallet-click",
-  "version": "1.11.0",
-  "description": "Get paid in BTC, ETH or XMR at a fresh or permanent address; FixedFloat swaps it to USDT (optionally through Monero, after a wait, in pieces) and sends it to Coinbase as USDC on Base",
+  "version": "1.12.0",
+  "description": "Get paid in BTC, ETH or XMR at a fresh or permanent address; FixedFloat swaps it to USDC on Base (optionally through Monero, after a wait, in pieces) and sends it to your exchange",
   "scripts": {
     "dev": "concurrently -k -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "tsx watch server/index.ts",

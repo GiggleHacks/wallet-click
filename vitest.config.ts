@@ -13,5 +13,10 @@ export default defineConfig({
     environment: 'node',
     testTimeout: 30_000,
     hookTimeout: 60_000,
+    // Made-up payout addresses (see test/helpers.ts): the server won't start without one.
+    env: {
+      PAYOUT_ADDRESS_USDC_BASE: '0xBA5eba5EBa5EbA5eBA5EBA5eBa5EBa5ebA5ebA5E',
+      PAYOUT_ADDRESS: '0x7E577e577e577E577e577E577E577E577e577E57',
+    },
   },
 });

@@ -6,10 +6,10 @@ import type { Transport } from '../server/fixedfloat.js';
 /** A valid (bech32 P2WSH) Bitcoin address that nobody controls, different for every seed. */
 export const btcAddress = (seed: number | string) => btc.Address(btc.NETWORK).encode({ type: 'wsh', hash: sha256(utf8ToBytes(`wc-test-${seed}`)) });
 
-/** Where swaps pay out: Coinbase's USDC-on-Base deposit address (the built-in "Coinbase (USDC on Base)"). */
+/** Where swaps pay out: a made-up USDC-on-Base deposit address (the built-in "Coinbase (USDC on Base)"), set in vitest.config.ts. */
 export const PAYOUT = '0xBA5eba5EBa5EbA5eBA5EBA5eBa5EBa5ebA5ebA5E';
 export const PAYOUT_BASE = PAYOUT;
-/** The old Coinbase USDT (ERC-20) address: no longer offered, but older records and permanent addresses still pay it. */
+/** A made-up old USDT (ERC-20) address: no longer offered, but older records and permanent addresses still pay it. */
 export const PAYOUT_USDT = '0x7E577e577e577E577e577E577E577E577e577E57';
 /** A well-formed (fake) Monero subaddress: 8 + 94 base58 characters. */
 export const xmrAddress = (seed: number | string, lead = '8') => `${lead}${String(seed).replace(/[^1-9A-HJ-NP-Za-km-z]/g, '').padEnd(94, 'x').slice(0, 94)}`;

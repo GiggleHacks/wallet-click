@@ -24,12 +24,15 @@ export function isChecksumAddress(address: string): boolean {
  * LEGACY: the Coinbase USDT (ERC-20) deposit address that payouts used before USDC on Base. New payouts never go
  * here; it is only used to read old records and to keep finishing transfers that were started with it.
  */
-const payoutAddress = env.PAYOUT_ADDRESS?.trim() || '0x7E577e577e577E577e577E577E577E577e577E57';
-if (!isChecksumAddress(payoutAddress)) {
+const payoutAddress = env.PAYOUT_ADDRESS?.trim() || '';
+if (payoutAddress && !isChecksumAddress(payoutAddress)) {
   throw new Error(`PAYOUT_ADDRESS "${payoutAddress}" is not a valid checksummed Ethereum address. Copy it again from Coinbase.`);
 }
 /** The Coinbase USDC-on-Base deposit address: the built-in destination, and where every swap pays out by default. */
-const payoutBaseAddress = env.PAYOUT_ADDRESS_USDC_BASE?.trim() || '0xBA5eba5EBa5EbA5eBA5EBA5eBa5EBa5ebA5ebA5E';
+const payoutBaseAddress = env.PAYOUT_ADDRESS_USDC_BASE?.trim() || '';
+if (!payoutBaseAddress) {
+  throw new Error('PAYOUT_ADDRESS_USDC_BASE is not set. Put your own USDC-on-Base deposit address in .env (see .env.example).');
+}
 if (!isChecksumAddress(payoutBaseAddress)) {
   throw new Error(`PAYOUT_ADDRESS_USDC_BASE "${payoutBaseAddress}" is not a valid checksummed address. Copy it again from Coinbase.`);
 }
