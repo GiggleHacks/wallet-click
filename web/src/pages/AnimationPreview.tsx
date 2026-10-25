@@ -4,12 +4,14 @@ import { JourneyStrip, type Phase } from '../components/JourneyDialog';
 import { TransferStrip } from '../components/TransferDialog';
 import { ModalLayer, Window } from '../components/Win98';
 import { demoOrder, demoTransfer } from '../lib/demo';
+import { ANIM_LABEL, setAnimStyle, useAnimStyle, type AnimStyle } from '../lib/motion';
 import { sfx } from '../lib/sound';
 import type { Coin, Order, Stage } from '../types';
 
 /**
  * "How it works › Animations": every moment of a transfer on its own, looping for as long as you like, without
- * playing a whole payment through. Auto-play walks through them all and starts again.
+ * playing a whole payment through. Auto-play walks through them all and starts again. The style switch here is the
+ * same setting as in Themes and the Start menu.
  */
 
 type Flow = 'direct' | 'privacy';
@@ -77,6 +79,7 @@ export function AnimationPreview({ onClose }: { onClose(): void }) {
   const [since, setSince] = useState(Date.now());
   const [now, setNow] = useState(Date.now());
   const fps = useFps();
+  const style = useAnimStyle();
   const moments = flow === 'direct' ? DIRECT : PRIVACY;
   const m = moments[Math.min(at, moments.length - 1)];
 
@@ -142,6 +145,7 @@ export function AnimationPreview({ onClose }: { onClose(): void }) {
             <span className="status-cell grow">
               {flow === 'direct' ? `${NAMES[coin]} → USDC` : `${NAMES[coin]} → Monero → USDC`}: {m.label}
             </span>
+            <span className="status-cell">{ANIM_LABEL[style]}</span>
             <span className="status-cell">{fps ? `${fps} fps` : '…'}</span>
           </>
         }
@@ -170,6 +174,13 @@ export function AnimationPreview({ onClose }: { onClose(): void }) {
               </button>
             ))}
           </div>
+        </div>
+        <div className="seg98 anim-style" role="radiogroup" aria-label="Style">
+          {(['smooth', 'retro', 'calm'] as AnimStyle[]).map((a) => (
+            <button key={a} type="button" role="radio" aria-checked={style === a} className={`btn98 seg-btn ${style === a ? 'is-pressed' : ''}`} onClick={() => (sfx.tap(), setAnimStyle(a))}>
+              {ANIM_LABEL[a]}
+            </button>
+          ))}
         </div>
 
         <div className="anim-stage">

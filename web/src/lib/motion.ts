@@ -1,16 +1,32 @@
 import { useEffect } from 'react';
-import { getPref, usePref } from './prefs';
+import { getPref, setPref, usePref } from './prefs';
 
 /**
- * Animations: Full (the default, whatever the computer's "reduce motion" setting says) or Calm (still, from the
- * Start menu). The choice and whether the tab is hidden live on <html> as data-motion / data-hidden, so CSS can
- * stop every infinite animation without React re-rendering anything.
+ * Animations: Retro (the default: chunky pixel art, Windows 98 style), Smooth (high-resolution glows and trails) or
+ * Calm (still), whatever the computer's "reduce motion" setting says. Set from the Start menu or Themes. The choice and whether the
+ * tab is hidden live on <html> as data-motion / data-anim / data-hidden, so CSS can follow without React re-rendering.
  */
 
-export const isCalm = () => getPref('calm');
+export type AnimStyle = 'smooth' | 'retro' | 'calm';
 
-export function applyMotionAttr(calm = isCalm()): void {
+export const isCalm = () => getPref('calm');
+export const isRetro = () => getPref('retro');
+export const animStyle = (): AnimStyle => (isCalm() ? 'calm' : isRetro() ? 'retro' : 'smooth');
+
+export function setAnimStyle(style: AnimStyle): void {
+  if (style !== 'calm') setPref('retro', style === 'retro');
+  setPref('calm', style === 'calm');
+  applyMotionAttr();
+}
+
+/** What the Start menu's Animations entry moves on to. */
+export const nextAnimStyle = (s: AnimStyle): AnimStyle => (s === 'smooth' ? 'retro' : s === 'retro' ? 'calm' : 'smooth');
+
+export const ANIM_LABEL: Record<AnimStyle, string> = { smooth: 'Smooth', retro: 'Retro', calm: 'Calm' };
+
+export function applyMotionAttr(calm = isCalm(), retro = isRetro()): void {
   document.documentElement.dataset.motion = calm ? 'calm' : 'full';
+  document.documentElement.dataset.anim = retro ? 'retro' : 'smooth';
 }
 
 /** Hidden tabs pause their animations (CSS) and the particle canvas (JS). */
@@ -23,9 +39,17 @@ export function installVisibility(): void {
   document.addEventListener('visibilitychange', set);
 }
 
-/** Keeps data-motion in step with the setting, and returns whether it's Calm. */
+/** Keeps data-motion and data-anim in step with the setting, and returns whether it's Calm. */
 export function useCalm(): boolean {
   const calm = usePref('calm');
-  useEffect(() => applyMotionAttr(calm), [calm]);
+  const retro = usePref('retro');
+  useEffect(() => applyMotionAttr(calm, retro), [calm, retro]);
   return calm;
+}
+
+/** The animation style, re-rendering when it changes. */
+export function useAnimStyle(): AnimStyle {
+  const calm = usePref('calm');
+  const retro = usePref('retro');
+  return calm ? 'calm' : retro ? 'retro' : 'smooth';
 }

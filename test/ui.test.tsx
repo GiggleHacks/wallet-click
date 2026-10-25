@@ -502,6 +502,19 @@ describe('Wallet Click UI', () => {
     await waitFor(() => !!host.querySelector('.win-anim .journey-strip.is-five'), 'five-station strip');
     await click(moment('Unlocking'), 'Unlocking');
     expect(host.querySelector('.win-anim .vault3d.is-closed')).toBeTruthy();
+    // Smooth / Retro / Calm: one setting, shared with Themes and the Start menu.
+    expect(host.querySelector('.anim-style [aria-checked="true"]')?.textContent).toBe('Retro'); // the default
+    await click([...host.querySelectorAll('.anim-style button')].find((b) => b.textContent === 'Smooth'), 'Smooth');
+    expect(document.documentElement.dataset.anim).toBe('smooth');
+    await click([...host.querySelectorAll('.anim-style button')].find((b) => b.textContent === 'Retro'), 'Retro');
+    expect(document.documentElement.dataset.anim).toBe('retro');
+    expect(document.documentElement.dataset.motion).toBe('full');
+    expect(localStorage.getItem('wc.retro')).toBe('1');
+    await click([...host.querySelectorAll('.anim-style button')].find((b) => b.textContent === 'Calm'), 'Calm');
+    expect(document.documentElement.dataset.motion).toBe('calm');
+    await click([...host.querySelectorAll('.anim-style button')].find((b) => b.textContent === 'Smooth'), 'Smooth');
+    expect(document.documentElement.dataset.anim).toBe('smooth');
+    expect(document.documentElement.dataset.motion).toBe('full');
     expect(calls.filter((c) => c.startsWith('POST')).length).toBe(before);
   });
 

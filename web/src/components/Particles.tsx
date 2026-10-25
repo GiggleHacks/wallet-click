@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { isCalm } from '../lib/motion';
+import { isCalm, isRetro } from '../lib/motion';
+import { PX } from './pixelArt';
 
 /**
  * A canvas of particles laid over an animation strip: bursts, sparks, confetti and slow drifting motes.
@@ -7,6 +8,7 @@ import { isCalm } from '../lib/motion';
  * One pre-allocated pool, no allocation per frame, drawn with cached glow sprites. The loop runs only while
  * something is alive (or an ambient emitter is on), and stops when the tab is hidden or Animations is set to Calm.
  * Positions are given like the strip's stations: x in percent of the strip's width, y in pixels from its top.
+ * Retro draws every particle as solid 2x2-pixel blocks on a half-resolution canvas: no glow, no fading (they flicker out).
  */
 
 export type Shape = 'dot' | 'spark' | 'confetti' | 'mote';
@@ -93,7 +95,8 @@ const pick = <T,>(xs: T[]) => xs[(Math.random() * xs.length) | 0];
 export const ParticleLayer = forwardRef<ParticleApi, { ambient?: Ambient[] }>(function ParticleLayer({ ambient }, ref) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const parts = useRef<P[]>(Array.from({ length: MAX }, blank));
-  const size = useRef({ w: 0, h: 0, dpr: 1 });
+  const size = useRef({ w: 0, h: 0, dpr: 1, pixel: false });
+  const tick = useRef(0);
   const raf = useRef(0);
   const last = useRef(0);
   const alive = useRef(0);
@@ -167,8 +170,12 @@ export const ParticleLayer = forwardRef<ParticleApi, { ambient?: Ambient[] }>(fu
       }
     });
 
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, w, h);
+    const pixel = size.current.pixel;
+    tick.current++;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, c.width, c.height);
+    g.setTransform(pixel ? 1 / PX : dpr, 0, 0, pixel ? 1 / PX : dpr, 0, 0);
+    g.imageSmoothingEnabled = !pixel;
     let n = 0;
     for (const p of parts.current) {
       if (!p.alive) continue;
@@ -186,6 +193,17 @@ export const ParticleLayer = forwardRef<ParticleApi, { ambient?: Ambient[] }>(fu
       p.rot += p.spin * dt;
       const life = p.age / p.life;
       const fade = life < 0.15 ? life / 0.15 : 1 - Math.pow((life - 0.15) / 0.85, 1.6);
+      if (pixel) {
+        // solid blocks on the pixel grid; the last of a particle's life flickers instead of fading
+        if (life > 0.15 && fade < 0.35 && (tick.current + n) % 2) continue;
+        const snap = (v: number) => Math.round(v / PX) * PX;
+        const blocks = p.shape === 'spark' || p.shape === 'mote' ? 1 : p.shape === 'confetti' ? 2 : p.size > 2.6 ? 2 : 1;
+        const flat = p.shape === 'confetti' && Math.cos(p.rot * 1.7) < 0;
+        g.globalAlpha = 1;
+        g.fillStyle = p.color;
+        g.fillRect(snap(p.x), snap(p.y), (flat ? 1 : blocks) * PX, (p.shape === 'confetti' && !flat ? 1 : blocks) * PX);
+        continue;
+      }
       g.globalAlpha = Math.max(0, fade);
       if (p.shape === 'confetti') {
         const flip = Math.cos(p.rot * 1.7);
@@ -240,9 +258,11 @@ export const ParticleLayer = forwardRef<ParticleApi, { ambient?: Ambient[] }>(fu
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const w = host.clientWidth + 2 * PAD;
       const h = host.clientHeight + 2 * PAD;
-      size.current = { w, h, dpr };
-      c.width = Math.round(w * dpr);
-      c.height = Math.round(h * dpr);
+      const pixel = isRetro();
+      size.current = { w, h, dpr, pixel };
+      c.width = pixel ? Math.ceil(w / PX) : Math.round(w * dpr);
+      c.height = pixel ? Math.ceil(h / PX) : Math.round(h * dpr);
+      c.style.imageRendering = pixel ? 'pixelated' : '';
       c.style.width = `${w}px`;
       c.style.height = `${h}px`;
     };
@@ -250,12 +270,16 @@ export const ParticleLayer = forwardRef<ParticleApi, { ambient?: Ambient[] }>(fu
     const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(fit) : null;
     ro?.observe(host);
     const onVis = () => wake();
+    const onPrefs = () => {
+      if (isRetro() !== size.current.pixel) fit(); // Smooth and Retro draw at different resolutions
+      wake();
+    };
     document.addEventListener('visibilitychange', onVis);
-    window.addEventListener('wc:prefs', onVis);
+    window.addEventListener('wc:prefs', onPrefs);
     return () => {
       ro?.disconnect();
       document.removeEventListener('visibilitychange', onVis);
-      window.removeEventListener('wc:prefs', onVis);
+      window.removeEventListener('wc:prefs', onPrefs);
       cancelAnimationFrame(raf.current);
       raf.current = 0;
     };

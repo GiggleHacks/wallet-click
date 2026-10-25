@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ANIM_LABEL, setAnimStyle, useAnimStyle, type AnimStyle } from '../lib/motion';
 import { sfx } from '../lib/sound';
 import { THEMES, isDark, type Mode, type Theme } from '../lib/themes';
 import { WALLPAPERS, wallpaperById, wallpaperCss, type Wallpaper } from '../lib/wallpapers';
@@ -51,6 +52,7 @@ export function DisplayProperties({ theme, wallpaper, mode, onApply, onClose }: 
   const [tab, setTab] = useState<'themes' | 'background'>('themes');
   const original = useRef({ theme, wallpaper, mode });
   const dark = isDark(mode);
+  const anim = useAnimStyle();
 
   const chooseTheme = (t: Theme) => {
     if (t.id === theme.id) return;
@@ -129,6 +131,14 @@ export function DisplayProperties({ theme, wallpaper, mode, onApply, onClose }: 
                 ))}
               </div>
               {mode === 'auto' && <p className="line-sub">Follows your phone or computer: {dark ? 'dark' : 'light'} right now.</p>}
+              <span className="lbl">Animations:</span>
+              <div className="seg98 mode98" role="radiogroup" aria-label="Animations">
+                {(['smooth', 'retro', 'calm'] as AnimStyle[]).map((a) => (
+                  <button key={a} type="button" role="radio" aria-checked={anim === a} className={`btn98 seg-btn ${anim === a ? 'is-pressed' : ''}`} onClick={() => (sfx.tap(), setAnimStyle(a))}>
+                    {ANIM_LABEL[a]}
+                  </button>
+                ))}
+              </div>
             </>
           ) : (
             <>

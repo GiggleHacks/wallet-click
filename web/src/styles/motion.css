@@ -770,3 +770,59 @@ html[data-hidden] *::after {
 .courier-art {
   display: none;
 }
+
+/* ---------------------------------------------------------------- Retro: the same moments, as 1998 would have drawn them */
+
+/* The coins and particles go pixelated on their canvases (Courier, Particles); around them, no soft glows... */
+html[data-anim='retro'] .swap-glow,
+html[data-anim='retro'] .station-halo,
+html[data-anim='retro'] .vault-aura {
+  display: none;
+}
+
+/* ...hard-edged icons... */
+html[data-anim='retro'] .station-icon svg,
+html[data-anim='retro'] .vault3d svg {
+  shape-rendering: crispEdges;
+}
+
+/* ...and little moves that step like sprite frames. */
+html[data-anim='retro'] .station.is-idle .station-bob {
+  animation-timing-function: steps(4);
+}
+
+/* Waiting for money: square, dotted rings, like a focus rectangle marching out. */
+html[data-anim='retro'] .station-ping i {
+  border-style: dotted;
+  border-radius: 0;
+  animation-timing-function: steps(6);
+}
+
+html[data-anim='retro'] .burst-ring {
+  border-style: dotted;
+  border-radius: 0;
+  animation-timing-function: steps(5);
+}
+
+html[data-anim='retro'] .swap-flash {
+  border-radius: 0;
+  animation-timing-function: steps(3);
+}
+
+html[data-anim='retro'] .track-lit {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Where the money's going: the blocks of a Windows 98 progress bar, marching. */
+html[data-anim='retro'] .track-flow {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+html[data-anim='retro'] .track-flow span {
+  top: 4px;
+  height: 6px;
+  background: repeating-linear-gradient(90deg, var(--navy) 0 6px, transparent 6px 8px);
+  animation-timing-function: steps(14);
+}

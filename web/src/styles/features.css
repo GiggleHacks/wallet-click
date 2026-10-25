@@ -1279,3 +1279,7 @@ html[data-shell='classic'][data-mode='dark'] .tip-box {
 .anim-auto {
   margin-right: auto;
 }
+
+.anim-style .seg-btn {
+  min-width: 0;
+}

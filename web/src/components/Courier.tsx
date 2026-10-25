@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
-import { isCalm } from '../lib/motion';
+import { isCalm, isRetro } from '../lib/motion';
+import { PX, darker, pixelSprite, pixelTwinkle } from './pixelArt';
 import { CoinbaseIcon, StableIcon, CoinIcon } from './art';
 
 /**
@@ -57,6 +58,7 @@ const SIZE = 28;
 /** A new coin leaves this often (s). */
 const GAP = 0.36;
 const SPRITE = 128;
+let sparkN = 0;
 
 // ------------------------------------------------------------------------------------------------ sprites
 
@@ -174,6 +176,127 @@ function drawCoin(g: CanvasRenderingContext2D, kind: CourierCoin, x: number, y: 
   g.restore();
 }
 
+// ------------------------------------------------------------------------------------------------ painters
+
+/**
+ * How things are drawn, in strip coordinates (CSS px): Smooth (glows, after-images, a lean into the flight) or Retro
+ * (pixel sprites on a half-resolution canvas, dithered ghosts, dotted trails, stepped twinkles). The flights and the
+ * orbit are the same either way.
+ */
+interface Painter {
+  begin(g: CanvasRenderingContext2D, c: HTMLCanvasElement): void;
+  coin(g: CanvasRenderingContext2D, kind: CourierCoin, x: number, y: number, size: number, flip: number, lean: number, alpha: number, shade?: number): void;
+  /** A faint copy left behind (motion blur). */
+  ghost(g: CanvasRenderingContext2D, kind: CourierCoin, x: number, y: number, size: number, flip: number, alpha: number): void;
+  /** One piece of a trail or a comet tail (`i` counts back from the coin). */
+  trail(g: CanvasRenderingContext2D, color: string, x: number, y: number, r: number, alpha: number, i: number): void;
+  halo(g: CanvasRenderingContext2D, color: string, x: number, y: number, r: number, alpha: number): void;
+  shadow(g: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, alpha: number): void;
+  spark(g: CanvasRenderingContext2D, x: number, y: number, size: number, f: number, n: number): void;
+}
+
+const smooth = (dpr: () => number): Painter => ({
+  begin(g, c) {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, c.width, c.height);
+    g.setTransform(dpr(), 0, 0, dpr(), 0, 0);
+    g.imageSmoothingEnabled = true;
+  },
+  coin: (g, kind, x, y, size, flip, lean, alpha, shade = 0) => drawCoin(g, kind, x, y, size, flip, lean, alpha, shade),
+  ghost: (g, kind, x, y, size, flip, alpha) => drawCoin(g, kind, x, y, size, flip, 0, alpha),
+  trail(g, color, x, y, r, alpha) {
+    g.globalAlpha = alpha;
+    g.drawImage(glow(color), x - r, y - r, r * 2, r * 2);
+    g.globalAlpha = 1;
+  },
+  halo(g, color, x, y, r, alpha) {
+    g.globalAlpha = alpha;
+    g.drawImage(glow(color), x - r, y - r, r * 2, r * 2);
+    g.globalAlpha = 1;
+  },
+  shadow(g, x, y, rx, ry, alpha) {
+    g.globalAlpha = alpha;
+    g.fillStyle = '#000';
+    g.beginPath();
+    g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    g.fill();
+    g.globalAlpha = 1;
+  },
+  spark(g, x, y, size, f) {
+    const s = size * (f < 0.2 ? f / 0.2 : 1 - (f - 0.2) / 0.8);
+    g.globalAlpha = 0.9 * (1 - f);
+    g.drawImage(glint(), x - s, y - s, s * 2, s * 2);
+    g.globalAlpha = 1;
+  },
+});
+
+/** Strip px to retro pixels. */
+const L = (v: number) => Math.round(v / PX);
+/** Eight frames to a turn, like a sprite sheet: face, three-quarter, edge-on, three-quarter, and round again. */
+const FRAME_W = [1, 0.62, 0, 0.62, 1, 0.62, 0, 0.62];
+
+const retro: Painter = {
+  begin(g, c) {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, c.width, c.height);
+    g.imageSmoothingEnabled = false;
+    g.globalAlpha = 1;
+  },
+  coin(g, kind, x, y, size, flip, _lean, alpha) {
+    const a = art.get(kind);
+    if (!a || alpha < 0.25) return;
+    const sp = pixelSprite(kind, a, Math.max(3, Math.min(22, L(size))), darker(LOOK[kind].edge));
+    if (!sp) return;
+    const turn = ((flip % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    const frame = Math.round(turn / (Math.PI / 4)) % 8;
+    const fw = FRAME_W[frame];
+    const cx = L(x);
+    const top = L(y) - (sp.n >> 1);
+    if (fw === 0) {
+      // edge-on: a thin bar of rim with a lit line down it
+      g.fillStyle = darker(LOOK[kind].edge);
+      g.fillRect(cx - 1, top, 3, sp.n);
+      g.fillStyle = LOOK[kind].edge;
+      g.fillRect(cx, top + 1, 1, sp.n - 2);
+      return;
+    }
+    const w = Math.max(3, Math.round(sp.n * fw));
+    if (fw < 1) {
+      // three-quarter: the rim shows on the side it's turning away from
+      g.fillStyle = LOOK[kind].edge;
+      g.fillRect(frame < 4 ? cx + (w >> 1) - 1 : cx - (w >> 1) - 1, top + 1, 2, sp.n - 2);
+    }
+    g.drawImage(alpha < 0.6 ? sp.ghost : sp.img, cx - (w >> 1), top, w, sp.n);
+  },
+  ghost(g, kind, x, y, size) {
+    const a = art.get(kind);
+    if (!a) return;
+    const sp = pixelSprite(kind, a, Math.max(3, Math.min(22, L(size))), darker(LOOK[kind].edge));
+    if (sp) g.drawImage(sp.ghost, L(x) - (sp.n >> 1), L(y) - (sp.n >> 1));
+  },
+  trail(g, color, x, y, r, alpha, i) {
+    if (i % 2 || alpha < 0.12) return; // dotted
+    g.fillStyle = color;
+    const s = r > 9 ? 2 : 1;
+    g.fillRect(L(x) - (s >> 1), L(y) - (s >> 1), s, s);
+  },
+  halo() {},
+  shadow(g, x, y, rx, _ry, alpha) {
+    if (alpha < 0.05) return;
+    g.fillStyle = '#000';
+    g.globalAlpha = 0.45;
+    const cx = L(x);
+    const cy = L(y);
+    const half = Math.max(1, L(rx));
+    for (let i = -half; i <= half; i++) if ((i + cx) % 2 === 0) g.fillRect(cx + i, cy, 1, 1);
+    for (let i = -half + 2; i <= half - 2; i++) if ((i + cx) % 2 !== 0) g.fillRect(cx + i, cy + 1, 1, 1);
+    g.globalAlpha = 1;
+  },
+  spark(g, x, y, _size, f, n) {
+    pixelTwinkle(g, L(x), L(y), f, n % 3 === 0 ? '#ffff00' : '#ffffff');
+  },
+};
+
 // ------------------------------------------------------------------------------------------------ the scene
 
 interface Thrown {
@@ -195,6 +318,7 @@ interface Stream {
 }
 
 interface Spark {
+  n: number;
   x: number;
   y: number;
   vx: number;
@@ -215,7 +339,8 @@ export function Courier({ flights = [], orbit = null }: { flights?: Flight[]; or
   const back = useRef<HTMLCanvasElement>(null);
   const front = useRef<HTMLCanvasElement>(null);
   const icons = useRef<HTMLDivElement>(null);
-  const size = useRef({ w: 0, h: 0, dpr: 1 });
+  const size = useRef({ w: 0, h: 0, dpr: 1, pixel: false });
+  const painter = useRef<Painter>(smooth(() => size.current.dpr));
   const raf = useRef(0);
   const streams = useRef(new Map<string, Stream>());
   const coins = useRef<Thrown[]>([]);
@@ -284,18 +409,17 @@ export function Courier({ flights = [], orbit = null }: { flights?: Flight[]; or
   draw.current = (t: number): boolean => {
     const now = t / 1000;
     const calm = isCalm();
-    const { w, h, dpr } = size.current;
+    const { w, pixel } = size.current;
     const gb = back.current?.getContext('2d');
     const gf = front.current?.getContext('2d');
-    if (!gb || !gf || !w) return false;
+    if (!gb || !gf || !w || !back.current || !front.current) return false;
+    const P = pixel ? retro : painter.current;
     const inner = w - 2 * PAD;
     const X = (pct: number) => PAD + (pct / 100) * inner;
     const Y = ICON_Y + PAD;
 
-    for (const g of [gb, gf]) {
-      g.setTransform(dpr, 0, 0, dpr, 0, 0);
-      g.clearRect(0, 0, w, h);
-    }
+    P.begin(gb, back.current);
+    P.begin(gf, front.current);
 
     // ---- new coins leave on time
     if (!calm) {
@@ -343,14 +467,11 @@ export function Courier({ flights = [], orbit = null }: { flights?: Flight[]; or
         // comet tails first, each piece on the side of the machine it's on
         for (const it of items) {
           const col = LOOK[it.kind].glow;
-          const spr = glow(col);
           for (let i = 14; i >= 1; i--) {
             const p = at(it.th - i * 0.075);
-            const g = p.z >= 0 ? gf : gb;
             const f = 1 - i / 15;
             const s = (7 + 9 * f) * (0.75 + 0.3 * (p.z + 1) * 0.5) * k;
-            g.globalAlpha = 0.5 * f * (0.55 + 0.45 * (p.z + 1) * 0.5) * shrink;
-            g.drawImage(spr, p.x - s, p.y - s, s * 2, s * 2);
+            P.trail(p.z >= 0 ? gf : gb, col, p.x, p.y, s, 0.5 * f * (0.55 + 0.45 * (p.z + 1) * 0.5) * shrink, i);
           }
         }
         // then the coins, far one first
@@ -361,12 +482,9 @@ export function Courier({ flights = [], orbit = null }: { flights?: Flight[]; or
             const g = p.z >= 0 ? gf : gb;
             const depth = (p.z + 1) * 0.5;
             const s = SIZE * (0.66 + 0.42 * depth) * Math.min(1, k * 1.1);
-            g.globalAlpha = 0.55 * shrink;
-            const halo = s * 0.95;
-            g.drawImage(glow(LOOK[kind].glow), p.x - halo, p.y - halo, halo * 2, halo * 2);
-            g.globalAlpha = 1;
-            drawCoin(g, kind, p.x, p.y, s, calm ? 0.35 : now * 4.2 + th, Math.cos(th) * 0.18, Math.min(1, shrink * 1.4), (1 - depth) * 0.38);
-            if (!calm && depth > 0.6 && Math.random() < 0.18) sparks.current.push({ x: p.x + (Math.random() - 0.5) * s * 0.6, y: p.y + (Math.random() - 0.5) * s * 0.6, vx: (Math.random() - 0.5) * 20, vy: 10 + Math.random() * 18, born: now, life: 0.45 + Math.random() * 0.3, size: 3 + Math.random() * 4 });
+            P.halo(g, LOOK[kind].glow, p.x, p.y, s * 0.95, 0.55 * shrink);
+            P.coin(g, kind, p.x, p.y, s, calm ? 0.35 : now * (pixel ? 2 : 4.2) + th, Math.cos(th) * 0.18, Math.min(1, shrink * 1.4), (1 - depth) * 0.38);
+            if (!calm && depth > 0.6 && Math.random() < 0.18) sparks.current.push({ n: sparkN++, x: p.x + (Math.random() - 0.5) * s * 0.6, y: p.y + (Math.random() - 0.5) * s * 0.6, vx: (Math.random() - 0.5) * 20, vy: 10 + Math.random() * 18, born: now, life: 0.45 + Math.random() * 0.3, size: 3 + Math.random() * 4 });
           });
       }
     }
@@ -409,52 +527,40 @@ export function Courier({ flights = [], orbit = null }: { flights?: Flight[]; or
       const flip = c.spin * Math.PI * 2 * here.u;
 
       // its shadow on the track
-      gb.globalAlpha = 0.2 * (1 - lift * 0.6) * fade * Math.min(1, pop);
-      gb.fillStyle = '#000';
-      gb.beginPath();
-      gb.ellipse(here.x, Y + 13, (s * 0.5) * (1 - lift * 0.35), 2.4 * (1 - lift * 0.3), 0, 0, Math.PI * 2);
-      gb.fill();
+      P.shadow(gb, here.x, Y + 13, s * 0.5 * (1 - lift * 0.35), 2.4 * (1 - lift * 0.3), 0.2 * (1 - lift * 0.6) * fade * Math.min(1, pop));
 
       // after-images and a glow trail: motion blur, drawn at its own earlier places
       if (!calm) {
-        const spr = glow(LOOK[c.coin].glow);
         for (let i = 8; i >= 1; i--) {
           const tt = t - i * 0.016;
           if (tt <= 0) continue;
           const p = path(tt);
           const f = 1 - i / 9;
-          const gs = s * (0.35 + 0.35 * f);
-          gf.globalAlpha = 0.42 * f * fade;
-          gf.drawImage(spr, p.x - gs, p.y - gs, gs * 2, gs * 2);
+          P.trail(gf, LOOK[c.coin].glow, p.x, p.y, s * (0.35 + 0.35 * f), 0.42 * f * fade, i);
         }
-        for (let i = 3; i >= 1; i--) {
-          const tt = t - i * 0.022;
+        // retro leaves one dithered ghost a little way back; smooth, a few faint copies close behind
+        for (let i = pixel ? 1 : 3; i >= 1; i--) {
+          const tt = t - i * (pixel ? 0.07 : 0.022);
           if (tt <= 0) continue;
           const p = path(tt);
-          drawCoin(gf, c.coin, p.x, p.y, s * (1 - i * 0.06), c.spin * Math.PI * 2 * p.u, dir * 0.12, 0.16 * (1 - i / 4) * fade);
+          P.ghost(gf, c.coin, p.x, p.y, s * (1 - i * 0.06), c.spin * Math.PI * 2 * p.u, 0.16 * (1 - i / 4) * fade);
         }
       }
       // the coin, leaning into its flight
       const ahead = path(Math.min(1, t + 0.02));
       const lean = Math.atan2(ahead.y - here.y, ahead.x - here.x) * 0.35;
-      drawCoin(gf, c.coin, here.x, here.y, s, flip, lean, fade);
-      if (!calm && Math.random() < 0.35) sparks.current.push({ x: here.x - dir * s * 0.3, y: here.y + (Math.random() - 0.5) * s * 0.5, vx: -dir * (10 + Math.random() * 25), vy: 8 + Math.random() * 20, born: now, life: 0.35 + Math.random() * 0.3, size: 2.5 + Math.random() * 4 });
+      P.coin(gf, c.coin, here.x, here.y, s, flip, lean, fade);
+      if (!calm && Math.random() < (pixel ? 0.14 : 0.35)) sparks.current.push({ n: sparkN++, x: here.x - dir * s * 0.3, y: here.y + (Math.random() - 0.5) * s * 0.5, vx: -dir * (10 + Math.random() * 25), vy: 8 + Math.random() * 20, born: now, life: 0.35 + Math.random() * 0.3, size: 2.5 + Math.random() * 4 });
     }
     if (!calm) coins.current = still;
 
     // ---- glints left behind
     const keep: Spark[] = [];
-    const st = glint();
     for (const p of sparks.current) {
       const age = now - p.born;
       if (age >= p.life) continue;
       keep.push(p);
-      const f = age / p.life;
-      const x = p.x + p.vx * age;
-      const y = p.y + p.vy * age;
-      const s = p.size * (f < 0.2 ? f / 0.2 : 1 - (f - 0.2) / 0.8);
-      gf.globalAlpha = 0.9 * (1 - f);
-      gf.drawImage(st, x - s, y - s, s * 2, s * 2);
+      P.spark(gf, p.x + p.vx * age, p.y + p.vy * age, p.size, age / p.life, p.n);
     }
     sparks.current = keep.length > 120 ? keep.slice(-120) : keep;
     gb.globalAlpha = 1;
@@ -469,15 +575,18 @@ export function Courier({ flights = [], orbit = null }: { flights?: Flight[]; or
     if (!host) return;
     const fit = () => {
       const dpr = Math.min(3, window.devicePixelRatio || 1);
+      const pixel = isRetro();
       const w = host.clientWidth + 2 * PAD;
       const h = host.clientHeight + 2 * PAD;
-      size.current = { w, h, dpr };
+      size.current = { w, h, dpr, pixel };
       for (const c of [back.current, front.current]) {
         if (!c) continue;
-        c.width = Math.round(w * dpr);
-        c.height = Math.round(h * dpr);
+        // retro: half resolution, blown up without smoothing (every pixel a 2x2 block)
+        c.width = pixel ? Math.ceil(w / PX) : Math.round(w * dpr);
+        c.height = pixel ? Math.ceil(h / PX) : Math.round(h * dpr);
         c.style.width = `${w}px`;
         c.style.height = `${h}px`;
+        c.style.imageRendering = pixel ? 'pixelated' : '';
       }
       if (isCalm()) draw.current(performance.now());
     };
@@ -485,15 +594,19 @@ export function Courier({ flights = [], orbit = null }: { flights?: Flight[]; or
     const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(fit) : null;
     ro?.observe(host);
     const onWake = () => wake();
+    const onPrefs = () => {
+      if (isRetro() !== size.current.pixel) fit(); // Smooth and Retro draw at different resolutions
+      wake();
+    };
     document.addEventListener('visibilitychange', onWake);
-    window.addEventListener('wc:prefs', onWake);
+    window.addEventListener('wc:prefs', onPrefs);
     // the art loads a moment after mount: draw again once it's there
     const late = setTimeout(onWake, 120);
     return () => {
       ro?.disconnect();
       clearTimeout(late);
       document.removeEventListener('visibilitychange', onWake);
-      window.removeEventListener('wc:prefs', onWake);
+      window.removeEventListener('wc:prefs', onPrefs);
       cancelAnimationFrame(raf.current);
       raf.current = 0;
     };

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { getPref, setPref, usePref } from '../lib/prefs';
+import { ANIM_LABEL, nextAnimStyle, setAnimStyle, useAnimStyle } from '../lib/motion';
 import { audioState, sfx } from '../lib/sound';
 import { useTheme, type Theme } from '../lib/themes';
 import type { Coin } from '../types';
@@ -180,7 +181,7 @@ export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, on
   const [menu, setMenu] = useState(false);
   const { time, date } = useClock();
   const audio = useAudioState();
-  const calm = usePref('calm');
+  const anim = useAnimStyle();
   const classic = theme.shell === 'classic';
 
   useEffect(() => {
@@ -224,7 +225,7 @@ export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, on
     { key: 'themes', label: 'Themes and background…', short: 'Themes', icon: (s) => <DisplayIcon size={s} />, onClick: pick(onDisplay), tile: '#0063b1' },
     { key: 'logs', label: 'Logs', short: 'Logs', icon: (s) => <LogIcon size={s} />, onClick: pick(onLogs), tile: '#4c4a48' },
     { key: 'sound', label: `Sound: ${audio === 'off' ? 'Off' : 'On'}`, short: 'Sound', icon: (s) => SpeakerIcon(s, audio === 'off'), onClick: pick(toggleSound), tile: '#00796b' },
-    { key: 'motion', label: `Animations: ${calm ? 'Calm' : 'Full'}`, short: calm ? 'Calm' : 'Animations', icon: (s) => <PlayIcon size={s} />, onClick: pick(() => setPref('calm', !calm)), tile: '#b4009e' },
+    { key: 'motion', label: `Animations: ${ANIM_LABEL[anim]}`, short: anim === 'smooth' ? 'Animations' : ANIM_LABEL[anim], icon: (s) => <PlayIcon size={s} />, onClick: pick(() => setAnimStyle(nextAnimStyle(anim))), tile: '#b4009e' },
     { key: 'lock', label: 'Log off…', short: 'Log off', icon: (s) => <KeyIcon size={s} />, onClick: pick(onLock), tile: '#b03030' },
   ];
 
