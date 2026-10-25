@@ -52,8 +52,7 @@ def send(text: str) -> bool:
 
 def main() -> None:
     if not CHAT:
-        sys.stderr.write("WC_CHAT_ID is not set: nothing to deliver to
-")
+        sys.stderr.write("WC_CHAT_ID is not set: nothing to deliver to\n")
         sys.exit(1)
     while True:
         try:
