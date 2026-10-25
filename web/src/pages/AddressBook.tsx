@@ -4,6 +4,7 @@ import { BookIcon, CoinbaseIcon, StableIcon } from '../components/art';
 import { DEFAULT_DESTINATION, assetName } from '../lib/assets';
 import { PasswordField } from '../components/PasswordField';
 import { ModalLayer, Window } from '../components/Win98';
+import { Tip } from '../components/Tip';
 import { MASK_ADDR, shortAddr } from '../lib/format';
 import { usePref } from '../lib/prefs';
 import { sfx } from '../lib/sound';
@@ -64,9 +65,6 @@ export function AddressBook({ destinations, onChange, onClose }: Props) {
   return (
     <ModalLayer>
       <Window title="Address Book" icon={<BookIcon size={16} />} onClose={onClose} className="win-book" role="dialog">
-        <p className="line-sub book-intro">
-          Swaps pay out <b>USDC on Base</b> to one of these. A permanent address always pays the destination it was made with.
-        </p>
         <ul className="listbox book-list" role="listbox" aria-label="Destinations">
           {destinations.map((d) => (
             <li
@@ -104,11 +102,13 @@ export function AddressBook({ destinations, onChange, onClose }: Props) {
               <input className="input98" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={40} placeholder="e.g. Kraken" autoFocus />
             </label>
             <label className="field">
-              <span className="lbl">{assetName('USDCBASE')} deposit address:</span>
+              <span className="lbl">
+                {assetName('USDCBASE')} deposit address:{' '}
+                <Tip tip={`From the exchange's ${assetName('USDCBASE')} deposit page. The same address on another network can lose the money.`} />
+              </span>
               <input className="input98 mono" value={address} onChange={(e) => setAddress(e.target.value)} spellCheck={false} autoComplete="off" placeholder="0x…" />
             </label>
             <PasswordField value={password} onChange={setPassword} label="Your password:" />
-            <p className="line-sub">Copy the address from the exchange's {assetName('USDCBASE')} deposit page. The same address on another network can lose the money.</p>
             {error && <p className="error-text">{error}</p>}
             <div className="btn-row">
               <button type="submit" className="btn98 is-default" disabled={busy || !label.trim() || !address.trim() || !password}>

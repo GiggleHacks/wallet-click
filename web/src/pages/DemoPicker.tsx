@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { CoinIcon, HouseIcon, PlayIcon, ShieldIcon } from '../components/art';
 import { ModalLayer, Window } from '../components/Win98';
+import { Tip } from '../components/Tip';
 import type { DemoKind } from '../lib/demo';
 
 interface Flow {
@@ -47,7 +48,7 @@ const PERMANENT: Flow[] = [
 ];
 
 /** "How it works": preview exactly what you'll see and hear when money arrives, without sending any. */
-export function DemoPicker({ onPick, onClose }: { onPick(kind: DemoKind): void; onClose(): void }) {
+export function DemoPicker({ onPick, onAnimations, onClose }: { onPick(kind: DemoKind): void; onAnimations(): void; onClose(): void }) {
   const button = (f: Flow) => (
     <button key={f.kind} type="button" className="btn98 pick-btn" onClick={() => onPick(f.kind)}>
       {f.icon}
@@ -61,8 +62,7 @@ export function DemoPicker({ onPick, onClose }: { onPick(kind: DemoKind): void; 
     <ModalLayer>
       <Window title="How it works" icon={<PlayIcon size={16} />} onClose={onClose} className="win-picker" role="dialog">
         <p className="line-sub picker-intro">
-          Preview exactly what you'll see and hear when money arrives: the same windows, animations and sounds as a real payment. Pick a flow to watch. The coins are pretend:
-          nothing is created and no money moves. A day's wait plays as a time-lapse.
+          Pretend coins, real windows and sounds. <Tip tip="Nothing is created and no money moves. A day's wait plays as a time-lapse." />
         </p>
         <fieldset className="group98">
           <legend>When someone pays a fresh address</legend>
@@ -71,6 +71,16 @@ export function DemoPicker({ onPick, onClose }: { onPick(kind: DemoKind): void; 
         <fieldset className="group98">
           <legend>When you send to one of your permanent addresses</legend>
           <div className="pick-grid">{PERMANENT.map(button)}</div>
+        </fieldset>
+        <fieldset className="group98">
+          <legend>Just the animations</legend>
+          <button type="button" className="btn98 pick-btn pick-wide" onClick={onAnimations}>
+            <PlayIcon size={34} />
+            <span>
+              <b>Animations</b>
+              <small>Loop any moment, or auto-play them all</small>
+            </span>
+          </button>
         </fieldset>
         <div className="btn-row">
           <button type="button" className="btn98" onClick={onClose}>

@@ -21,6 +21,7 @@ import { setSoundTheme, sfx } from './lib/sound';
 import { AddressBook } from './pages/AddressBook';
 import { Addresses } from './pages/Addresses';
 import { DemoPicker } from './pages/DemoPicker';
+import { AnimationPreview } from './pages/AnimationPreview';
 import { Home } from './pages/Home';
 import { Lock } from './pages/Lock';
 import { Logs } from './pages/Logs';
@@ -131,6 +132,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
   /** The open transfer window; `auto` = money just arrived, play the whole flow. */
   const [journey, setJourney] = useState<{ id: string; auto: boolean } | null>(null);
   const [demoPicker, setDemoPicker] = useState(false);
+  const [animations, setAnimations] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const sendOptions = useSendOptions();
   const [myAddresses, setMyAddresses] = useState(false);
@@ -502,7 +504,10 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
           />
         )}
       </AnimatePresence>
-      <AnimatePresence>{demoPicker && <DemoPicker onPick={playDemo} onClose={() => setDemoPicker(false)} />}</AnimatePresence>
+      <AnimatePresence>
+        {demoPicker && <DemoPicker onPick={playDemo} onAnimations={() => (setDemoPicker(false), setAnimations(true))} onClose={() => setDemoPicker(false)} />}
+      </AnimatePresence>
+      <AnimatePresence>{animations && <AnimationPreview onClose={() => setAnimations(false)} />}</AnimatePresence>
       <AnimatePresence>
         {myAddresses && <Addresses delays={delays} destinations={destinations} seedBackupPending={meta?.features?.seedBackupPending} onClose={() => setMyAddresses(false)} />}
       </AnimatePresence>

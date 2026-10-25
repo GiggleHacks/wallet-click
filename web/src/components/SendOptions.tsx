@@ -3,8 +3,7 @@ import { throughMonero, type SendOptions } from '../lib/sendOptions';
 import type { Coin, Minimums } from '../types';
 import { ShieldIcon, WarnIcon } from './art';
 import { DelaySlider } from './DelaySlider';
-
-const NAME: Record<Coin, string> = { BTC: 'Bitcoin', ETH: 'Ethereum', XMR: 'Monero' };
+import { Tip } from './Tip';
 
 /** The highest "send at least" across the coin buttons (they share one set of Send options). */
 export function safeForAll(m: Minimums | null, o: SendOptions): number | null {
@@ -28,24 +27,20 @@ export function MinimumNote({ m, o, coin }: { m: Minimums | null; o: SendOptions
   const less = top.v!.single !== null ? ` Less goes in fewer pieces; below about ${usdText(top.v!.single)} it waits for more.` : ' Less waits for more (or, at a FixedFloat address, is sent back).';
   return (
     <div className="min-note" role="note">
-      <WarnIcon size={18} />
+      <WarnIcon size={16} />
       <p>
-        To be safe, send at least{' '}
+        Send ≥{' '}
         {rows.length === 1 ? (
           <b>{usdText(rows[0].v!.safe)}</b>
         ) : (
           rows.map((r, i) => (
             <span key={r.c}>
               {i ? ' · ' : ''}
-              {NAME[r.c]} <b>{usdText(r.v!.safe)}</b>
+              {r.c} <b>{usdText(r.v!.safe)}</b>
             </span>
           ))
         )}
-        .{' '}
-        <span className="line-sub">
-          {why}
-          {less} Prices and fees move, so leave some room.
-        </span>
+        <Tip tip={`${why}${less} Prices and fees move, so this leaves some room.`} />
       </p>
     </div>
   );
@@ -77,7 +72,11 @@ export function SendOptionsFields({ value: o, onChange, delays, piecesMax = 4, m
     <div className="sendopts">
       {!isXmr && (
         <fieldset className="group98">
-          <legend>Route</legend>
+          <legend>
+            Route
+            {monero && <Tip tip="Swapped to Monero first and held in your own wallet. FixedFloat only swaps about $110 or more into Monero." />}
+            {!monero && holds && <Tip tip={`${coin ? 'Payments land' : 'With a wait or pieces, the coin buttons give you a one-time address: the payment lands'} in your server's own wallet first, then goes on.`} />}
+          </legend>
           <div className="seg98" role="radiogroup" aria-label="Route">
             <button type="button" role="radio" aria-checked={!monero} className={`btn98 seg-btn ${!monero ? 'is-pressed' : ''}`} onClick={() => set({ route: 'direct' })}>
               Straight to {sym}
@@ -99,14 +98,24 @@ export function SendOptionsFields({ value: o, onChange, delays, piecesMax = 4, m
 
       <fieldset className="group98">
         <legend>
-          Wait {monero || isXmr ? 'in Monero' : 'before it goes on'}: <b>{o.delayHours ? `${o.delayHours} hours` : 'none'}</b>
+          Wait{monero || isXmr ? ' in Monero' : ''}: <b>{o.delayHours ? `${o.delayHours} h` : 'none'}</b>
+          {o.delayHours > 0 && <Tip tip="Plus a random extra of up to 30 minutes, so its length isn't a fingerprint." />}
         </legend>
         <DelaySlider value={o.delayHours} delays={delays} onChange={(h) => set({ delayHours: h })} />
       </fieldset>
 
       <fieldset className="group98">
         <legend>
-          Send in: <b>{o.pieces === 1 ? 'one piece' : `${o.pieces} pieces`}</b>
+          Pieces: <b>{o.pieces}</b>
+          {o.pieces > 1 && (
+            <Tip
+              tip={
+                monero || isXmr
+                  ? "Split inside Monero, where the pieces can't be linked. Each goes 5 min–2 h after the last, in random, unequal amounts. Each pays its own fees."
+                  : `5 min–2 h apart, in random, unequal amounts: hidden from ${coin ? 'the destination' : 'Coinbase'}, but still linked on-chain (use Through Monero${coin ? '' : ' or pay in Monero'} for that). Each pays its own fees.`
+              }
+            />
+          )}
         </legend>
         <div className="seg98 pieces98" role="radiogroup" aria-label="Pieces">
           {Array.from({ length: piecesMax }, (_, i) => i + 1).map((n) => (
@@ -117,26 +126,11 @@ export function SendOptionsFields({ value: o, onChange, delays, piecesMax = 4, m
         </div>
       </fieldset>
 
-      <ul className="hints">
-        {monero && (
-          <li>
-            Swapped to <b>Monero</b> first and held in your own wallet. FixedFloat only swaps <b>about $110 or more</b> into Monero.
-          </li>
-        )}
-        {!monero && holds && !isXmr && <li>{coin ? 'Payments land' : 'With a wait or pieces, the coin buttons give you a one-time address: the payment lands'} in your server's own wallet first, then goes on.</li>}
-        {o.delayHours > 0 && <li>The wait gets a random extra of up to 30 minutes, so its length isn't a fingerprint.</li>}
-        {o.pieces > 1 && (monero || isXmr) && <li>Split inside Monero, where the pieces can't be linked to each other. Each one goes 5 min–2 h after the one before has finished, in a random, unequal amount.</li>}
-        {o.pieces > 1 && !monero && !isXmr && (
-          <li>
-            Pieces go 5 min–2 h apart, in random, unequal amounts. That hides the amounts and the timing from {coin ? 'the destination' : 'Coinbase'}, but on the blockchain the pieces are still linked:
-            for that, use <b>Through Monero</b>{coin ? '' : ' (or pay in Monero)'}.
-          </li>
-        )}
-        {o.pieces > 1 && <li>Each piece pays its own FixedFloat and network fees.</li>}
-      </ul>
       <MinimumNote m={minimums} o={o} coin={coin} />
       {!monero && holds && !walletOk && coin !== 'XMR' && (
-        <p className="error-text">A wait or pieces on Bitcoin and Ethereum needs the hot wallet on the server (WALLET_KEY and wallet:init).</p>
+        <p className="error-text">
+          Needs the hot wallet <Tip tip="A wait or pieces on Bitcoin and Ethereum needs the hot wallet on the server (WALLET_KEY and wallet:init)." />
+        </p>
       )}
     </div>
   );

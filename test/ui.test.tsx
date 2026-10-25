@@ -281,7 +281,7 @@ describe('Wallet Click UI', () => {
     serverOrders = [{ ...baseOrder, stage: 'received', status: 'PENDING', received: '0.00250000', confirmations: 1, depositTx: 'abc', depositTxUrl: 'https://mempool.space/tx/abc' }];
     await waitFor(() => text().includes('Payment received'), 'payment received', 8000);
     expect(text()).toContain('0.0025 BTC');
-    expect(text()).toContain('(1 of 2)');
+    expect(text()).toContain('Confirmations 1/2');
     expect(host.querySelector('[role="dialog"]')).toBeTruthy();
     expect(host.querySelector('[role="progressbar"]')).toBeTruthy();
     expect(sounds.ding).toBe(1);
@@ -310,13 +310,13 @@ describe('Wallet Click UI', () => {
     await click(inDialog('Through Monero'), 'Through Monero');
     expect(text()).toContain('about $110 or more');
     await click(inDialog('12 h'), '12 h');
-    expect(text()).toContain('Wait in Monero: 12 hours');
+    expect(text()).toContain('Wait in Monero: 12 h');
     await click(inDialog('3'), '3 pieces');
-    expect(text()).toContain('Send in: 3 pieces');
+    expect(text()).toContain('Pieces: 3');
     expect(text()).toContain("can't be linked");
     // Into Monero needs about $110; with room to spare: $145 (BTC and ETH alike), and 3 × 1.5 × $9.97 for Monero.
-    await waitFor(() => text().includes('To be safe, send at least'), 'minimum note');
-    expect(host.querySelector('.min-note')!.textContent).toMatch(/Bitcoin \$145 · Ethereum \$145 · Monero \$60/);
+    await waitFor(() => text().includes('Send ≥'), 'minimum note');
+    expect(host.querySelector('.min-note')!.textContent).toMatch(/BTC \$145 · ETH \$145 · XMR \$60/);
     await click(inDialog('OK'), 'OK');
     await waitFor(() => !host.querySelector('.win-sendopts'), 'dialog closed', 3000);
     expect(text()).toContain('Through Monero · wait 12 h · 3 pieces');
@@ -325,7 +325,7 @@ describe('Wallet Click UI', () => {
     await click(button('Ethereum'), 'Ethereum');
     expect(transferBody).toEqual({ coin: 'ETH', delayHours: 12, destinationId: 'coinbase-base', pieces: 3 }); // never an address
     await waitFor(() => text().includes(VAULT_LEG.address), 'receive window for the first swap');
-    expect(text()).toContain('Becomes Monero first');
+    expect(text()).toContain('swapped to Monero first');
 
     // The payment went through and the Monero is waiting: the transfer window opens with the countdown.
     const releaseAt = Date.now() + 11 * 3_600_000;
@@ -363,11 +363,11 @@ describe('Wallet Click UI', () => {
     expect(onceBody).toEqual({ coin: 'BTC', delayHours: 4, pieces: 2, destinationId: 'coinbase-base' });
     await waitFor(() => text().includes('bc1qonetimeaddress'), 'one-time address');
     expect(text()).toContain('One-time address');
-    expect(text()).toContain('waits 4 hours');
-    expect(text()).toContain('in 2 pieces');
+    expect(text()).toContain('4 h wait');
+    expect(text()).toContain('2 pieces');
     // 2 pieces × 1.5 × $10.42 = $31.26 at least; with room to spare, $45.
     await waitFor(() => !!host.querySelector('.min-note'), 'minimum note');
-    expect(host.querySelector('.min-note')!.textContent).toContain('To be safe, send at least $45');
+    expect(host.querySelector('.min-note')!.textContent).toContain('Send ≥ $45');
     expect(host.querySelector('.min-note')!.textContent).toContain('the minimum is about $31.26');
     expect(host.querySelector('.min-note')!.textContent).toContain('below about $10.42 it waits for more');
     localStorage.removeItem('wc.sendOptions');
@@ -412,12 +412,12 @@ describe('Wallet Click UI', () => {
     const before = calls.filter((c) => c.startsWith('POST')).length;
     await click(button('How it works'), 'How it works');
     // A picker: one button per flow.
-    await waitFor(() => text().includes('Pick a flow to watch'), 'demo picker');
+    await waitFor(() => text().includes('Pretend coins'), 'demo picker');
     const pick = (label: string) => [...host.querySelectorAll('.win-picker button')].find((b) => b.textContent?.includes(label));
     expect(pick('Bitcoin') && pick('Monero') && pick('Privacy Enhanced')).toBeTruthy();
     await click(pick('Ethereum'), 'Ethereum');
     await waitFor(() => text().includes('Receive Ethereum (demo)'), 'demo receive window');
-    expect(text()).toContain('no money moves');
+    expect(text()).toContain('Demo: not a real address');
     expect(text()).not.toMatch(/0x[0-9a-fA-F]{40}(?!.*7E57)/); // no real-looking deposit address
     await waitFor(() => text().includes('Payment detected'), 'demo payment', 9000);
     expect(sounds.ding).toBe(1);
@@ -443,7 +443,7 @@ describe('Wallet Click UI', () => {
     await waitFor(() => text().includes('Payment at "Phone → Coinbase"'), 'payment at the permanent address', 10_000);
     expect(host.querySelector('.journey-strip .stack-badge')).toBeTruthy();
     expect(host.querySelector('.journey-strip.is-five')).toBeNull();
-    await waitFor(() => text().includes('forwarding it to a fresh FixedFloat order'), 'forward', 10_000);
+    await waitFor(() => text().includes('Forwarding to FixedFloat'), 'forward', 10_000);
     await waitFor(() => text().includes('Done!'), 'route demo done', 20_000);
     expect(text()).toContain('124.03 USDC');
     expect(sounds).toMatchObject({ ding: 1, swap: 1, send: 1, tada: 1, error: 0, vaultLock: 0 });
@@ -459,14 +459,14 @@ describe('Wallet Click UI', () => {
     await waitFor(() => !!button('How it works'), 'demo button');
     const before = calls.filter((c) => c.startsWith('POST')).length;
     await click(button('How it works'), 'How it works');
-    await waitFor(() => text().includes('Pick a flow to watch'), 'demo picker');
+    await waitFor(() => text().includes('Pretend coins'), 'demo picker');
     await click([...host.querySelectorAll('.win-picker button')].find((b) => b.textContent?.includes('Privacy Enhanced')), 'Privacy Enhanced');
     await waitFor(() => text().includes('Receive Bitcoin (demo)'), 'demo receive window');
-    expect(text()).toContain('Becomes Monero first');
+    expect(text()).toContain('swapped to Monero first');
     await waitFor(() => text().includes('Payment received'), 'privacy demo payment', 10_000);
     expect(host.querySelector('.journey-strip.is-five')).toBeTruthy();
     await waitFor(() => !!host.querySelector('.vault3d.is-closed'), 'vault door shuts', 20_000);
-    await waitFor(() => text().includes('Moving it to a fresh spot'), 'churn', 10_000);
+    await waitFor(() => text().includes('Moving it within your wallet'), 'churn', 10_000);
     expect(host.querySelector('.churn-hop')).toBeTruthy();
     await waitFor(() => text().includes('Time-lapse'), 'time-lapse wait', 10_000);
     expect(text()).toMatch(/Holding 0\.2231 XMR for another/);
@@ -480,6 +480,30 @@ describe('Wallet Click UI', () => {
     await waitFor(() => !host.querySelector('.bomb-icon'), 'bomb gone once the money has landed', 3000);
     expect(calls.filter((c) => c.startsWith('POST')).length).toBe(before); // nothing was created
   }, 90_000);
+
+  it('previews the animations on their own, a moment at a time, without touching the server', async () => {
+    status = { ...status, authed: true };
+    serverOrders = [];
+    serverTransfers = [];
+    await mount();
+    await waitFor(() => !!button('How it works'), 'demo button');
+    const before = calls.filter((c) => c.startsWith('POST')).length;
+    await click(button('How it works'), 'How it works');
+    await waitFor(() => text().includes('Just the animations'), 'demo picker');
+    await click([...host.querySelectorAll('.win-picker button')].find((b) => b.textContent?.includes('Animations')), 'Animations');
+    await waitFor(() => !!host.querySelector('.win-anim'), 'animations window');
+    const moment = (label: string) => [...host.querySelectorAll('.anim-moments button')].find((b) => b.textContent === label);
+    expect(host.querySelectorAll('.win-anim .courier').length).toBe(2); // back and front canvases
+    await click(moment('Swapping'), 'Swapping');
+    expect(moment('Swapping')!.getAttribute('aria-checked')).toBe('true');
+    expect(host.querySelector('.win-anim .station.is-working')).toBeTruthy();
+    expect((host.querySelector('.anim-auto input') as HTMLInputElement).checked).toBe(false); // picking one stops auto-play
+    await click([...host.querySelectorAll('.win-anim .anim-bar button')].find((b) => b.textContent?.includes('Privacy')), 'Privacy');
+    await waitFor(() => !!host.querySelector('.win-anim .journey-strip.is-five'), 'five-station strip');
+    await click(moment('Unlocking'), 'Unlocking');
+    expect(host.querySelector('.win-anim .vault3d.is-closed')).toBeTruthy();
+    expect(calls.filter((c) => c.startsWith('POST')).length).toBe(before);
+  });
 
   const option = (label: string) => [...host.querySelectorAll('[role="option"]')].find((o) => o.textContent?.includes(label));
   const desktopIcon = (label: string) => [...host.querySelectorAll('.desk-icon')].find((b) => b.textContent?.includes(label));

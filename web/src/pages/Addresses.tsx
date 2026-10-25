@@ -7,6 +7,7 @@ import { MinimumNote, SendOptionsFields } from '../components/SendOptions';
 import { DEFAULT_DESTINATION, destName, symbolOf } from '../lib/assets';
 import { minimumFor, usdText, useMinimums } from '../lib/minimums';
 import { ModalLayer, Window } from '../components/Win98';
+import { Tip } from '../components/Tip';
 import { shortAddr, trimAmount, usdt } from '../lib/format';
 import { piecesText, waitText, type SendOptions } from '../lib/sendOptions';
 import { sfx } from '../lib/sound';
@@ -79,15 +80,19 @@ function SendForm({ route }: { route: Route }) {
           </p>
           {need && !below && Number(usd) < need.min && (
             <p className="error-text">
-              ${usd} is below the ≈ {usdText(need.min)} that {(route.pieces ?? 1) > 1 ? `${route.pieces} pieces need` : 'this needs'}: it would go in fewer pieces or wait for more. Send at least {usdText(need.safe)} to be safe.
+              Below the ≈ {usdText(need.min)} minimum. Send ≥ {usdText(need.safe)}
+              <Tip tip={`${(route.pieces ?? 1) > 1 ? `${route.pieces} pieces need` : 'This needs'} about ${usdText(need.min)}: less would go in fewer pieces or wait for more.`} />
             </p>
           )}
           {need && Number(usd) >= need.min && Number(usd) < need.safe && (
-            <p className="line-sub">That's close to the minimum (≈ {usdText(need.min)}). {usdText(need.safe)} or more leaves room for fees and price moves.</p>
+            <p className="line-sub">
+              Close to the ≈ {usdText(need.min)} minimum <Tip tip={`${usdText(need.safe)} or more leaves room for fees and price moves.`} />
+            </p>
           )}
           {below && (
             <p className="error-text">
-              FixedFloat's minimum here is {trimAmount(quote.minAmount)} {route.coin} (≈ ${usdt(String(quote.minUsd))}). Smaller payments wait at this address until they add up to it.
+              Below the {trimAmount(quote.minAmount)} {route.coin} (≈ ${usdt(String(quote.minUsd))}) minimum
+              <Tip tip="Smaller payments wait at this address until they add up to it." />
             </p>
           )}
           <div className="send-pay">
@@ -96,7 +101,6 @@ function SendForm({ route }: { route: Route }) {
               <a className="btn98 is-default btn-link pay-link" href={payUri(route, quote.amount)}>
                 Open in wallet
               </a>
-              <p className="line-sub">Opens your wallet app with the address and amount filled in. Check both before you swipe.</p>
             </div>
           </div>
         </>
@@ -161,7 +165,11 @@ function NewForm({
           ))}
         </div>
         <SendOptionsFields value={opts} onChange={setOpts} delays={delays} moneroOk={available.privacy} coin={coin} sym={sym} />
-        {privacy && <p className="line-sub">Payments collect here until they reach FixedFloat's ≈ $110 minimum for swapping into Monero.</p>}
+        {privacy && (
+          <p className="line-sub">
+            Collects until ≈ $110 <Tip tip="Payments collect here until they reach FixedFloat's minimum for swapping into Monero." />
+          </p>
+        )}
         <label className="field">
           <span className="lbl">{sym} goes to (fixed for this address):</span>
           <select className="input98 select98" value={dest} onChange={(e) => setDest(e.target.value)}>
@@ -238,12 +246,9 @@ export function Addresses({ delays, destinations, seedBackupPending, onClose }: 
   return (
     <ModalLayer>
       <Window title="My Addresses" icon={<HouseIcon size={16} />} onClose={onClose} className="win-addresses" role="dialog">
-        <p className="line-sub book-intro">
-          Save one of these in your phone wallet once. Whatever you send to it is swapped and delivered automatically; its destination never changes.
-        </p>
         {seedBackupPending && (
           <div className="warn-box">
-            <WarnIcon size={20} /> The hot wallet's 24 words are still in data/seed-backup.txt on the server. Write them down, then delete that file.
+            <WarnIcon size={20} /> <Tip tip="Write the 24 words down, then delete that file.">Seed backup still in data/seed-backup.txt</Tip>
           </div>
         )}
         {error && <p className="error-text">{error}</p>}

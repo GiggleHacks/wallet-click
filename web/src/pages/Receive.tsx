@@ -10,8 +10,12 @@ import { symbolOf } from '../lib/assets';
 import { MinimumNote } from '../components/SendOptions';
 import { useMinimums } from '../lib/minimums';
 import { STAGE_LABEL } from './Home';
+import { Tip } from '../components/Tip';
 
 const NETWORK: Record<Route['coin'], string> = { BTC: 'Bitcoin', ETH: 'Ethereum mainnet', XMR: 'Monero' };
+
+/** "Send ETH to: (i)": which network, on hover. */
+const networkTip = (coin: Route['coin'], network: string) => `${network} only.${coin === 'ETH' ? ' Not Base, Arbitrum or any other network.' : ''}`;
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -46,8 +50,7 @@ interface OnceProps {
 export function ReceiveOnce({ route, transfer, offline, creating, onNew, onBack, onShowProgress }: OnceProps) {
   const [copied, setCopied] = useState(false);
   const minimums = useMinimums();
-  const wait = route.delayHours ? `waits ${route.delayHours} hours (plus up to 30 minutes)` : 'goes on once it is confirmed';
-  const pieces = (route.pieces ?? 1) > 1 ? ` in ${route.pieces} pieces, at random times` : '';
+  const sym = symbolOf(route.destinationCcy);
   async function copy() {
     if (await copyText(route.address)) {
       sfx.copy();
@@ -74,7 +77,7 @@ export function ReceiveOnce({ route, transfer, offline, creating, onNew, onBack,
         </div>
         <div className="receive-info">
           <span className="lbl">
-            Send {route.coinName} ({route.coin}) to:
+            Send {route.coin} to: <Tip tip={networkTip(route.coin, NETWORK[route.coin])} />
           </span>
           <div className="address-box" onClick={() => void copy()} title="Click to copy">
             {route.address}
@@ -82,15 +85,26 @@ export function ReceiveOnce({ route, transfer, offline, creating, onNew, onBack,
           <button type="button" className="btn98 is-default" onClick={() => void copy()}>
             {copied ? 'Copied!' : 'Copy address'}
           </button>
-          <ul className="hints">
+          <ul className="facts">
             <li>
-              <b>{NETWORK[route.coin]} only.</b>
-              {route.coin === 'ETH' && ' Not Base, Arbitrum or any other network.'}
+              <Tip tip={`A one-time address of your own wallet. The payment lands here first, then goes on to ${route.destinationLabel} as ${sym}.`}>One-time</Tip>
+            </li>
+            {route.delayHours ? (
+              <li>
+                <Tip tip="Plus a random extra of up to 30 minutes, counted from when it's confirmed.">{route.delayHours} h wait</Tip>
+              </li>
+            ) : null}
+            {(route.pieces ?? 1) > 1 && (
+              <li>
+                <Tip tip="Random, unequal amounts, at random times.">{route.pieces} pieces</Tip>
+              </li>
+            )}
+            <li>
+              → {sym}, {route.destinationLabel}
             </li>
             <li>
-              A one-time address of your own wallet. The payment {wait}, then goes to <b>{route.destinationLabel}</b> as {symbolOf(route.destinationCcy)}{pieces}.
+              <Tip tip="The address is watched for 30 days.">30 days</Tip>
             </li>
-            <li>It's watched for 30 days.</li>
           </ul>
           <MinimumNote m={minimums} o={{ route: 'direct', delayHours: route.delayHours ?? 0, pieces: route.pieces ?? 1 }} coin={route.coin} />
         </div>
@@ -187,12 +201,12 @@ export function Receive({ order, pieces = 1, payoutCcy, demo, offline, creating,
     >
       {demo && (
         <div className="warn-box demo-box">
-          <WarnIcon size={20} /> Demo. This isn't a real address and no money moves. Watch what happens when a payment arrives.
+          <WarnIcon size={20} /> Demo: not a real address.
         </div>
       )}
       {order.reusedAddress && (
         <div className="warn-box">
-          <WarnIcon size={20} /> FixedFloat has handed out this address before. Make a new one if you need a never-used address.
+          <WarnIcon size={20} /> <Tip tip="Make a new one if you need a never-used address.">FixedFloat has used this address before.</Tip>
         </div>
       )}
       <div className="receive-grid">
@@ -201,7 +215,7 @@ export function Receive({ order, pieces = 1, payoutCcy, demo, offline, creating,
         </div>
         <div className="receive-info">
           <span className="lbl">
-            Send {order.coinName} ({order.coin}) to:
+            Send {order.coin} to: <Tip tip={networkTip(order.coin, order.network)} />
           </span>
           <div className="address-box" onClick={() => void copy()} title="Click to copy">
             {order.address}
@@ -209,27 +223,33 @@ export function Receive({ order, pieces = 1, payoutCcy, demo, offline, creating,
           <button type="button" className="btn98 is-default" onClick={() => void copy()}>
             {copied ? 'Copied!' : 'Copy address'}
           </button>
-          <ul className="hints">
+          <ul className="facts">
             <li>
-              <b>{order.network} only.</b>
-              {order.coin === 'ETH' && ' Not Base, Arbitrum or any other network.'}
+              <Tip
+                tip={`${order.max ? `Maximum ${trimAmount(order.max)} ${order.coin}. ` : ''}${
+                  order.coin === 'XMR' ? "Less can't be swapped; Monero hides who paid, so you'd give a refund address." : 'Less is sent back to the sender.'
+                }`}
+              >
+                Min <b>{trimAmount(order.min)} {order.coin}</b>
+                {order.minUsd ? ` ≈ $${order.minUsd.toFixed(2)}` : ''}
+              </Tip>
             </li>
             <li>
-              Minimum <b>{trimAmount(order.min)} {order.coin}</b>
-              {order.minUsd ? ` (≈ $${order.minUsd.toFixed(2)})` : ''}
-              {order.max ? `, maximum ${trimAmount(order.max)} ${order.coin}` : ''}.{' '}
-              {order.coin === 'XMR'
-                ? "Less than the minimum can't be swapped; Monero hides who paid, so you'd give a refund address."
-                : 'Less than the minimum is sent back to the sender.'}
+              {order.toCcy === 'XMR' ? (
+                <Tip tip={`Privacy Enhanced: swapped to Monero first, then to ${symbolOf(payoutCcy)}${pieces > 1 ? `, in ${pieces} pieces` : ''}.`}>→ XMR → {symbolOf(payoutCcy)}</Tip>
+              ) : (
+                <>
+                  → {symbolOf(order.toCcy)}, {payout}
+                </>
+              )}
             </li>
-            <li>{order.toCcy === 'XMR' ? `Becomes Monero first, then ${symbolOf(payoutCcy)} (Privacy Enhanced)${pieces > 1 ? `, in ${pieces} pieces` : ''}.` : `Arrives as ${symbolOf(order.toCcy)} in ${payout}.`}</li>
             <li>
               {left !== null && left > 0 ? (
-                <>
-                  Pay within <b>{clock(left)}</b>. FixedFloat still takes a late payment up to 24 hours after the address was made.
-                </>
+                <Tip tip="FixedFloat still takes a late payment up to 24 hours after the address was made.">
+                  <b>{clock(left)}</b> left
+                </Tip>
               ) : (
-                'The 30-minute window has passed. A payment within 24 hours of making this address still goes through at the market rate, but a new address is better.'
+                <Tip tip="A payment within 24 hours of making this address still goes through at the market rate, but a new address is better.">Window passed</Tip>
               )}
             </li>
           </ul>

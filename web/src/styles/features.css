@@ -1137,3 +1137,145 @@ html[data-mode='dark'][data-theme='win11'] .log-list {
   display: block;
   margin-top: 2px;
 }
+
+/* ---------------------------------------------------------------- tooltips: the explanations live here, on hover */
+
+.tip-text {
+  border-bottom: 1px dotted currentColor;
+  cursor: help;
+}
+
+.tip-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: var(--text-faint, #808080);
+  color: var(--face, #c0c0c0);
+  font: italic bold 10px/1 Georgia, 'Times New Roman', serif;
+  vertical-align: 1px;
+  cursor: help;
+  opacity: 0.75;
+  transition: opacity 0.15s;
+}
+
+.tip-dot:hover,
+.tip-dot:focus-visible {
+  opacity: 1;
+}
+
+.tip-text:focus-visible,
+.tip-dot:focus-visible {
+  outline: 1px dotted currentColor;
+  outline-offset: 1px;
+}
+
+.tip-box {
+  position: fixed;
+  z-index: 10000;
+  max-width: 280px;
+  padding: 3px 6px;
+  border: 1px solid #000;
+  background: #ffffe1;
+  color: #000;
+  font-size: 11px;
+  line-height: 1.4;
+  font-style: normal;
+  font-weight: normal;
+  white-space: normal;
+  pointer-events: none;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.25);
+  animation: tip-in 0.12s ease-out;
+}
+
+html[data-shell='win10'] .tip-box,
+html[data-shell='win11'] .tip-box {
+  padding: 6px 9px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 6px;
+  background: #f9f9f9;
+  color: #1a1a1a;
+  font-size: 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+html[data-mode='dark'] .tip-box {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: #2b2b2b;
+  color: #eee;
+}
+
+html[data-shell='classic'][data-mode='dark'] .tip-box {
+  border-color: #000;
+  background: #3a3a2a;
+  color: #f2f2d8;
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+/* One tight line of facts in place of a list of explanations. */
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.facts li {
+  white-space: nowrap;
+}
+
+.legend-tip {
+  font-weight: normal;
+}
+
+/* ---------------------------------------------------------------- How it works › Animations */
+
+.win-anim {
+  width: min(600px, 100%);
+}
+
+.pick-wide {
+  width: 100%;
+}
+
+.anim-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
+}
+
+.anim-bar .seg98 {
+  flex: 1 1 200px;
+}
+
+.anim-bar .seg-btn,
+.anim-moments .seg-btn {
+  min-width: 0;
+}
+
+/* Room above the strip for the arcs, and a sunken screen to watch them on. */
+.anim-stage {
+  margin: 4px 0 10px;
+  padding: 40px 6px 4px;
+  background: var(--field);
+  box-shadow: var(--sunken);
+}
+
+.anim-moments {
+  margin-bottom: 4px;
+}
+
+.anim-auto {
+  margin-right: auto;
+}

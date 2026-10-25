@@ -31,7 +31,7 @@ const H = 3_600_000;
 /** The demo's 24-hour wait plays in this long. */
 const LAPSE_MS = 8000;
 
-function demoOrder(coin: Coin): Order {
+export function demoOrder(coin: Coin): Order {
   const s = SCRIPT[coin];
   const now = Date.now();
   return {
@@ -108,7 +108,7 @@ function stepsAt(flavor: Flavor, active: string, details: Record<string, string>
   return list.map(([key, label], i) => ({ key, label, status: i < at ? 'done' : i === at ? 'active' : 'pending', detail: details[key] ?? null, link: null }));
 }
 
-function demoTransfer(flavor: Flavor, leg1: Order, payoutAddress: string): Transfer {
+export function demoTransfer(flavor: Flavor, leg1: Order, payoutAddress: string): Transfer {
   const now = Date.now();
   const route = flavor !== 'privacy';
   const privacy = flavor !== 'route';

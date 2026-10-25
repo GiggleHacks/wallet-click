@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ClockIcon } from '../components/art';
 import { SendOptionsFields } from '../components/SendOptions';
+import { Tip } from '../components/Tip';
 import { ModalLayer, Window } from '../components/Win98';
 import { saveSendOptions, type SendOptions } from '../lib/sendOptions';
 import { sfx } from '../lib/sound';
@@ -30,14 +31,12 @@ export function SendOptionsDialog({ value, delays, piecesMax, moneroOk, walletOk
   return (
     <ModalLayer>
       <Window title="Send options" icon={<ClockIcon size={16} />} onClose={onClose} className="win-sendopts" role="dialog">
-        <div className="privacy-head">
-          <ClockIcon size={36} />
-          <p>How the coin buttons send what you're paid. Your choice stays until you change it; each permanent address keeps its own.</p>
-        </div>
         <SendOptionsFields value={o} onChange={setO} delays={delays} piecesMax={piecesMax} moneroOk={moneroOk} walletOk={walletOk} sym={sym} />
         {testDelayMin !== null && (
           <p className="line-sub">
-            <b>Test mode on this server:</b> every wait is {testDelayMin} minutes, and pieces are seconds apart.
+            <Tip tip={`Every wait is ${testDelayMin} minutes, and pieces are seconds apart.`}>
+              <b>Test mode</b>
+            </Tip>
           </p>
         )}
         <div className="btn-row">

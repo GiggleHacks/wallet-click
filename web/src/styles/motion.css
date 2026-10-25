@@ -725,9 +725,8 @@ html[data-motion='calm'] *::after {
   transition-delay: 0s !important;
 }
 
-/* What only makes sense moving goes away; the flyers leave one coin parked halfway. */
+/* What only makes sense moving goes away (the courier parks one coin halfway). */
 html[data-motion='calm'] .particles,
-html[data-motion='calm'] .sparkles,
 html[data-motion='calm'] .burst,
 html[data-motion='calm'] .swap-flash,
 html[data-motion='calm'] .swap-glow,
@@ -744,24 +743,30 @@ html[data-motion='calm'] .win.is-done .titlebar::after {
   display: none;
 }
 
-html[data-motion='calm'] .lane-runner,
-html[data-motion='calm'] .lane-arc,
-html[data-motion='calm'] .lane-pop {
-  animation: none !important;
-}
-
-html[data-motion='calm'] .lane-runner {
-  transform: translate3d(50%, 0, 0);
-}
-
-html[data-motion='calm'] .lane-runner:not(:first-child) {
-  display: none;
-}
-
 /* ---------------------------------------------------------------- a hidden tab pauses */
 
 html[data-hidden] *,
 html[data-hidden] *::before,
 html[data-hidden] *::after {
   animation-play-state: paused !important;
+}
+
+/* ---------------------------------------------------------------- the coin courier (canvas: flights and the swap orbit) */
+
+.courier {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* The back canvas sits under the stations (the far half of the orbit, shadows); the front one over them. */
+.courier.is-back {
+  z-index: 0;
+}
+
+.courier.is-front {
+  z-index: 3;
+}
+
+.courier-art {
+  display: none;
 }

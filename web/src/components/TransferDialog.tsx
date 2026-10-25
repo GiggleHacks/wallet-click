@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { api } from '../api';
 import { isCalm } from '../lib/motion';
 import { FX, ParticleLayer, type ParticleApi } from './Particles';
+import { Courier, courierCoin, type Flight } from './Courier';
 import { minutesText, shortAddr, trimAmount, usdt } from '../lib/format';
 import { COST_HELP, costText } from '../lib/cost';
 import { sfx } from '../lib/sound';
@@ -11,6 +12,7 @@ import type { Order, Stage } from '../types';
 import { networkOf, symbolOf, isCoinbaseId } from '../lib/assets';
 import { AppMark, CheckBadge, CoinIcon, CoinbaseIcon, Hourglass, ModernPC, StableIcon, SwapMachine, WarnIcon } from './art';
 import { PasswordField } from './PasswordField';
+import { Tip } from './Tip';
 import { ModalLayer, ProgressBar, SpeedGraph, Window } from './Win98';
 
 const FLOW: Stage[] = ['waiting', 'received', 'swapping', 'sending', 'done'];
@@ -52,58 +54,6 @@ const STAGE_SOUND: Partial<Record<Stage, () => void>> = {
 const X = { coin: 13, swap: 50, coinbase: 87 };
 /** The middle of a station's icon, in px from the top of the strip (where the track runs). */
 export const ICON_Y = 36;
-
-/**
- * Coins flying down a lane on an arc. Each runner is as wide as the lane and slides by its own width
- * (translateX 100%) at a steady speed while an inner layer rises and falls (translateY, eased out then in): together
- * a parabola, all GPU transforms, so it stays smooth at full frame rate. `onLand` fires as each coin arrives.
- */
-export function Flyers({ from, to, children, count = 4, duration = 1.6, arc = 16, onLand }: { from: number; to: number; children: ReactNode; count?: number; duration?: number; arc?: number; onLand?(): void }) {
-  return (
-    <div className="lane" style={{ left: `${from}%`, width: `${to - from}%` }}>
-      {Array.from({ length: count }, (_, i) => (
-        <span
-          key={i}
-          className="lane-runner"
-          style={{ '--dur': `${duration}s`, '--delay': `${(-i * duration) / count}s`, '--arc': `${-arc}px` } as CSSProperties}
-          onAnimationIteration={onLand ? (e) => e.animationName === 'lane-run' && e.target === e.currentTarget && onLand() : undefined}
-        >
-          <span className="lane-arc">
-            <span className="lane-pop">
-              <span className="lane-coin">{children}</span>
-            </span>
-          </span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-/** A coin spinning in 3D inside a swap machine: what goes in on one face, what comes out on the other, a metal edge between. */
-export function SpinFaces({ front, back }: { front: ReactNode; back: ReactNode }) {
-  return (
-    <div className="spin3d">
-      <div className="spin3d-coin">
-        <span className="spin3d-face is-front">{front}</span>
-        <span className="spin3d-edge" />
-        <span className="spin3d-face is-back">{back}</span>
-      </div>
-    </div>
-  );
-}
-
-const SpinCoin = ({ coin, ccy }: { coin: Order['coin']; ccy?: string }) => <SpinFaces front={<CoinIcon coin={coin} size={30} />} back={<StableIcon ccy={ccy} size={30} />} />;
-
-/** Sparks orbiting the machine on a tilted ring: a back half (behind the machine) and a front half. */
-export function Sparkles({ side, count = 6 }: { side: 'back' | 'front'; count?: number }) {
-  return (
-    <div className={`sparkles is-${side}`}>
-      {Array.from({ length: count }, (_, i) => (
-        <i key={i} style={{ animationDelay: `${(-i * 1.8) / count}s` }} />
-      ))}
-    </div>
-  );
-}
 
 /** A one-shot burst (ring + flying dots). Give it a new key to play it again. */
 export function Burst({ color, center }: { color: string; center?: boolean }) {
@@ -234,22 +184,24 @@ export function TransferStrip({ order, shown }: { order: Order; shown: Stage }) 
     setCaught((c) => ({ ...c, [at]: c[at] + 1 }));
   };
   const flow = shown === 'waiting' || shown === 'received' ? [X.coin, X.swap] : shown === 'swapping' || shown === 'sending' ? [X.swap, X.coinbase] : null;
+  const out = courierCoin(order.toCcy);
+  const flights: Flight[] = [];
+  if (shown === 'received') flights.push({ id: 'in', from: X.coin, to: X.swap, coin: order.coin, onLand: land('swap') });
+  if (shown === 'sending') flights.push({ id: 'out', from: X.swap, to: X.coinbase, coin: out, onLand: land('dest') });
 
   return (
     <div className={`strip stage-${shown}`} aria-hidden="true">
       <Track from={X.coin} to={X.coinbase} litTo={done ? X.coinbase : after('received') ? X.swap : undefined} flowFrom={flow?.[0]} flowTo={flow?.[1]} />
+      <Courier flights={flights} orbit={swapping ? { x: X.swap, a: order.coin, b: out, r: 50 } : null} />
       <ParticleLayer ref={parts} ambient={swapping ? [{ x: X.swap, y: ICON_Y, rate: 24, ...FX.swirl([...coinColors, ...outColors]) }] : undefined} />
       <Station x={X.coin} label={order.coinName} dim={after('received')} ping={shown === 'waiting'} idle={shown === 'waiting'}>
         <CoinIcon coin={order.coin} size={44} />
       </Station>
       <Station x={X.swap} label="Swap" working={swapping} catches={caught.swap}>
         {swapping && <span className="swap-glow" />}
-        {swapping && <Sparkles side="back" />}
         <span className="station-machine">
           {theme.shell === 'classic' ? <SwapMachine size={60} spinning={busy} /> : <ModernPC size={60} spinning={busy} variant={theme.shell} />}
         </span>
-        {swapping && <SpinCoin coin={order.coin} ccy={order.toCcy} />}
-        {swapping && <Sparkles side="front" />}
         {fx?.kind === 'in' && <span key={fx.key} className="swap-flash" />}
         {fx?.kind === 'out' && <Burst key={fx.key} color="#26a17b" />}
       </Station>
@@ -262,16 +214,6 @@ export function TransferStrip({ order, shown }: { order: Order; shown: Stage }) 
           </motion.span>
         )}
       </Station>
-      {shown === 'received' && (
-        <Flyers from={X.coin + 5} to={X.swap - 6} onLand={land('swap')}>
-          <CoinIcon coin={order.coin} size={24} />
-        </Flyers>
-      )}
-      {shown === 'sending' && (
-        <Flyers from={X.swap + 6} to={X.coinbase - 5} onLand={land('dest')}>
-          <StableIcon ccy={order.toCcy} size={24} />
-        </Flyers>
-      )}
     </div>
   );
 }
@@ -356,7 +298,7 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
             <Hourglass size={16} /> Waiting for your {order.coinName} payment…
           </p>
           <p className="line-sub">
-            Any amount from {trimAmount(order.min)} {order.coin} works.
+            Min {trimAmount(order.min)} {order.coin}
           </p>
         </>
       );
@@ -369,8 +311,8 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
           </p>
           <p className="line-sub">
             {belowMin
-              ? `That's below the ${trimAmount(order.min)} ${order.coin} minimum, so it will be sent back to the sender.`
-              : `Waiting for network confirmations (${Math.min(order.confirmations, req)} of ${req})…`}
+              ? `Below the ${trimAmount(order.min)} ${order.coin} minimum: going back to the sender.`
+              : `Confirmations ${Math.min(order.confirmations, req)}/${req}`}
           </p>
         </>
       );
@@ -381,7 +323,6 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
           <p className="line-main">
             Swapping <b>{paid}</b> to {symbolOf(order.toCcy)}…
           </p>
-          <p className="line-sub">FixedFloat is exchanging it at the market rate.</p>
         </>
       );
     case 'sending':
@@ -390,7 +331,9 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
           <p className="line-main">
             Sending <b>{order.usdt ? `≈ ${usdt(order.usdt)} ${symbolOf(order.toCcy)}` : symbolOf(order.toCcy)}</b> to {payoutName(order)}…
           </p>
-          <p className="line-sub">To {order.payoutAddress ? shortAddr(order.payoutAddress) : payoutName(order)} on {networkOf(order.toCcy)}.</p>
+          <p className="line-sub">
+            {order.payoutAddress ? shortAddr(order.payoutAddress) : payoutName(order)} · {networkOf(order.toCcy)}
+          </p>
         </>
       );
     case 'done':
@@ -404,14 +347,13 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
               {costText(order.cost)}
             </p>
           )}
-          <p className="line-sub">
-            {paid} in, {symbolOf(order.toCcy)} out to {order.payoutAddress ? shortAddr(order.payoutAddress) : payoutName(order)}.{' '}
-            {order.payoutTxUrl && (
+          {order.payoutTxUrl && (
+            <p className="line-sub">
               <a href={order.payoutTxUrl} target="_blank" rel="noreferrer">
                 View payout
               </a>
-            )}
-          </p>
+            </p>
+          )}
         </>
       );
     case 'refunded':
@@ -435,7 +377,7 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
                 .{' '}
               </>
             ) : null}
-            FixedFloat returns it minus the network fee.{' '}
+            <Tip tip="FixedFloat returns it minus the network fee." />{' '}
             {order.refundTxUrl && (
               <a href={order.refundTxUrl} target="_blank" rel="noreferrer">
                 View refund
@@ -447,8 +389,7 @@ function Lines({ order, shown, onUpdate }: { order: Order; shown: Stage; onUpdat
     case 'expired':
       return (
         <>
-          <p className="line-main">This address expired without a payment.</p>
-          <p className="line-sub">Make a new address for the next payment.</p>
+          <p className="line-main">Expired without a payment.</p>
         </>
       );
     case 'attention': {

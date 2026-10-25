@@ -9,8 +9,10 @@ import type { Order, Piece, Transfer, TransferStep } from '../types';
 import { isCoinbaseId, networkOf, symbolOf } from '../lib/assets';
 import { AppMark, CheckBadge, CoinIcon, CoinbaseIcon, HouseIcon, Hourglass, ModernPC, ShieldIcon, StableIcon, SwapMachine, WarnIcon, XmrIcon } from './art';
 import { DelaySlider, untilText } from './DelaySlider';
+import { Tip } from './Tip';
 import { FX, ParticleLayer, type Ambient, type ParticleApi } from './Particles';
-import { Burst, COIN_COLORS, Flyers, ICON_Y, RefundForm, Sparkles, SpinFaces, Station, Track, stableColors } from './TransferDialog';
+import { Burst, COIN_COLORS, ICON_Y, RefundForm, Station, Track, stableColors } from './TransferDialog';
+import { Courier, courierCoin, type Flight } from './Courier';
 import { ModalLayer, ProgressBar, SpeedGraph, Window } from './Win98';
 
 /**
@@ -219,7 +221,7 @@ function Vault({ door, turning, idle, coins, churning, alive, ring, flash }: Vau
   );
 }
 
-function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: number }) {
+export function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: number }) {
   const theme = useTheme();
   const five = viaMonero(t);
   const flow = flowOf(t);
@@ -342,15 +344,19 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
       'Vault'
     );
 
-  const fly = (from: number, to: number, icon: React.ReactNode, onLand?: () => void) => (
-    <Flyers from={from + 5} to={to - 6} count={3} arc={five ? 14 : 18} onLand={onLand}>
-      {icon}
-    </Flyers>
-  );
+  // Coins thrown from station to station, and two coins circling a machine while it swaps.
+  const out = courierCoin(t.payoutCcy);
+  const flights: Flight[] = [];
+  if (shown === 'confirming' || (shown === 'swap1' && t.state === 'pieces')) flights.push({ id: 'in', from: X.coin, to: X.swap1, coin: t.coin, onLand: land('swap1', X.swap1, coinColors) });
+  if (shown === 'vault-in') flights.push({ id: 'vault', from: X.swap1, to: X.vault, coin: 'XMR', onLand: land('vault', X.vault, xmrColors) });
+  if (shown === 'release') flights.push({ id: 'release', from: X.vault, to: X.swap2, coin: 'XMR', onLand: land('swap2', X.swap2, xmrColors) });
+  if (shown === 'sending' || pieceFly > 0) flights.push({ id: 'out', from: five ? X.swap2 : X.swap1, to: X.dest, coin: out, onLand: land('dest', X.dest, outColors) });
+  const orbit = shown === 'swap1' ? { x: X.swap1, a: t.coin, b: five ? ('XMR' as const) : out, r: five ? 38 : 50 } : shown === 'swap2' ? { x: X.swap2, a: 'XMR' as const, b: out, r: 38 } : null;
 
   return (
     <div className={`strip journey-strip ${five ? 'is-five' : ''} phase-${shown}`} aria-hidden="true">
       <Track from={X.coin} to={X.dest} litTo={lit} flowFrom={seg ? stops[seg[0]] : undefined} flowTo={seg ? stops[seg[1]] : undefined} slow={slow} />
+      <Courier flights={flights} orbit={orbit} />
       <ParticleLayer ref={parts} ambient={ambient} />
       <Station
         x={X.coin}
@@ -377,10 +383,7 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
 
       <Station x={X.swap1} label="Swap" working={shown === 'swap1'} dim={after('swap1')} catches={caught.swap1}>
         {shown === 'swap1' && <span className="swap-glow" />}
-        {shown === 'swap1' && <Sparkles side="back" />}
         <span className="station-machine">{machine(shown === 'swap1')}</span>
-        {shown === 'swap1' && <SpinFaces front={<CoinIcon coin={t.coin} size={30} />} back={five ? <XmrIcon size={30} /> : <StableIcon ccy={t.payoutCcy} size={30} />} />}
-        {shown === 'swap1' && <Sparkles side="front" />}
         {fx?.phase === 'swap1' && <span key={fx.key} className="swap-flash" />}
         {fx && fx.phase === (five ? 'vault-in' : 'sending') && <Burst key={fx.key} color={five ? '#ff6600' : '#26a17b'} />}
       </Station>
@@ -404,10 +407,7 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
       {five && (
         <Station x={X.swap2} label="Swap" working={shown === 'swap2'} dim={after('swap2')} catches={caught.swap2}>
           {shown === 'swap2' && <span className="swap-glow" />}
-          {shown === 'swap2' && <Sparkles side="back" />}
           <span className="station-machine">{machine(shown === 'swap2')}</span>
-          {shown === 'swap2' && <SpinFaces front={<XmrIcon size={30} />} back={<StableIcon ccy={t.payoutCcy} size={30} />} />}
-          {shown === 'swap2' && <Sparkles side="front" />}
           {fx?.phase === 'swap2' && <span key={fx.key} className="swap-flash" />}
           {fx?.phase === 'sending' && <Burst key={fx.key} color="#26a17b" />}
         </Station>
@@ -423,10 +423,6 @@ function JourneyStrip({ t, shown, now }: { t: Transfer; shown: Phase; now: numbe
         )}
       </Station>
 
-      {(shown === 'confirming' || (shown === 'swap1' && t.state === 'pieces')) && fly(X.coin, X.swap1, <CoinIcon coin={t.coin} size={22} />, land('swap1', X.swap1, coinColors))}
-      {shown === 'vault-in' && fly(X.swap1, X.vault, <XmrIcon size={22} />, land('vault', X.vault, xmrColors))}
-      {shown === 'release' && fly(X.vault, X.swap2, <XmrIcon size={22} />, land('swap2', X.swap2, xmrColors))}
-      {(shown === 'sending' || pieceFly > 0) && fly(five ? X.swap2 : X.swap1, X.dest, <StableIcon ccy={t.payoutCcy} size={22} />, land('dest', X.dest, outColors))}
     </div>
   );
 }
@@ -645,19 +641,19 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
       <>
         <Hourglass size={16} /> Waiting for your {t.coinName} payment…
       </>,
-      t.privacy ? `It goes through Monero first, then to ${sym}.` : null,
+      null,
     ],
     confirming: [
       <>
         {t.routeLabel ? `Payment at "${t.routeLabel}"` : 'Payment received'}: <b>{paid}</b>
       </>,
       t.state === 'split'
-        ? `Splitting it into ${t.pieces} pieces at fresh addresses of your own wallet…`
+        ? `Splitting into ${t.pieces} pieces…`
         : t.state === 'open1' || t.state === 'send1'
-        ? 'Confirmed: forwarding it to a fresh FixedFloat order…'
+        ? 'Forwarding to FixedFloat…'
         : t.leg1 && t.leg1.requiredConfirmations && !t.routeId
-          ? `Waiting for network confirmations (${Math.min(t.leg1.confirmations, t.leg1.requiredConfirmations)} of ${t.leg1.requiredConfirmations})…`
-          : 'Waiting for network confirmations…',
+          ? `Confirmations ${Math.min(t.leg1.confirmations, t.leg1.requiredConfirmations)}/${t.leg1.requiredConfirmations}`
+          : 'Confirming…',
     ],
     held: [
       <>
@@ -673,24 +669,27 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
           </>
         )}
       </>,
-      t.state === 'pieces' ? 'Each piece is forwarded to FixedFloat on its own, in a random, unequal amount.' : until ? `Goes on at ${new Date(until).toLocaleString()}${split ? `, in ${t.pieces} pieces` : ''}.` : null,
+      t.state === 'pieces' ? null : until ? `Goes on ${new Date(until).toLocaleString()}${split ? ` · ${t.pieces} pieces` : ''}` : null,
     ],
     swap1: [
       <>
         Swapping <b>{t.state === 'pieces' ? `piece ${pieceList.find((p) => p.stage === 'sending')?.n ?? ''} of ${pieceList.length}` : paid}</b> to {t.privacy ? 'Monero' : sym}…
       </>,
-      t.privacy ? 'FixedFloat pays the Monero into your own wallet.' : 'FixedFloat is exchanging it at the market rate.',
+      null,
     ],
-    'vault-in': [<>Monero on its way into your vault…</>, 'A fresh address in your own Monero wallet.'],
+    'vault-in': [<>Monero on its way into your vault…</>, null],
     locked: [
       <>
         <b>{xmr}</b> is in the vault
       </>,
-      `Unlocking: ${Math.min(t.xmrConfirmations ?? 0, 10)} of 10 confirmations.`,
+      `Unlocking ${Math.min(t.xmrConfirmations ?? 0, 10)}/10`,
     ],
     churn: [
-      <>{split ? `Splitting it into ${t.pieces} pieces within your wallet…` : 'Moving it to a fresh spot in your wallet…'}</>,
-      split ? 'One fresh address per piece; each piece moves once more on its own.' : "So FixedFloat's own coins never go straight back to it.",
+      <>
+        {split ? `Splitting into ${t.pieces} pieces…` : 'Moving it within your wallet…'}
+        <Tip tip={split ? 'One fresh address per piece; each piece moves once more on its own.' : "So FixedFloat's own coins never go straight back to it."} />
+      </>,
+      null,
     ],
     waiting: [
       <>
@@ -705,20 +704,20 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
           </>
         )}
       </>,
-      until ? `${t.state === 'pieces' && sentPieces ? 'Next piece swaps' : 'Swaps'} to ${sym} at ${new Date(until).toLocaleString()}${split && !sentPieces ? `, in ${t.pieces} pieces` : ''}.` : null,
+      until ? `${t.state === 'pieces' && sentPieces ? 'Next piece' : 'Swaps'} ${new Date(until).toLocaleString()}${split && !sentPieces ? ` · ${t.pieces} pieces` : ''}` : null,
     ],
-    release: [<>Wait over: opening the vault…</>, `${xmr} heads to the swap.`],
+    release: [<>Opening the vault…</>, null],
     swap2: [
       <>
         Swapping <b>{t.state === 'pieces' ? `piece ${pieceList.find((p) => p.stage === 'sending')?.n ?? ''} of ${pieceList.length}` : xmr}</b> to {sym}…
       </>,
-      'FixedFloat is exchanging it at the market rate.',
+      null,
     ],
     sending: [
       <>
         Sending <b>{out ? `≈ ${usdt(out)} ${sym}` : sym}</b> to {t.destinationLabel}…
       </>,
-      `To ${shortAddr(t.destinationAddress)} on ${networkOf(t.payoutCcy)}.`,
+      `${shortAddr(t.destinationAddress)} · ${networkOf(t.payoutCcy)}`,
     ],
     done: [
       <>
@@ -752,7 +751,7 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
         )}
         {demo && (
           <div className="warn-box demo-box">
-            <WarnIcon size={20} /> Demo. No real money moves{timeLapse ? '; the wait runs as a time-lapse' : ''}.
+            <WarnIcon size={20} /> Demo{timeLapse ? ': the wait plays as a time-lapse' : ''}.
           </div>
         )}
         <JourneyStrip t={t} shown={shown} now={now} />
@@ -770,7 +769,7 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
           </motion.div>
           {(shown === 'waiting' || shown === 'held') && timeLapse && (
             <p className="line-sub timelapse">
-              <FastForward /> Time-lapse: a day in a few seconds.
+              <FastForward /> Time-lapse
             </p>
           )}
           {!finished && t.waitingFor && shown !== 'waiting' && shown !== 'held' && <p className="line-sub">Waiting for {t.waitingFor}…</p>}
