@@ -1,0 +1,21 @@
+# Delivers Wallet Click's Telegram pings (data/telegram-outbox.jsonl) through openclaw.
+# Install: copy to /etc/systemd/system/, then put your chat id in an override that stays on the server:
+#   systemctl edit wallet-click-notify   →   [Service]
+#                                            Environment=WC_CHAT_ID=<your Telegram chat id>
+#   systemctl enable --now wallet-click-notify
+[Unit]
+Description=Wallet Click Telegram notification deliverer
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /opt/wallet-click/scripts/telegram-deliver.py
+Restart=always
+RestartSec=3
+# Payment notices only. The script does not print message bodies.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

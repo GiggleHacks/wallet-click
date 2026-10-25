@@ -17,6 +17,26 @@ const { setTransport } = await import('../server/fixedfloat.js');
 const { emergencyAction, orders, pollDue, refundOrder, stageOf, watchChain } = await import('../server/orders.js');
 const { fromBase, setChainFetch, toBase } = await import('../server/chain.js');
 
+/** Telegram pings queued while `fn` runs (the outbox lines: key and text). */
+async function pings(fn: () => Promise<void>): Promise<{ key: string; text: string }[]> {
+  const { resetNotify } = await import('../server/notify.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-ping-'));
+  process.env.WC_NOTIFY_DIR = dir;
+  process.env.WC_NOTIFY_TEST = '1';
+  resetNotify();
+  try {
+    await fn();
+    const file = path.join(dir, 'telegram-outbox.jsonl');
+    if (!fs.existsSync(file)) return [];
+    return fs.readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { key: string; text: string });
+  } finally {
+    delete process.env.WC_NOTIFY_DIR;
+    delete process.env.WC_NOTIFY_TEST;
+    resetNotify();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 const SENDER = '0xe5b787cf9a4d383230ec88363a6c721dce27e504';
 const BTC_PAYER = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
 
@@ -427,6 +447,30 @@ describe('following an order', () => {
     const { rec } = await createThenAnswer(() => ffOrder({ status: 'NEW' }));
     rec.seen = { at: Date.now() - 2 * 60 * 60 * 1000, amount: '0.01' };
     expect((await view(rec.id)).stage).toBe('waiting');
+  });
+
+  it('pings Telegram once when a payment shows up, and once when the USDC goes out', async () => {
+    let done = false;
+    const got = await pings(async () => {
+      const { rec } = await createThenAnswer(() =>
+        done ? ffOrder({ status: 'DONE', fromTx: { id: '0xin', amount: '0.006', confirmations: 12 }, toTx: { id: '0xout', amount: '15.2' } }) : ffOrder({ status: 'NEW' }),
+      );
+      chain.totals = [0n, toBase('0.006', 18)!];
+      await watchChain(); // baseline
+      rec.chainNextAt = 0;
+      await watchChain(); // spotted on-chain: the ping goes now, before FixedFloat has seen it
+      done = true;
+      rec.nextPollAt = 0;
+      await pollDue(); // FixedFloat has it, swapped and paid out
+      rec.nextPollAt = 0;
+      await pollDue(); // looking again sends nothing new
+    });
+    expect(got.map((g) => g.key)).toEqual([expect.stringMatching(/^recv:order:/), 'send:payout:0xout']);
+    expect(got[0].text).toContain('📥 Received');
+    expect(got[0].text).toContain('0.006 ETH');
+    expect(got[1].text).toContain('📤 Sent');
+    expect(got[1].text).toContain('15.2 USDC');
+    expect(got[1].text).toContain('https://basescan.org/tx/0xout');
   });
 
   it('leaves reused addresses to FixedFloat', async () => {

@@ -6,6 +6,7 @@ import { destinations } from './destinations.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
 import { FfError, budgetLeft, ff, type FfOrder } from './fixedfloat.js';
 import { logger } from './logs.js';
+import { noteOrderMoney } from './notify.js';
 import { readJson, writeJsonAtomic } from './store.js';
 
 /**
@@ -363,6 +364,7 @@ export async function refundOrder(r: OrderRecord, address: string): Promise<void
 export async function pollOrder(r: OrderRecord, now = Date.now()): Promise<void> {
   const before = JSON.stringify([r.ff, r.pollError]);
   const [wasStatus, wasError] = [r.ff.status, r.pollError];
+  const had = { from: Boolean(r.ff.from.tx?.id), to: Boolean(r.ff.to.tx?.id), refund: Boolean(r.ff.back?.tx?.id) };
   try {
     r.ff = stripToken(await ff.order(r.id, r.token));
     r.pollError = null;
@@ -376,12 +378,40 @@ export async function pollOrder(r: OrderRecord, now = Date.now()): Promise<void>
     logger.info(`[order ${r.id}] FixedFloat: ${wasStatus} → ${r.ff.status}${got}${sent}`);
   }
   if (r.pollError && r.pollError !== wasError) logger.warn(`[order ${r.id}] couldn't check with FixedFloat: ${r.pollError}`);
+  if (!r.pollError) noteMoney(r, now, { hadFrom: had.from, hadTo: had.to, hadRefund: had.refund });
   r.polledAt = now;
   await maybeContinue(r, now);
   await maybeRefund(r, now);
   await notePrices(r, now);
   const delay = nextPollDelay(r, now);
   r.nextPollAt = delay === null ? STOPPED : now + delay;
+}
+
+/** A Telegram ping for money that just came in or went out on this order (only the changes since the last look). */
+function noteMoney(r: OrderRecord, now: number, p: { seenNew?: boolean; hadFrom: boolean; hadTo: boolean; hadRefund: boolean }): void {
+  const o = r.ff;
+  noteOrderMoney({
+    id: r.id,
+    coin: r.coin,
+    depositAddress: r.depositAddress,
+    ownRefund: r.ownRefund,
+    toCcy: r.toCcy,
+    toAddress: r.toAddress,
+    toLabel: r.toLabel,
+    seen: r.seen,
+    seenNew: p.seenNew,
+    fromTxId: o.from.tx?.id ?? null,
+    fromAmount: o.from.tx?.amount ? String(o.from.tx.amount) : null,
+    toTxId: o.to.tx?.id ?? null,
+    toAmount: o.to.tx?.amount ? String(o.to.tx.amount) : null,
+    hadFrom: p.hadFrom,
+    hadTo: p.hadTo,
+    hadRefund: p.hadRefund,
+    refundTxId: o.back?.tx?.id ?? null,
+    refundAmount: o.back?.tx?.amount ? String(o.back.tx.amount) : null,
+    refundTo: o.back?.address ? String(o.back.address) : null,
+    at: now,
+  });
 }
 
 const CHAIN_FRESH = 4 * S;
@@ -426,6 +456,7 @@ export async function watchChain(now = Date.now()): Promise<void> {
           if (added <= 0n) return;
           r.seen = { at: now, amount: formatBase(r.coin, added) };
           logger.info(`[order ${r.id}] payment spotted on-chain: ${r.seen.amount} ${r.coin}`);
+          noteMoney(r, now, { seenNew: true, hadFrom: true, hadTo: true, hadRefund: true });
           r.nextPollAt = now; // and ask FixedFloat straight away
           markDirty();
         } catch {

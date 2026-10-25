@@ -155,6 +155,14 @@ docker compose exec wallet-click rm /app/data/seed-backup.txt
 docker compose restart
 ```
 
+### Telegram pings (optional)
+
+When money arrives (a fresh address, a permanent one), leaves the hot wallet for a swap, or is paid out or refunded,
+the server appends one line per event to `data/telegram-outbox.jsonl`; each event pings once, even across restarts.
+The server never holds a bot token: a small host process delivers the lines. With the `openclaw` CLI
+set up on the host, install `scripts/wallet-click-notify.service` and give it your chat id in a local override
+(see the comments in the file).
+
 ## Tests
 
 `npm test` covers:

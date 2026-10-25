@@ -28,6 +28,26 @@ const { orders, pollDue } = await import('../server/orders.js');
 const { transfers, stepTransfer, scanRoutes, createPrivacyTransfer, refreshPrices, rescueLeftovers, planPieces } = await import('../server/transfers.js');
 const { addresses } = await import('../server/addresses.js');
 const { setXmrFetch } = await import('../server/wallets/xmr.js');
+
+/** Telegram pings queued while `fn` runs (the outbox lines: key and text). */
+async function pings(fn: () => Promise<void>): Promise<{ key: string; text: string }[]> {
+  const { resetNotify } = await import('../server/notify.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-ping-'));
+  process.env.WC_NOTIFY_DIR = dir;
+  process.env.WC_NOTIFY_TEST = '1';
+  resetNotify();
+  try {
+    await fn();
+    const file = path.join(dir, 'telegram-outbox.jsonl');
+    if (!fs.existsSync(file)) return [];
+    return fs.readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { key: string; text: string });
+  } finally {
+    delete process.env.WC_NOTIFY_DIR;
+    delete process.env.WC_NOTIFY_TEST;
+    resetNotify();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
 const { setChainFetch } = await import('../server/chain.js');
 
 const BIP84_FIRST = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';
@@ -495,6 +515,28 @@ describe('permanent addresses', () => {
     t = await run(id);
     expect(t).toMatchObject({ state: 'done', usdt: '240.5' });
     expect(t.forward!.raw).toEqual([]); // nothing signed left lying around
+  });
+
+  it('pings Telegram when money lands at a permanent address, goes to the swap, and pays out', async () => {
+    let id = '';
+    const got = await pings(async () => {
+      await post('/api/addresses', { coin: 'BTC', mode: 'direct', label: 'Phone' });
+      chain.utxos = [{ txid: 'ab'.repeat(32), vout: 0, value: 300_000, status: { confirmed: true, block_height: chain.tip } }];
+      await scanRoutes();
+      id = transfers.all()[0].id;
+      const t = await run(id); // confirmed: forwarded to FixedFloat
+      const leg = orders.get(t.leg1!)!;
+      ff.finish(leg.id, '240.5');
+      leg.nextPollAt = 0;
+      await pollDue();
+      await run(id);
+    });
+    expect(got.map((g) => g.key.split(':').slice(0, 2).join(':'))).toEqual(['recv:route', 'send:hot', 'send:payout']);
+    expect(got[0].text).toContain('0.003 BTC');
+    expect(got[0].text).toContain('Phone');
+    expect(got[0].text).toContain(`https://mempool.space/tx/${'ab'.repeat(32)}`);
+    expect(got[1].text).toContain('To the swap');
+    expect(got[2].text).toContain('240.5 USDC');
   });
 
   it('forwards Ethereum: exactly the order amount, gas kept back, mainnet only', async () => {

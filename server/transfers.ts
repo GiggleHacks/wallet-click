@@ -8,6 +8,7 @@ import { destinations } from './destinations.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
 import { FfError } from './fixedfloat.js';
 import { logger } from './logs.js';
+import { noteHotSend, noteRouteReceived } from './notify.js';
 import { LimitError, abandon, costOf, createOrder, flush as flushOrders, limits, openSwap, orderView, orders, pairBusy, usdPrice, type Expect, type OrderRecord, type OrderView } from './orders.js';
 import { readJson, writeJsonAtomic } from './store.js';
 import { hotWallet, xmrWallet, type HotWallet, type RouteRef } from './wallets/index.js';
@@ -397,6 +398,11 @@ async function collect(t: TransferRecord, now: number): Promise<void> {
     // A piece shows its own share; the address may hold the other pieces too (Ethereum).
     const received = fmt(route.coin, s.seen);
     if (received !== t.received || s.confirmations !== t.inbound?.confirmations) markDirty();
+    const was = t.received ? (toBase(t.received, DECIMALS[route.coin]) ?? 0n) : 0n;
+    const fresh = s.txids.filter((x) => !(t.inbound?.txids ?? []).includes(x));
+    if (t.inbound && fresh.length && s.seen > was) {
+      noteRouteReceived({ routeId: route.id, label: route.label, coin: route.coin, address: route.address, amount: fmt(route.coin, s.seen - was), txids: fresh, at: now });
+    }
     t.received = received;
     t.inbound = { txids: s.txids, confirmations: s.confirmations, required: s.required, spendable: fmt(route.coin, s.spendable) };
   }
@@ -653,6 +659,7 @@ async function send1(t: TransferRecord, now: number): Promise<void> {
     persist(); // on disk before it goes out
   }
   await broadcast(w, t.forward, now);
+  noteHotSend({ txid: t.forward.txids[0], amount: t.forward.amount, coin: route.coin, to: t.forward.to, at: now });
   o.nextPollAt = now; // ask FixedFloat straight away
   advance(t, 'swap1', `Sent ${t.forward.amount} ${route.coin} to FixedFloat (tx ${shortTx(t.forward.txids[0])})`, now);
 }
@@ -828,6 +835,7 @@ async function send2(t: TransferRecord, now: number): Promise<void> {
     persist();
   }
   await broadcast(xmrWallet, t.sweep, now);
+  noteHotSend({ txid: t.sweep.txids[0], amount: t.sweep.amount, coin: 'XMR', to: t.sweep.to, at: now });
   o.nextPollAt = now;
   advance(t, 'swap2', `Sent ${t.sweep.amount} XMR to FixedFloat (tx ${shortTx(t.sweep.txids[0])})`, now);
 }
@@ -970,6 +978,7 @@ export async function scanRoutes(now = Date.now()): Promise<void> {
         t.received = fmt(route.coin, s.seen);
         t.inbound = { txids: s.txids, confirmations: s.confirmations, required: s.required, spendable: fmt(route.coin, s.spendable) };
         note(t, `Payment seen at "${route.label}": ${t.received} ${route.coin}`, now);
+        noteRouteReceived({ routeId: route.id, label: route.label, coin: route.coin, address: route.address, amount: t.received, txids: s.txids, at: now });
         load().transfers.push(t);
         markDirty();
       } catch {
