@@ -1,11 +1,12 @@
 import { motion } from 'motion/react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { beat, chip } from '../lib/chiptune';
+import { chip } from '../lib/chiptune';
 import { useAnimStyle } from '../lib/motion';
+import { getChoice, setChoice } from '../lib/prefs';
 import { clockText, momentsOf, spotsAt, type Column, type Holder, type MoneyPath, type Token } from '../lib/moneyPath';
 import { useTheme } from '../lib/themes';
 import { CoinIcon, CoinbaseIcon, Hourglass, ModernPC, ServerIcon, SmallKey, SwapMachine, UsdcIcon, VaultIcon } from './art';
-import { CoinArt, paintCoin, paintTrail } from './Courier';
+import { CoinArt, paintCoin, paintRail, paintSpark, paintTrail } from './Courier';
 import { PX } from './pixelArt';
 import { Tip } from './Tip';
 
@@ -74,7 +75,25 @@ interface Tok {
   count: number;
   /** A moving coin's line, and how far along it is (for its trail). */
   line?: { a: { x: number; y: number }; b: { x: number; y: number }; progress: number };
+  /** 0–1 over the moment after it arrived (for Rail's glint); unset once it has settled. */
+  fresh?: number;
 }
+
+/**
+ * Three ways to draw the moving coins, to try side by side; all go straight along the line. Glide: eases out and in,
+ * with a dotted trail and an after-image. Stream: a little convoy of coins at a steady speed. Rail: one coin at a
+ * steady speed, filling in the line behind it, with a glint as it arrives.
+ */
+type Variant = 'glide' | 'stream' | 'rail';
+const VARIANTS: { id: Variant; label: string }[] = [
+  { id: 'glide', label: 'A · Glide' },
+  { id: 'stream', label: 'B · Stream' },
+  { id: 'rail', label: 'C · Rail' },
+];
+const savedVariant = (): Variant => {
+  const v = getChoice('mapCoins');
+  return v === 'stream' || v === 'rail' ? v : 'glide';
+};
 
 /** Along a line: mostly eased in and out, never quite stopping (the courier's flights move the same way). */
 const glide = (x: number) => 0.3 * x + 0.7 * (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
@@ -162,11 +181,13 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
    */
   const calm = style === 'calm';
   const pixel = style === 'retro';
+  const [variant, setVariant] = useState<Variant>(savedVariant);
+  const along = (x: number) => (variant === 'glide' ? glide(x) : x);
   /** Where the coins waiting at a stop sit: its top corner (the left one on a phone, where its words are on the right). */
   const corner = (c: { x: number; y: number }) => ({ x: c.x + (vertical ? -16 : 14), y: c.y - 14 });
   const tokensAt = (at: number): Tok[] => {
     const list: Tok[] = [];
-    const resting = new Map<string, { coin: Token; count: number; alpha: number }>();
+    const resting = new Map<string, { coin: Token; count: number; alpha: number; fresh?: number }>();
     const realAt = w.toReal(at);
     for (const s of spotsAt(p, at)) {
       const x = s.progress;
@@ -174,24 +195,27 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
         const a = center(s.leg.from, s.lane);
         const b = center(s.leg.to, s.lane);
         if (!a || !b) continue;
-        const f = calm ? (x < 0.5 ? 0 : 1) : glide(x);
+        const f = calm ? (x < 0.5 ? 0 : 1) : along(x);
         const size = calm ? 1 : Math.min(1, 0.55 + (x / 0.15) * 0.45, 0.55 + ((1 - x) / 0.15) * 0.45);
         list.push({ key: `m${s.lane}`, x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, size, alpha: 1, coin: s.leg.coin, count: 1, line: { a, b, progress: x } });
       } else {
         const col = s.leg.kind === 'travel' && x <= 0 ? s.leg.from : s.leg.to;
         const k = keyOf(col, s.lane);
         const came = p.legs.filter((l) => l.lane === s.lane && l.kind === 'travel' && l.to === col && l.end <= at).at(-1);
-        const alpha = calm || !came ? 1 : Math.min(1, (realAt - w.toReal(came.end)) / 220);
+        const since = calm || !came ? Infinity : realAt - w.toReal(came.end);
+        const alpha = Math.min(1, since / 220);
+        const fresh = since < 450 ? since / 450 : undefined;
         const r = resting.get(k);
         if (r) {
           r.count++;
           r.alpha = Math.max(r.alpha, alpha);
-        } else resting.set(k, { coin: s.leg.coin, count: 1, alpha });
+          if (fresh !== undefined) r.fresh = Math.min(r.fresh ?? 1, fresh);
+        } else resting.set(k, { coin: s.leg.coin, count: 1, alpha, fresh });
       }
     }
     for (const [k, r] of resting) {
       const c = centers[k];
-      if (c) list.push({ key: `r${k}#${r.count}`, ...corner(c), size: 1, alpha: r.alpha, coin: r.coin, count: r.count });
+      if (c) list.push({ key: `r${k}#${r.count}`, ...corner(c), size: 1, alpha: r.alpha, coin: r.coin, count: r.count, fresh: r.fresh });
     }
     return list;
   };
@@ -225,20 +249,35 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
       g.imageSmoothingEnabled = !pixel;
       for (const k of list) {
         if (k.line && !calm) {
-          // A dotted trail along the line behind it, and in Retro one dithered after-image, like the courier's.
           const { a, b, progress } = k.line;
-          const at = (x: number) => ({ x: a.x + (b.x - a.x) * glide(x), y: a.y + (b.y - a.y) * glide(x) });
-          for (let i = 8; i >= 1; i--) {
-            const back = progress - i * 0.022;
-            if (back <= 0) continue;
-            const q = at(back);
-            paintTrail(g, k.coin, q.x, q.y, COIN * k.size * (0.2 + 0.25 * (1 - i / 9)), 0.42 * (1 - i / 9), i, pixel);
-          }
-          if (pixel && progress > 0.08) {
-            const q = at(progress - 0.06);
-            paintCoin(g, k.coin, q.x, q.y, COIN * k.size, true, 0.4);
-          }
+          const at = (x: number) => ({ x: a.x + (b.x - a.x) * along(x), y: a.y + (b.y - a.y) * along(x) });
+          if (variant === 'glide') {
+            // A dotted trail along the line behind it, and in Retro one dithered after-image, like the courier's.
+            for (let i = 8; i >= 1; i--) {
+              const back = progress - i * 0.022;
+              if (back <= 0) continue;
+              const q = at(back);
+              paintTrail(g, k.coin, q.x, q.y, COIN * k.size * (0.2 + 0.25 * (1 - i / 9)), 0.42 * (1 - i / 9), i, pixel);
+            }
+            if (pixel && progress > 0.08) {
+              const q = at(progress - 0.06);
+              paintCoin(g, k.coin, q.x, q.y, COIN * k.size, true, 0.4);
+            }
+          } else if (variant === 'stream') {
+            // Two smaller coins following at the same speed, a coin's width apart: a little convoy.
+            const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+            for (const [gap, scale] of [
+              [52, 0.62],
+              [26, 0.8],
+            ]) {
+              const back = progress - gap / len;
+              if (back <= 12 / len) continue;
+              const q = at(back);
+              paintCoin(g, k.coin, q.x, q.y, COIN * scale, pixel, 1);
+            }
+          } else paintRail(g, k.coin, a.x, a.y, k.x, k.y, pixel);
         }
+        if (variant === 'rail' && k.fresh !== undefined && !calm) paintSpark(g, k.x, k.y - 4, 12, k.fresh, 0, pixel);
         paintCoin(g, k.coin, k.x, k.y, COIN * k.size, pixel, k.alpha);
       }
     }
@@ -285,12 +324,6 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, [playing, w, p]);
-
-  // The 8-bit beat pulses while it plays.
-  useEffect(() => {
-    beat(playing);
-    return () => beat(false);
-  }, [playing]);
 
   /** What each stop is doing right now. */
   const state = (col: number, lane: number) => {
@@ -376,9 +409,10 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
             <span className="mm-label">{c.lanes ? `${c.kind === 'swap' ? 'Order' : c.kind === 'vault' ? 'Subaddress' : 'Address'} ${lane + 1}` : c.label}</span>
             {!c.lanes && <span className="mm-sub">{c.sub}</span>}
             {c.lanes && amountUsd > 0 && <span className="mm-sub">≈ ${Math.round(amountUsd * share)}</span>}
-            {s.left !== null && (
-              <span className="mm-wait">
-                <Hourglass size={12} /> {clockText(s.left)}
+            {/* A piece's stop keeps room for its countdown, so nothing moves when one starts or ends. */}
+            {(c.lanes || s.left !== null) && (
+              <span className={`mm-wait ${s.left === null ? 'is-idle' : ''}`}>
+                <Hourglass size={12} /> {clockText(s.left ?? 0)}
               </span>
             )}
             {!c.lanes && HOLDER[c.holder] && c.holder !== 'server' && s.left === null && <span className={`mm-holder holder-${c.holder}`}>{HOLDER[c.holder]}</span>}
@@ -427,7 +461,7 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
           </span>
           <span>
             <b>{done ? 'All there' : `After ${clockText(t)}`}</b>
-            <small>{done ? `in about ${clockText(p.end)} (an example)` : 'example times'}</small>
+            <small>{done ? `in about ${clockText(p.end)}` : 'example times'}</small>
           </span>
         </div>
       </div>
@@ -464,7 +498,9 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
         <motion.p key={now.caption} className="line-main" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
           {now.caption}
         </motion.p>
-        <p className="line-sub">Held by: {holdText}</p>
+        <p className="line-sub" title={`Held by: ${holdText}`}>
+          Held by: {holdText}
+        </p>
       </div>
 
       <div className="mm-controls">
@@ -485,6 +521,29 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
           aria-label="Timeline"
           aria-valuetext={clockText(t)}
         />
+      </div>
+      <div className="mm-variants">
+        <span>
+          Coin style <Tip tip="Three ways to draw the moving coins, to try side by side. Pick the one you like best: the others will go." />
+        </span>
+        <div className="seg98" role="radiogroup" aria-label="Coin style">
+          {VARIANTS.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              role="radio"
+              aria-checked={variant === v.id}
+              className={`btn98 seg-btn ${variant === v.id ? 'is-pressed' : ''}`}
+              onClick={() => {
+                setVariant(v.id);
+                setChoice('mapCoins', v.id);
+                if (!playing) (seek(0), setPlaying(true));
+              }}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="tabs98 mm-tabs" role="tablist">

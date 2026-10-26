@@ -1,9 +1,9 @@
 import { audioOut } from './sound';
 
 /**
- * The money map's soundtrack, 8-bit style: only pulse, triangle and noise voices, like an old console's sound chip.
- * While the coins move a minor bass line pulses under a hi-hat and a quiet arpeggio; the moments get effects: a coin
- * when coins arrive somewhere, a power-up for a swap, a jump for a hop, a clunk for the vault, a fanfare at the end.
+ * The money map's sound effects, 8-bit style: only pulse, triangle and noise voices, like an old console's sound chip.
+ * A coin when coins arrive somewhere, a blip as they set off, a power-up for a swap, a jump for a hop, a clunk for the
+ * vault, a fanfare at the end. (No music: just the moments.)
  */
 
 type Out = NonNullable<ReturnType<typeof audioOut>>;
@@ -89,7 +89,7 @@ const play = (fn: (a: Out, t: number) => void) => () => {
 };
 
 /** Note frequencies, by name. */
-const N = { E2: 82.41, F2: 87.31, A2: 110, E4: 329.63, F4: 349.23, Gs4: 415.3, A4: 440, B4: 493.88, C5: 523.25, E5: 659.25, G5: 783.99, B5: 987.77, C6: 1046.5, E6: 1318.51, G6: 1567.98, C7: 2093 };
+const N = { C5: 523.25, E5: 659.25, G5: 783.99, B5: 987.77, C6: 1046.5, E6: 1318.51, G6: 1567.98, C7: 2093 };
 
 export const chip = {
   /** Coins arrive somewhere: the two-note coin pickup. */
@@ -126,52 +126,3 @@ export const chip = {
     noise(a, t + 0.38, 0.3, { gain: 0.03, from: 5000 });
   }),
 };
-
-/** The loop: four bars (A minor, A minor, F, E), eighth notes. The E bar leans back into A, so it never settles. */
-const BPM = 140;
-const STEP = 60 / BPM / 2;
-const BARS = [
-  { root: N.A2, arp: [N.A4, N.C5, N.E5, N.C5] },
-  { root: N.A2, arp: [N.A4, N.C5, N.E5, N.C5] },
-  { root: N.F2, arp: [N.F4, N.A4, N.C5, N.A4] },
-  { root: N.E2, arp: [N.E4, N.Gs4, N.B4, N.Gs4] },
-];
-/** The bass under each eighth: root, root, octave, root, fifth, root, octave, fifth. */
-const BASS = [1, 1, 2, 1, 1.5, 1, 2, 1.5];
-
-let beatTimer: ReturnType<typeof setInterval> | null = null;
-let nextAt = 0;
-let step = 0;
-
-function scheduleBeat() {
-  const a = audioOut();
-  if (!a) return;
-  const ahead = a.c.currentTime + 0.25;
-  if (nextAt < a.c.currentTime) nextAt = a.c.currentTime + 0.05;
-  while (nextAt < ahead) {
-    const bar = BARS[Math.floor(step / 8) % BARS.length];
-    const i = step % 8;
-    // The pulse: a triangle bass on every eighth, a kick on the beat, a snare on 2 and 4, a hi-hat between.
-    note(a, bar.root * BASS[i], nextAt, STEP * 0.9, { wave: 'triangle', gain: 0.13 });
-    if (i % 4 === 0) note(a, 160, nextAt, 0.09, { wave: 'triangle', gain: 0.2, slideTo: 45 });
-    if (i % 4 === 2) noise(a, nextAt, 0.09, { gain: 0.035, from: 1800, to: 1200 });
-    noise(a, nextAt, i % 2 ? 0.05 : 0.025, { gain: i % 2 ? 0.018 : 0.01, from: 7000 });
-    // A quiet arpeggio on top, one note per eighth.
-    note(a, bar.arp[i % 4] * (i < 4 ? 1 : 2), nextAt, STEP * 0.8, { wave: 0.125, gain: 0.014 });
-    nextAt += STEP;
-    step++;
-  }
-}
-
-/** Starts or stops the loop (it keeps time on the audio clock, so it doesn't stutter when the page is busy). */
-export function beat(on: boolean): void {
-  if (on && !beatTimer) {
-    step = 0;
-    nextAt = 0;
-    scheduleBeat();
-    beatTimer = setInterval(scheduleBeat, 60);
-  } else if (!on && beatTimer) {
-    clearInterval(beatTimer);
-    beatTimer = null;
-  }
-}
