@@ -297,6 +297,46 @@ const retro: Painter = {
   },
 };
 
+// ------------------------------------------------------------------------------------------------ for the money map
+
+/**
+ * One coin facing you, the same art the courier throws: its pixel sprite in Retro (dithered when faint), its smooth
+ * coin otherwise. Coordinates in CSS px; a Retro canvas is at half resolution, a Smooth one is already scaled.
+ */
+export function paintCoin(g: CanvasRenderingContext2D, kind: CourierCoin, x: number, y: number, size: number, pixel: boolean, alpha = 1) {
+  if (!pixel) return drawCoin(g, kind, x, y, size, 0, 0, alpha);
+  if (alpha < 0.25) return;
+  if (alpha < 0.6) retro.ghost(g, kind, x, y, size, 0, alpha);
+  else retro.coin(g, kind, x, y, size, 0, 0, 1);
+}
+
+/** One dot of a coin's trail (`i` counts back from the coin): dotted pixels in Retro, a soft glow otherwise. */
+export function paintTrail(g: CanvasRenderingContext2D, kind: CourierCoin, x: number, y: number, r: number, alpha: number, i: number, pixel: boolean) {
+  if (pixel) retro.trail(g, LOOK[kind].glow, x, y, r, alpha, i);
+  else {
+    g.globalAlpha = alpha;
+    g.drawImage(glow(LOOK[kind].glow), x - r, y - r, r * 2, r * 2);
+    g.globalAlpha = 1;
+  }
+}
+
+/** The coin art, rasterised once for `paintCoin` (the courier does the same when it mounts). */
+export function CoinArt() {
+  const icons = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    icons.current?.querySelectorAll<SVGSVGElement>('[data-coin] > svg').forEach((svg) => rasterise((svg.parentElement as HTMLElement).dataset.coin as CourierCoin, svg));
+  }, []);
+  return (
+    <div ref={icons} className="courier-art" aria-hidden="true">
+      {KINDS.map((k) => (
+        <span key={k} data-coin={k}>
+          {k === 'CB' ? <CoinbaseIcon size={SPRITE} /> : k === 'USDC' || k === 'USDT' ? <StableIcon ccy={k} size={SPRITE} /> : <CoinIcon coin={k} size={SPRITE} />}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------------------------------------ the scene
 
 interface Thrown {

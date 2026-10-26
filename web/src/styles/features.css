@@ -1083,56 +1083,26 @@ html[data-theme='win11'] .extra-btn small {
   pointer-events: none;
 }
 
-.mm-token {
+/* The coins, painted every frame with the transfer animation's own art (Retro: half resolution, chunky pixels). */
+.mm-coins {
   position: absolute;
   top: 0;
   left: 0;
-  width: 20px;
-  height: 20px;
-  margin: -10px 0 0 -10px;
+  z-index: 3;
+  pointer-events: none;
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35));
 }
 
-/* Moved every frame by the map's own loop: keep it on its own layer, so the browser only slides it. */
-.mm-token.is-moving {
-  will-change: transform;
+html[data-anim='retro'] .mm-coins {
+  image-rendering: pixelated;
 }
 
-/* A coin landing at a stop pops (each time another piece arrives too). */
-.mm-token:not(.is-moving) {
-  animation: mm-land 0.32s ease-out;
-}
-
-@keyframes mm-land {
-  0% {
-    scale: 1.7;
-  }
-  60% {
-    scale: 0.88;
-  }
-  100% {
-    scale: 1;
-  }
-}
-
-html[data-motion='calm'] .mm-token {
-  animation: none;
-}
-
-/* Coins waiting at a stop sit on its corner, so the stop's own icon still shows. */
-.mm-token:not(.is-moving) {
-  margin: -24px 0 0 4px;
-}
-
-/* On a phone a stop's words are on its right: the coins sit on its other corner. */
-.is-vertical .mm-token:not(.is-moving) {
-  margin: -24px 0 0 -26px;
-}
-
-.mm-token b {
+/* How many pieces wait at a stop, on its coin. */
+.mm-count {
   position: absolute;
-  right: -12px;
-  bottom: -5px;
+  top: 0;
+  left: 0;
+  margin: 2px 0 0 4px;
   padding: 0 3px;
   border-radius: 6px;
   font-size: 10px;
