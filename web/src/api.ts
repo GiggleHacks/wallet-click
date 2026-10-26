@@ -1,5 +1,5 @@
 import { clientLog } from './lib/devlog';
-import type { Coin, Destination, LogLine, Meta, Minimums, Order, Quote, Route, Stable, Status, Transfer } from './types';
+import type { Coin, Destination, Fees, LogLine, Meta, Minimums, Order, Quote, Route, Stable, Status, Transfer } from './types';
 
 export class ApiError extends Error {
   constructor(
@@ -56,5 +56,6 @@ export const api = {
   updateAddress: (id: string, patch: { label?: string; delayHours?: number; pieces?: number; archived?: boolean }) => request<Route>('POST', `/api/addresses/${id}`, patch),
   logs: (after: number) => request<{ lines: LogLine[]; startedAt: number }>('GET', `/api/logs?after=${after}`),
   minimums: () => request<Minimums>('GET', '/api/minimums'),
+  fees: () => request<Fees>('GET', '/api/fees'),
   quote: (coin: Coin, usd: number, mode: 'direct' | 'privacy', ccy: Stable = 'USDCBASE') => request<Quote>('GET', `/api/quote?coin=${coin}&usd=${usd}&mode=${mode}&ccy=${ccy}`),
 };

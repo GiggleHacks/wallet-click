@@ -1023,6 +1023,20 @@ describe('waits and pieces', () => {
     });
   });
 
+  it("tells the browser what each swap and each of our own transactions costs, for the fee estimates", async () => {
+    const f = (await get('/api/fees')).json();
+    // FixedFloat's cut from its rates: BTC $83.86 in, $83.40 out.
+    expect(f.swap.BTC.usdc).toBeCloseTo(0.55, 2);
+    expect(f.swap.ETH.usdc).toBeCloseTo(0.52, 2);
+    expect(f.swap.BTC.xmr).toBeGreaterThan(-1);
+    expect(f.swap.XMR.xmr).toBeNull();
+    // 5 sat/vB × 122 vB at $83,860; 21k gas × 4 gwei at $2,543; a Monero transaction at $541.7.
+    expect(f.network.BTC.forward).toBeCloseTo(0.512, 3);
+    expect(f.network.BTC.splitPiece).toBeCloseTo(0.13, 2);
+    expect(f.network.ETH.forward).toBeCloseTo(0.214, 3);
+    expect(f.network.XMR.tx).toBeCloseTo(0.022, 3);
+  });
+
   it('stops watching a one-time address after 30 days', async () => {
     const r = (await post('/api/addresses/once', { coin: 'BTC', delayHours: 4 })).json();
     expect(r.address).toBe(BIP84_FIRST);

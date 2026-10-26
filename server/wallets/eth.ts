@@ -38,6 +38,12 @@ async function fees(): Promise<{ maxFee: bigint; tip: bigint }> {
   return { maxFee, tip };
 }
 
+/** What a plain transfer (21k gas) would pay right now (base fee + tip), in wei: for the fee estimates. */
+export async function ethTransferFee(): Promise<bigint> {
+  const { maxFee, tip } = await fees();
+  return 21_000n * ((maxFee - tip) / 2n + tip);
+}
+
 async function balances(address: string) {
   const latest = Number(BigInt(await rpc<string>('eth_blockNumber', [])));
   const [now, settled, pending, nonceLatest, noncePending] = await Promise.all([

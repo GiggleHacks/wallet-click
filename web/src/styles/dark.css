@@ -37,8 +37,7 @@ html[data-mode='dark'] .listbox li.is-selected .current {
   color: inherit;
 }
 
-html[data-mode='dark'] .extra-btn small,
-html[data-mode='dark'] .pick-btn small {
+html[data-mode='dark'] .extra-btn small {
   color: var(--text-dim);
 }
 

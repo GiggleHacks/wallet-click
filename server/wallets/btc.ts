@@ -68,6 +68,12 @@ async function feeRate(): Promise<number> {
   return Math.max(2, Math.ceil(est?.['3'] ?? est?.['6'] ?? 10));
 }
 
+/** What our own transactions would pay right now, in sats, for the fee estimates: a forward of one coin, and a split's base and per-piece share. */
+export async function btcFeeEstimate(): Promise<{ forward: number; split: number; splitPiece: number }> {
+  const rate = await feeRate();
+  return { forward: vsize(1) * rate, split: splitVsize(1, 0) * rate, splitPiece: 31 * rate };
+}
+
 /** A transaction spending exactly these coins of ours from `r` (outputs still to add). */
 function spending(r: RouteRef, inputs: Utxo[]) {
   const key = keyAt(btcPath(r.index, r.chain ?? 0));

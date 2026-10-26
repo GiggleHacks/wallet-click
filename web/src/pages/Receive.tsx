@@ -155,15 +155,13 @@ interface Props {
   payoutCcy?: string;
   /** The browser can't reach the server right now. */
   offline?: boolean;
-  /** The "How it works" run: fake address, nothing to pay. */
-  demo?: boolean;
   creating: boolean;
   onNew(): void;
   onBack(): void;
   onShowProgress(): void;
 }
 
-export function Receive({ order, pieces = 1, payoutCcy, demo, offline, creating, onNew, onBack, onShowProgress }: Props) {
+export function Receive({ order, pieces = 1, payoutCcy, offline, creating, onNew, onBack, onShowProgress }: Props) {
   const [copied, setCopied] = useState(false);
   const minimums = useMinimums();
   const [now, setNow] = useState(Date.now());
@@ -188,22 +186,17 @@ export function Receive({ order, pieces = 1, payoutCcy, demo, offline, creating,
 
   return (
     <Window
-      title={demo ? `Receive ${order.coinName} (demo)` : `Receive ${order.coinName}`}
+      title={`Receive ${order.coinName}`}
       icon={<CoinIcon coin={order.coin} size={16} />}
       onClose={onBack}
       className="win-receive"
       statusBar={
         <>
           <span className="status-cell grow">{STAGE_LABEL[order.stage]}</span>
-          <span className="status-cell">{demo ? 'Demo: no real money' : `Order ${order.id}`}</span>
+          <span className="status-cell">Order {order.id}</span>
         </>
       }
     >
-      {demo && (
-        <div className="warn-box demo-box">
-          <WarnIcon size={20} /> Demo: not a real address.
-        </div>
-      )}
       {order.reusedAddress && (
         <div className="warn-box">
           <WarnIcon size={20} /> <Tip tip="Make a new one if you need a never-used address.">FixedFloat has used this address before.</Tip>
@@ -211,7 +204,7 @@ export function Receive({ order, pieces = 1, payoutCcy, demo, offline, creating,
       )}
       <div className="receive-grid">
         <div className={`qr-box ${waiting ? 'is-scanning' : 'is-got'}`}>
-          <QrCode value={demo ? 'Wallet Click demo: not a real address' : order.address} size={200} logo={<CoinIcon coin={order.coin} size={40} />} />
+          <QrCode value={order.address} size={200} logo={<CoinIcon coin={order.coin} size={40} />} />
         </div>
         <div className="receive-info">
           <span className="lbl">
@@ -253,7 +246,7 @@ export function Receive({ order, pieces = 1, payoutCcy, demo, offline, creating,
               )}
             </li>
           </ul>
-          {!demo && pieces > 1 && <MinimumNote m={minimums} o={{ route: order.toCcy === 'XMR' ? 'monero' : 'direct', delayHours: 0, pieces }} coin={order.coin} />}
+          {pieces > 1 && <MinimumNote m={minimums} o={{ route: order.toCcy === 'XMR' ? 'monero' : 'direct', delayHours: 0, pieces }} coin={order.coin} />}
         </div>
       </div>
       <div className={`wait-row ${waiting ? '' : 'is-live'}`}>
@@ -285,7 +278,7 @@ export function Receive({ order, pieces = 1, payoutCcy, demo, offline, creating,
       )}
       <div className="btn-row">
         <button type="button" className="btn98" onClick={onNew} disabled={creating}>
-          {demo ? 'Play again' : creating ? 'Getting address…' : 'New address'}
+          {creating ? 'Getting address…' : 'New address'}
         </button>
         <button type="button" className="btn98" onClick={onBack}>
           Back

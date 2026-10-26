@@ -5,6 +5,8 @@ import { COINS, DELAYS, PIECE_MIN_FACTOR, PIECES_MAX, STABLES, config, type Coin
 import { UserError } from '../errors.js';
 import { limits } from '../orders.js';
 import { changeDelay, createPrivacyTransfer, releaseNow, retry, transferView, transfers } from '../transfers.js';
+import { btcFeeEstimate } from '../wallets/btc.js';
+import { ethTransferFee } from '../wallets/eth.js';
 import { hotWallet } from '../wallets/index.js';
 import { onDestinationRemove } from './destinations.js';
 
@@ -29,6 +31,63 @@ async function quote(c: Coin, usd: number, privacy: boolean, ccy: Stable) {
     minAmount: String(first.min),
     minUsd: Math.round(first.min * first.usdPerCoin * 100) / 100,
   };
+}
+
+/** A Monero transaction's fee, about (they barely move): the churn, a split, each send to FixedFloat. */
+const XMR_TX_FEE = 0.00004;
+const FEES_FRESH = 120_000;
+let feesCache: { at: number; value: Fees } | null = null;
+
+type Pct = number | null;
+interface Fees {
+  /** FixedFloat's cut (and its payout fee) for each swap, as a percent of what goes in. */
+  swap: Record<Coin, { usdc: Pct; xmr: Pct }>;
+  /** What our own transactions pay the network, in dollars. */
+  network: { BTC: { forward: Pct; split: Pct; splitPiece: Pct }; ETH: { forward: Pct }; XMR: { tx: Pct } };
+  at: number;
+}
+
+/**
+ * What each step of a journey costs right now, for the "How it works" map and Send options: FixedFloat's rates
+ * (rates up to two minutes old) and today's network fees. Anything that can't be fetched is null; the browser then
+ * uses a typical value.
+ */
+async function liveFees(now = Date.now()): Promise<Fees> {
+  if (feesCache && now - feesCache.at < FEES_FRESH) return feesCache.value;
+  const lim = async (from: Coin, to: PayoutCcy) => {
+    try {
+      return await limits(from, to, { cached: true });
+    } catch {
+      return null;
+    }
+  };
+  const monero = Boolean(config.monero.rpcUrl);
+  const [btcU, ethU, xmrU, btcX, ethX] = await Promise.all([lim('BTC', 'USDCBASE'), lim('ETH', 'USDCBASE'), lim('XMR', 'USDCBASE'), monero ? lim('BTC', 'XMR') : null, monero ? lim('ETH', 'XMR') : null]);
+  const usd = { BTC: btcU?.usdPerCoin ?? null, ETH: ethU?.usdPerCoin ?? null, XMR: xmrU?.usdPerCoin ?? null };
+  const cut = (l: Awaited<ReturnType<typeof lim>>, toUsd: number | null): Pct => {
+    if (!l?.usdPerCoin || !l.outPerCoin || !toUsd) return null;
+    const pct = (1 - (l.outPerCoin * toUsd) / l.usdPerCoin) * 100;
+    // A rate that says FixedFloat pays more than it takes, or eats a fifth, is a bad answer, not a fee.
+    return pct > -1 && pct < 20 ? Math.round(pct * 100) / 100 : null;
+  };
+  const dollars = (amount: number | null, price: number | null): Pct => (amount === null || !price ? null : Math.round(amount * price * 1000) / 1000);
+  const [btcFee, ethFee] = await Promise.all([btcFeeEstimate().catch(() => null), ethTransferFee().catch(() => null)]);
+  const sats = (v: number | undefined) => (v === undefined ? null : v / 1e8);
+  const value: Fees = {
+    swap: {
+      BTC: { usdc: cut(btcU, 1), xmr: cut(btcX, usd.XMR) },
+      ETH: { usdc: cut(ethU, 1), xmr: cut(ethX, usd.XMR) },
+      XMR: { usdc: cut(xmrU, 1), xmr: null },
+    },
+    network: {
+      BTC: { forward: dollars(sats(btcFee?.forward), usd.BTC), split: dollars(sats(btcFee?.split), usd.BTC), splitPiece: dollars(sats(btcFee?.splitPiece), usd.BTC) },
+      ETH: { forward: dollars(ethFee === null ? null : Number(ethFee) / 1e18, usd.ETH) },
+      XMR: { tx: dollars(XMR_TX_FEE, usd.XMR) },
+    },
+    at: now,
+  };
+  feesCache = { at: now, value };
+  return value;
 }
 
 export function registerTransfers(app: FastifyInstance): void {
@@ -132,6 +191,9 @@ export function registerTransfers(app: FastifyInstance): void {
       pieceFactor: PIECE_MIN_FACTOR,
     };
   });
+
+  // What each swap and each of our own transactions costs right now, for the fee estimates.
+  app.get('/api/fees', async () => liveFees());
 
   app.get<{ Querystring: { coin?: string; usd?: string; mode?: string; ccy?: string } }>('/api/quote', async (req) => {
     const q = z

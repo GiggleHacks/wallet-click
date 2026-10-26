@@ -17,11 +17,13 @@ interface Props {
   testDelayMin: number | null;
   /** What the destination is paid in ("USDC"). */
   sym?: string;
+  /** How it works, with the options as they are in this window. */
+  onExplain?(o: SendOptions): void;
   onClose(): void;
 }
 
 /** How the coin buttons send what comes in: straight or through Monero, a wait, and how many pieces. */
-export function SendOptionsDialog({ value, delays, piecesMax, moneroOk, walletOk, testDelayMin, sym, onClose }: Props) {
+export function SendOptionsDialog({ value, delays, piecesMax, moneroOk, walletOk, testDelayMin, sym, onExplain, onClose }: Props) {
   const [o, setO] = useState<SendOptions>(value.route === 'monero' && !moneroOk ? { ...value, route: 'direct' } : value);
   const save = () => {
     saveSendOptions(o);
@@ -31,7 +33,7 @@ export function SendOptionsDialog({ value, delays, piecesMax, moneroOk, walletOk
   return (
     <ModalLayer>
       <Window title="Send options" icon={<ClockIcon size={16} />} onClose={onClose} className="win-sendopts" role="dialog">
-        <SendOptionsFields value={o} onChange={setO} delays={delays} piecesMax={piecesMax} moneroOk={moneroOk} walletOk={walletOk} sym={sym} />
+        <SendOptionsFields value={o} onChange={setO} delays={delays} piecesMax={piecesMax} moneroOk={moneroOk} walletOk={walletOk} sym={sym} onExplain={onExplain && (() => onExplain(o))} />
         {testDelayMin !== null && (
           <p className="line-sub">
             <Tip tip={`Every wait is ${testDelayMin} minutes, and pieces are seconds apart.`}>

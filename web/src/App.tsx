@@ -9,20 +9,19 @@ import { DesktopBombs, TrayBomb, isBomb, useBombs, type Bomb, type Fused } from 
 import { TransferDialog } from './components/TransferDialog';
 import { VersionTag } from './components/VersionTag';
 import { DragBounds, ModalLayer, Window } from './components/Win98';
-import { DEMO_ID, DEMO_TRANSFER, useDemo, type DemoKind } from './lib/demo';
 import { costText } from './lib/cost';
 import { trimAmount, usdt } from './lib/format';
 import { DEFAULT_DESTINATION, symbolOf } from './lib/assets';
 import { getChoice, setChoice, usePref } from './lib/prefs';
-import { plainAddress, throughMonero, useSendOptions } from './lib/sendOptions';
+import { plainAddress, throughMonero, useSendOptions, type SendOptions } from './lib/sendOptions';
 import { applyThemeAttr, saveMode, savedMode, saveTheme, savedTheme, ThemeContext, useDark, type Mode, type Theme } from './lib/themes';
 import { savedWallpaper, saveWallpaper, wallpaperById, wallpaperCss, type Wallpaper } from './lib/wallpapers';
 import { setSoundTheme, sfx } from './lib/sound';
 import { AddressBook } from './pages/AddressBook';
 import { Addresses } from './pages/Addresses';
-import { DemoPicker } from './pages/DemoPicker';
 import { AnimationPreview } from './pages/AnimationPreview';
 import { Home } from './pages/Home';
+import { HowItWorks } from './pages/HowItWorks';
 import { Lock } from './pages/Lock';
 import { Logs } from './pages/Logs';
 import { Receive, ReceiveOnce } from './pages/Receive';
@@ -131,7 +130,8 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   /** The open transfer window; `auto` = money just arrived, play the whole flow. */
   const [journey, setJourney] = useState<{ id: string; auto: boolean } | null>(null);
-  const [demoPicker, setDemoPicker] = useState(false);
+  /** How it works, starting from these options. */
+  const [how, setHow] = useState<SendOptions | null>(null);
   const [animations, setAnimations] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const sendOptions = useSendOptions();
@@ -195,12 +195,11 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
       if (!loaded.current || prev === t.stage) continue;
       if ((prev === undefined || prev === 'waiting' || prev === 'expired') && LIVE.includes(t.stage)) {
         // Money arrived (at a permanent address, or a Privacy Enhanced address): ring and show its journey.
-        demoRef.current?.stop();
         flashTitle(`Payment detected: ${trimAmount(t.received)} ${t.coin}`);
         // The transfer window plays the whole flow from the start (it rings itself); otherwise just ring. It never
-        // takes over a window that's already showing another real payment (a leftover demo window doesn't count).
+        // takes over a window that's already showing another payment.
         const j = journeyRef.current;
-        const busy = (dialogRef.current && dialogRef.current.id !== DEMO_ID) || (j && j.id !== t.id && j.id !== DEMO_TRANSFER && tList.some((x) => x.id === j.id));
+        const busy = dialogRef.current || (j && j.id !== t.id && tList.some((x) => x.id === j.id));
         if (!showing && !busy) setJourney({ id: t.id, auto: true });
         else {
           sfx.ding();
@@ -221,7 +220,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
     setTransfers(tList);
     // A window for a transfer the server has since dropped closes, so the next payment can open its own.
     const j = journeyRef.current;
-    if (j && j.id !== DEMO_TRANSFER && !tList.some((x) => x.id === j.id)) setJourney(null);
+    if (j && !tList.some((x) => x.id === j.id)) setJourney(null);
     for (const o of list) {
       const prev = stages.current.get(o.id);
       stages.current.set(o.id, o.stage);
@@ -233,8 +232,6 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
       };
       if (IDLE.includes(prev ?? 'waiting') && !IDLE.includes(o.stage)) {
         // A payment landed: pop the transfer window and play the whole flow (it rings the bell).
-        // A real payment always wins over the "How it works" demo.
-        demoRef.current?.stop();
         flashTitle(`Payment detected: ${trimAmount(o.received)} ${o.coin}`);
         if (!showing) {
           setView({ name: 'receive', id: o.id });
@@ -280,32 +277,13 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
     };
   }, [refresh]);
 
-  const realDialogOpen = () =>
-    Boolean((dialogRef.current && dialogRef.current.id !== DEMO_ID) || (journeyRef.current && journeyRef.current.id !== DEMO_TRANSFER));
-  const demo = useDemo(meta?.payout.address ?? '', {
-    // Never cover a real transfer window with the demo.
-    onOpen: (o) => !realDialogOpen() && setView({ name: 'receive', id: o.id }),
-    onDetected: (o) => !realDialogOpen() && setDialog({ id: o.id, auto: true }),
-    onJourney: (t) => !realDialogOpen() && setJourney({ id: t.id, auto: true }),
-  });
-  const demoRef = useRef(demo);
-  demoRef.current = demo;
-  const playDemo = (kind: DemoKind) => {
-    setDemoPicker(false);
-    setDialog(null);
-    setJourney(null);
-    setView({ name: 'home' });
-    demo.start(kind);
-  };
   const pickDemo = () => {
     sfx.open();
-    setDemoPicker(true);
+    setHow(sendOptions);
   };
-  const stopDemo = demo.stop;
 
   const create = async (coin: Coin) => {
     if (creating) return;
-    stopDemo();
     setCreating(coin);
     document.body.classList.add('busy');
     try {
@@ -359,9 +337,8 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
   };
 
   const legs = transfers.flatMap((t) => [t.leg1, t.leg2].filter((o): o is Order => Boolean(o)));
-  const findOrder = (id: string) => (id === DEMO_ID ? (demo.order ?? undefined) : (orders.find((o) => o.id === id) ?? legs.find((o) => o.id === id)));
-  const journeyT = journey ? (journey.id === DEMO_TRANSFER ? (demo.transfer ?? undefined) : transfers.find((t) => t.id === journey.id)) : undefined;
-  const isDemoJourney = journeyT?.id === DEMO_TRANSFER;
+  const findOrder = (id: string) => orders.find((o) => o.id === id) ?? legs.find((o) => o.id === id);
+  const journeyT = journey ? transfers.find((t) => t.id === journey.id) : undefined;
   const delays = meta?.privacy?.delays ?? DELAYS;
   const updateTransfer = (t: Transfer) => {
     tStages.current.set(t.id, t.stage);
@@ -372,12 +349,8 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
     if (t.leg1 && !t.routeId && t.state === 'swap1' && t.leg1.stage === 'waiting') setView({ name: 'receive', id: t.leg1.id });
     else setJourney({ id: t.id, auto: false });
   };
-  // Long Privacy waits tick away on the desktop as bombs (the demo's too, on its fast-forwarded clock).
-  const lapse = demo.timeLapse;
+  // Long Privacy waits tick away on the desktop as bombs.
   const fused: Fused[] = transfers.filter(isBomb).map((t) => ({ transfer: t, now: Date.now }));
-  if (demo.transfer && isBomb(demo.transfer)) {
-    fused.push({ transfer: demo.transfer, now: () => (lapse ? lapse.virtualStart + (Date.now() - lapse.realStart) * lapse.speed : Date.now()), fast: Boolean(lapse) });
-  }
   const bombs = useBombs(fused, meta?.privacy?.testDelayMin ?? null);
   const openBomb = (t: Transfer) => {
     sfx.open();
@@ -386,15 +359,10 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
 
   const current = view.name === 'receive' ? findOrder(view.id) : undefined;
   const dialogOrder = dialog ? findOrder(dialog.id) : undefined;
-  const isDemo = current?.id === DEMO_ID;
   const closeDialog = useCallback(() => setDialog(null), []);
   const goHome = () => {
     setDialog(null);
     setView({ name: 'home' });
-    if (demo.order || demo.transfer) {
-      stopDemo();
-      setJourney(null);
-    }
   };
   const dismissBalloon = useCallback(() => setBalloon(null), []);
 
@@ -416,10 +384,9 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
               order={current}
               pieces={current.transferId ? (transfers.find((t) => t.id === current.transferId)?.pieces ?? 1) : 1}
               payoutCcy={current.transferId ? transfers.find((t) => t.id === current.transferId)?.payoutCcy : undefined}
-              demo={isDemo}
               offline={offline}
               creating={creating !== null}
-              onNew={() => (isDemo ? playDemo(demo.kind ?? current.coin) : void create(current.coin))}
+              onNew={() => void create(current.coin)}
               onBack={goHome}
               onShowProgress={() => (current.transferId ? setJourney({ id: current.transferId, auto: false }) : setDialog({ id: current.id, auto: false }))}
             />
@@ -450,7 +417,6 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
               onAddressBook={() => setBook(true)}
               creating={creating}
               offline={offline}
-              pressing={demo.pressing}
               onCreate={(c) => void create(c)}
               onOpen={openOrder}
               onDemo={pickDemo}
@@ -478,8 +444,6 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
             key={journeyT.id}
             transfer={journeyT}
             autoplay={journey?.auto}
-            demo={isDemoJourney}
-            timeLapse={isDemoJourney ? demo.timeLapse : null}
             delays={delays}
             onClose={() => setJourney(null)}
             onUpdate={updateTransfer}
@@ -500,12 +464,25 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
             walletOk={meta?.features?.wallet !== false}
             testDelayMin={meta?.privacy?.testDelayMin ?? null}
             sym={symbolOf(destinations.find((d) => d.id === destination)?.ccy)}
+            onExplain={(o) => (setOptionsOpen(false), setHow(o))}
             onClose={() => setOptionsOpen(false)}
           />
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {demoPicker && <DemoPicker onPick={playDemo} onAnimations={() => (setDemoPicker(false), setAnimations(true))} onClose={() => setDemoPicker(false)} />}
+        {how && (
+          <HowItWorks
+            initial={how}
+            delays={delays}
+            piecesMax={meta?.privacy?.piecesMax}
+            moneroOk={meta?.features?.monero !== false}
+            walletOk={meta?.features?.wallet !== false}
+            dest={destinations.find((d) => d.id === destination)?.label ?? 'Coinbase'}
+            sym={symbolOf(destinations.find((d) => d.id === destination)?.ccy)}
+            onAnimations={() => (setHow(null), setAnimations(true))}
+            onClose={() => setHow(null)}
+          />
+        )}
       </AnimatePresence>
       <AnimatePresence>{animations && <AnimationPreview onClose={() => setAnimations(false)} />}</AnimatePresence>
       <AnimatePresence>

@@ -629,61 +629,535 @@ html[data-theme='win11'] .extra-btn small {
   max-width: 48px;
 }
 
-.timelapse {
-  font-weight: 700;
-  color: var(--navy);
-}
-
 /* Calm (and paused tabs) live in motion.css. */
 
-/* ---------------------------------------------------------------- "How it works" picker */
+/* ---------------------------------------------------------------- How it works: the money map */
 
-.win-picker {
-  width: min(460px, 100%);
+.win-how {
+  width: min(1000px, 100%);
 }
 
-.picker-intro {
-  margin: 0 0 10px;
+.how-intro {
+  margin: 0 0 4px;
 }
 
-.pick-grid {
+/* The settings sit side by side on a wide screen (Send options' own fieldsets join the grid). */
+.how-settings {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0 10px;
+  align-items: start;
+}
+
+.how-settings .sendopts {
+  display: contents;
+}
+
+.how-settings .group98 {
+  margin-top: 8px;
+}
+
+.how-settings .min-note,
+.how-settings .error-text {
+  grid-column: 1 / -1;
+}
+
+.how-coin-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.how-amount {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+}
+
+.how-amount .input98 {
+  width: 92px;
+}
+
+.how-summary {
+  margin: 12px 0 4px;
+}
+
+.mm-clock {
+  display: flex;
+  align-items: center;
   gap: 8px;
+  margin-bottom: 6px;
 }
 
-.pick-btn {
-  justify-content: flex-start;
-  gap: 10px;
-  min-height: 64px;
-  padding: 8px 10px;
-  text-align: left;
-}
-
-.pick-btn b {
+.mm-clock b,
+.mm-clock small {
   display: block;
-  font-size: 14px;
 }
 
-.pick-btn small {
-  display: block;
+.mm-clock small {
   font-size: 11px;
   color: var(--text-dim);
 }
 
-.pick-btn .stack-badge {
-  right: -8px;
-  bottom: -3px;
+.mm-clock-face {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--accent-text);
+  border-radius: 50%;
+  background: var(--field);
 }
 
-html[data-theme='win10'] .pick-btn small,
-html[data-theme='win11'] .pick-btn small {
-  color: #555;
+.mm-clock-face i {
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  width: 2px;
+  height: 7px;
+  margin-left: -1px;
+  background: var(--text);
+  transform-origin: 50% 100%;
+}
+
+.mm-clock-face i.is-min {
+  height: 10px;
+  background: #c0392b;
+}
+
+/* Stops in columns, one row per piece; a stop everything passes through spans all the rows. */
+.mm-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--lanes), auto);
+  gap: 10px 6px;
+  min-height: 150px;
+  padding: 30px 8px 10px;
+  background: var(--field);
+  box-shadow: var(--sunken);
+}
+
+.mm-node {
+  position: relative;
+  z-index: 2;
+  grid-column: var(--col);
+  grid-row: var(--lane);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 2px;
+  text-align: center;
+}
+
+.mm-node.is-single {
+  grid-row: 1 / span var(--lanes);
+  align-self: center;
+}
+
+/* On a phone: top to bottom, the pieces side by side. */
+.is-vertical .mm-grid {
+  grid-template-columns: repeat(var(--lanes), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--cols), auto);
+  gap: 26px 4px;
+  padding: 12px 6px;
+}
+
+.is-vertical .mm-node {
+  grid-column: var(--lane);
+  grid-row: var(--col);
+}
+
+.is-vertical .mm-node.is-single {
+  grid-column: 1 / span var(--lanes);
+  grid-row: var(--col);
+}
+
+.mm-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+}
+
+.mm-node.is-lane .mm-icon {
+  width: 34px;
+  height: 34px;
+}
+
+.mm-node.is-busy .mm-icon {
+  filter: drop-shadow(0 0 5px rgba(255, 196, 40, 0.95));
+}
+
+.mm-label {
+  max-width: 100%;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.mm-sub {
+  font-size: 11px;
+  line-height: 1.15;
+  color: var(--text-dim);
+}
+
+.mm-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-text);
+  white-space: nowrap;
+}
+
+.mm-holder {
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 15px;
+  color: #fff;
+}
+
+.mm-holder.holder-you {
+  background: #6b6b6b;
+}
+
+.mm-holder.holder-fixedfloat {
+  background: #1f6fb2;
+}
+
+/* An address of your server's wallet: a little card with its coin and a key. */
+.mm-addr {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 5px;
+  border-radius: 3px;
+  background: var(--face);
+  box-shadow: var(--raised);
+}
+
+/* A Monero piece moving once more on its own. */
+.mm-hop {
+  position: absolute;
+  inset: -3px;
+  border: 2px solid #ff6600;
+  border-radius: 50%;
+  animation: mm-hop 0.8s ease-out infinite;
+}
+
+@keyframes mm-hop {
+  from {
+    transform: scale(0.7);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+}
+
+/* Your server: a dashed frame round the stops it holds. */
+.mm-server {
+  position: relative;
+  z-index: 0;
+  grid-column: var(--from) / var(--to);
+  grid-row: 1 / -1;
+  margin: -26px -3px -6px;
+  border: 2px dashed #6b7686;
+  border-radius: 6px;
+  background: rgba(90, 99, 114, 0.09);
+}
+
+.is-vertical .mm-server {
+  grid-column: 1 / -1;
+  grid-row: var(--from) / var(--to);
+  margin: -24px -3px -6px;
+}
+
+.mm-server-tag {
+  position: absolute;
+  top: 2px;
+  left: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mm-lines {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.mm-lines line {
+  stroke: var(--shade);
+  stroke-width: 2;
+  stroke-dasharray: 3 4;
+}
+
+.mm-lines line.is-lit {
+  stroke: #2775ca;
+  stroke-dasharray: none;
+}
+
+.mm-lines line.is-flowing {
+  stroke: #e0a100;
+  stroke-width: 2.5;
+  stroke-dasharray: 6 5;
+  animation: mm-flow 0.6s linear infinite;
+}
+
+@keyframes mm-flow {
+  to {
+    stroke-dashoffset: -11;
+  }
+}
+
+html[data-anim='retro'] .mm-lines line.is-flowing {
+  animation-timing-function: steps(3);
+}
+
+.mm-tokens {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.mm-token {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35));
+}
+
+/* Coins waiting at a stop sit on its corner, so the stop's own icon still shows. */
+.mm-token:not(.is-moving) {
+  margin: -26px 0 0 6px;
+}
+
+.mm-token b {
+  position: absolute;
+  right: -12px;
+  bottom: -5px;
+  padding: 0 3px;
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 13px;
+  color: #fff;
+  background: #1f3a93;
+}
+
+.mm-now {
+  min-height: 54px;
+  margin-top: 6px;
+}
+
+.mm-now .line-main {
+  margin: 0;
+}
+
+.mm-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mm-scrub {
+  flex: 1;
+  min-width: 0;
+}
+
+.mm-moments {
+  max-height: 168px;
+  margin: 6px 0 0;
+  padding: 2px;
+  overflow: auto;
+  list-style: none;
+  font-size: 12px;
+  background: var(--field);
+  box-shadow: var(--sunken);
+}
+
+.mm-moments button {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  padding: 2px 6px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.mm-moments button:focus-visible {
+  outline: 1px dotted currentColor;
+}
+
+.mm-moments .is-past button {
+  color: var(--text);
+}
+
+.mm-moments .is-now button {
+  color: #fff;
+  background: var(--navy);
+}
+
+.mm-at {
+  display: inline-block;
+  min-width: 84px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+/* What it costs, and the comparison. */
+.how-fees {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 0 10px;
+  margin-top: 6px;
+}
+
+.fee-table,
+.fee-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.fee-table td {
+  padding: 2px 4px;
+  vertical-align: top;
+}
+
+.fee-table .num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.fee-table tfoot td {
+  padding-top: 4px;
+  border-top: 1px solid var(--shade);
+  font-weight: 700;
+}
+
+.fee-count,
+.fee-typical {
+  color: var(--text-dim);
+}
+
+.fee-notes {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.fee-grid th {
+  padding: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.fee-grid tbody th {
+  text-align: left;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.fee-grid td {
+  padding: 2px;
+}
+
+.fee-cell {
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 2px 4px;
+}
+
+.fee-cell small,
+.seg-fee {
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--text-dim);
+}
+
+/* Send options: each choice shows about what it loses. */
+.seg-btn.has-fee {
+  flex-direction: column;
+  gap: 0;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.seg-btn.has-fee > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fee-note-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: #2775ca;
+}
+
+.link-btn {
+  all: unset;
+  color: var(--link);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-btn:focus-visible {
+  outline: 1px dotted currentColor;
 }
 
 @media (max-width: 560px) {
-  .pick-grid {
+  .how-settings {
     grid-template-columns: 1fr;
+  }
+  .mm-label {
+    font-size: 11px;
+  }
+  .mm-node.is-lane .mm-sub {
+    font-size: 10px;
+  }
+  .fee-grid tbody th {
+    white-space: normal;
   }
 }
 
@@ -753,10 +1227,6 @@ html[data-theme='win11'] .pick-btn small {
   background: linear-gradient(currentColor 0 65%, transparent 65% 80%, currentColor 80%);
 }
 
-.timelapse svg {
-  vertical-align: -2px;
-}
-
 /* Windows 10 and 11 emphasise with Segoe's semibold, not bold. */
 html[data-shell='win10'] b,
 html[data-shell='win10'] strong,
@@ -778,11 +1248,6 @@ html[data-shell='win11'] .book-name {
   html[data-theme] .modal-layer {
     background: rgba(0, 0, 0, 0.5);
   }
-}
-
-/* The time-lapse note: the theme's accent text colour (readable in light and dark). */
-.timelapse {
-  color: var(--accent-text);
 }
 
 /* Windows 11 buttons barely change when pressed: a chosen option gets the accent outline. */
@@ -1243,10 +1708,6 @@ html[data-shell='classic'][data-mode='dark'] .tip-box {
 
 .win-anim {
   width: min(600px, 100%);
-}
-
-.pick-wide {
-  width: 100%;
 }
 
 .anim-bar {

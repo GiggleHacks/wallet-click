@@ -209,6 +209,13 @@ export interface Minimums {
   pieceFactor: number;
 }
 
+/** What each step costs right now (server /api/fees): FixedFloat's cut per swap in percent, our own transactions in dollars. Null: unknown. */
+export interface Fees {
+  swap: Record<Coin, { usdc: number | null; xmr: number | null }>;
+  network: { BTC: { forward: number | null; split: number | null; splitPiece: number | null }; ETH: { forward: number | null }; XMR: { tx: number | null } };
+  at: number;
+}
+
 export interface Quote {
   coin: Coin;
   amount: string;
