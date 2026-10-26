@@ -156,6 +156,15 @@ function route(method: string, path: string, body: unknown): [number, unknown] {
     serverDestinations = [...serverDestinations, { id: 'd_new', label: b.label, address: b.address, ccy: b.ccy, createdAt: Date.now() }];
     return [200, { destinations: serverDestinations }];
   }
+  if (path === '/api/fees')
+    return [
+      200,
+      {
+        swap: { BTC: { usdc: 0.8, xmr: 0.9 }, ETH: { usdc: 0.7, xmr: 0.9 }, XMR: { usdc: 0.6, xmr: null } },
+        network: { BTC: { forward: 0.5, split: 0.25, splitPiece: 0.12 }, ETH: { forward: 0.3 }, XMR: { tx: 0.02 } },
+        at: Date.now(),
+      },
+    ];
   if (path === '/api/minimums') return [200, { BTC: { direct: 10.42, intoMonero: 109 }, ETH: { direct: 12.72, intoMonero: 109 }, XMR: { direct: 9.97, intoMonero: null }, pieceFactor: 1.5 }];
   if (path === '/api/addresses/once' && method === 'POST') {
     onceBody = body;
@@ -306,7 +315,8 @@ describe('Wallet Click UI', () => {
     expect(text()).not.toContain('Privacy Enhanced…');
     await click(button('Change…'), 'Change…');
     await waitFor(() => !!host.querySelector('.win-sendopts'), 'send options dialog');
-    const inDialog = (label: string) => [...host.querySelectorAll('.win-sendopts button')].find((b) => b.textContent?.trim() === label);
+    // A choice's own label (its first part: under it, about what it loses).
+    const inDialog = (label: string) => [...host.querySelectorAll('.win-sendopts button')].find((b) => (b.firstElementChild?.tagName === 'SPAN' ? b.firstElementChild.textContent : b.textContent)?.trim() === label);
     await click(inDialog('Through Monero'), 'Through Monero');
     expect(text()).toContain('about $110 or more');
     await click(inDialog('12 h'), '12 h');
@@ -317,6 +327,9 @@ describe('Wallet Click UI', () => {
     // Into Monero needs about $110; with room to spare: $145 (BTC and ETH alike), and 3 × 1.5 × $9.97 for Monero.
     await waitFor(() => text().includes('Send ≥'), 'minimum note');
     expect(host.querySelector('.min-note')!.textContent).toMatch(/BTC \$145 · ETH \$145 · XMR \$60/);
+    // And what it loses on the way: two swaps through Monero, at today's rates.
+    await waitFor(() => /Lose ≈ BTC [\d.]+%/.test(host.querySelector('.fee-note')?.textContent ?? ''), 'fee note');
+    expect(inDialog('Through Monero')!.textContent).toMatch(/≈ [\d.]+%/);
     await click(inDialog('OK'), 'OK');
     await waitFor(() => !host.querySelector('.win-sendopts'), 'dialog closed', 3000);
     expect(text()).toContain('Through Monero · wait 12 h · 3 pieces');
@@ -403,94 +416,63 @@ describe('Wallet Click UI', () => {
     serverTransfers = [];
   });
 
-  it('plays the "How it works" demo end to end without touching the server', async () => {
-    status = { ...status, authed: true };
-    serverOrders = [];
-    Object.assign(sounds, { ding: 0, swap: 0, send: 0, tada: 0, error: 0, vaultLock: 0, shuffle: 0, vaultOpen: 0 });
-    await mount();
-    await waitFor(() => !!button('How it works'), 'demo button');
-    const before = calls.filter((c) => c.startsWith('POST')).length;
-    await click(button('How it works'), 'How it works');
-    // A picker: one button per flow.
-    await waitFor(() => text().includes('Pretend coins'), 'demo picker');
-    const pick = (label: string) => [...host.querySelectorAll('.win-picker button')].find((b) => b.textContent?.includes(label));
-    expect(pick('Bitcoin') && pick('Monero') && pick('Privacy Enhanced')).toBeTruthy();
-    await click(pick('Ethereum'), 'Ethereum');
-    await waitFor(() => text().includes('Receive Ethereum (demo)'), 'demo receive window');
-    expect(text()).toContain('Demo: not a real address');
-    expect(text()).not.toMatch(/0x[0-9a-fA-F]{40}(?!.*7E57)/); // no real-looking deposit address
-    await waitFor(() => text().includes('Payment detected'), 'demo payment', 9000);
-    expect(sounds.ding).toBe(1);
-    await waitFor(() => text().includes('Done!'), 'demo done', 25_000);
-    expect(text()).toContain('126.84 USDC');
-    expect(text()).toContain('Swap cost ≈ $1.37 (1.1%)'); // what it cost, at the end
-    expect(sounds).toMatchObject({ ding: 1, swap: 1, send: 1, tada: 1, error: 0 });
-    expect(calls.filter((c) => c.startsWith('POST')).length).toBe(before); // nothing was created
-  }, 45_000);
-
-  it('previews a payment to a permanent address: it lands, is forwarded, swapped and sent', async () => {
+  it('"How it works" shows where the money goes, who holds it and what it costs, without touching the server', async () => {
     status = { ...status, authed: true };
     serverOrders = [];
     serverTransfers = [];
-    Object.assign(sounds, { ding: 0, swap: 0, send: 0, tada: 0, error: 0, vaultLock: 0, shuffle: 0, vaultOpen: 0 });
+    localStorage.removeItem('wc.sendOptions');
+    localStorage.removeItem('wc.feeAmount');
     await mount();
-    await waitFor(() => !!button('How it works'), 'demo button');
+    await waitFor(() => !!button('How it works'), 'How it works button');
     const before = calls.filter((c) => c.startsWith('POST')).length;
     await click(button('How it works'), 'How it works');
-    await waitFor(() => text().includes('When you send to one of your permanent addresses'), 'demo picker');
-    await click([...host.querySelectorAll('.win-picker button')].find((b) => b.textContent?.includes('You send BTC from your phone')), 'permanent: straight to USDT');
-    // No address window: you send from your phone, and the transfer window opens when it lands.
-    await waitFor(() => text().includes('Payment at "Phone → Coinbase"'), 'payment at the permanent address', 10_000);
-    expect(host.querySelector('.journey-strip .stack-badge')).toBeTruthy();
-    expect(host.querySelector('.journey-strip.is-five')).toBeNull();
-    await waitFor(() => text().includes('Forwarding to FixedFloat'), 'forward', 10_000);
-    await waitFor(() => text().includes('Done!'), 'route demo done', 20_000);
-    expect(text()).toContain('124.03 USDC');
-    expect(sounds).toMatchObject({ ding: 1, swap: 1, send: 1, tada: 1, error: 0, vaultLock: 0 });
-    expect(calls.filter((c) => c.startsWith('POST')).length).toBe(before);
-  }, 60_000);
+    await waitFor(() => !!host.querySelector('.win-how .money-map'), 'money map');
+    const how = () => host.querySelector('.win-how')!;
+    const pick = (label: string) => [...how().querySelectorAll('button')].find((b) => (b.firstElementChild?.tagName === 'SPAN' ? b.firstElementChild.textContent : b.textContent)?.trim() === label);
+    // A plain coin button: straight to FixedFloat, the server never holds it.
+    expect(how().textContent).toContain('your server never holds it');
+    expect(how().querySelector('.mm-server')).toBeNull();
+    await waitFor(() => how().querySelector('.fee-table tfoot')?.textContent?.includes('0.80%') ?? false, 'the cost of one swap');
 
-  it('plays the Privacy Enhanced demo: swap to Monero, the vault, a time-lapse wait, swap to USDC', async () => {
-    status = { ...status, authed: true };
-    serverOrders = [];
-    serverTransfers = [];
-    Object.assign(sounds, { ding: 0, swap: 0, send: 0, tada: 0, error: 0, vaultLock: 0, shuffle: 0, vaultOpen: 0 });
-    await mount();
-    await waitFor(() => !!button('How it works'), 'demo button');
-    const before = calls.filter((c) => c.startsWith('POST')).length;
-    await click(button('How it works'), 'How it works');
-    await waitFor(() => text().includes('Pretend coins'), 'demo picker');
-    await click([...host.querySelectorAll('.win-picker button')].find((b) => b.textContent?.includes('Privacy Enhanced')), 'Privacy Enhanced');
-    await waitFor(() => text().includes('Receive Bitcoin (demo)'), 'demo receive window');
-    expect(text()).toContain('swapped to Monero first');
-    await waitFor(() => text().includes('Payment received'), 'privacy demo payment', 10_000);
-    expect(host.querySelector('.journey-strip.is-five')).toBeTruthy();
-    await waitFor(() => !!host.querySelector('.vault3d.is-closed'), 'vault door shuts', 20_000);
-    await waitFor(() => text().includes('Moving it within your wallet'), 'churn', 10_000);
-    expect(host.querySelector('.churn-hop')).toBeTruthy();
-    await waitFor(() => text().includes('Time-lapse'), 'time-lapse wait', 10_000);
-    expect(text()).toMatch(/Holding 0\.2231 XMR for another/);
-    expect(host.querySelector('.bomb-icon.is-ticking')?.textContent).toContain('≈ $120.85');
-    expect(host.querySelector('.vault-ring.is-wait')).toBeTruthy();
-    await waitFor(() => text().includes('Done!'), 'privacy demo done', 30_000);
-    expect(text()).toContain('118.42 USDC');
-    expect(text()).toContain('Swap cost ≈ $4.61 (3.7%)'); // fees only…
-    expect(text()).toContain('Monero price moved −$3.07 while waiting'); // …the price move shown apart
-    expect(sounds).toMatchObject({ ding: 1, swap: 2, send: 2, vaultLock: 1, shuffle: 1, vaultOpen: 1, tada: 1, error: 0, boom: 1 });
-    await waitFor(() => !host.querySelector('.bomb-icon'), 'bomb gone once the money has landed', 3000);
+    // Ethereum through Monero, 4 h, in 4 pieces: one vault, four subaddresses, four orders out, each with its time.
+    await click(pick('ETH'), 'ETH');
+    await click(pick('Through Monero'), 'Through Monero');
+    await click(pick('4 h'), '4 h');
+    await click(pick('4'), '4 pieces');
+    expect(how().textContent).toContain("Waits in your server's Monero wallet, split into 4 fresh subaddresses.");
+    expect(how().querySelectorAll('.mm-server')).toHaveLength(1);
+    expect(how().querySelectorAll('.mm-node.is-lane')).toHaveLength(8);
+    const fees = how().querySelector('.fee-table')!.textContent!;
+    expect(fees).toContain('FixedFloat swap ETH → XMR');
+    expect(fees).toContain('FixedFloat swap XMR → USDC ×4');
+    expect(fees).toContain('Moves in your Monero wallet (Monero fee) ×9');
+    expect(how().querySelectorAll('.fee-grid .fee-cell')).toHaveLength(8);
+    const moments = [...how().querySelectorAll('.mm-moments button')];
+    expect(moments.some((m) => m.textContent?.includes('Waiting in Monero: 4 hours'))).toBe(true);
+    await click(moments.at(-1), 'the last moment');
+    expect(how().querySelector('.mm-clock')!.textContent).toContain('All there');
+    expect(how().textContent).toContain('Held by: Coinbase (USDC on Base) (4 of 4)');
+
+    // A cell of the comparison picks those options; they can become your Send options.
+    await click(how().querySelectorAll('.fee-grid .fee-cell')[1], 'straight, 2 pieces');
+    expect(how().textContent).toContain('Waits at a one-time address on your server.');
+    await click(button('Use these as my Send options'), 'Use these');
+    expect(JSON.parse(localStorage.getItem('wc.sendOptions')!)).toEqual({ route: 'direct', delayHours: 4, pieces: 2 });
+    await waitFor(() => text().includes('Straight to USDC · wait 4 h · 2 pieces'), 'saved');
     expect(calls.filter((c) => c.startsWith('POST')).length).toBe(before); // nothing was created
-  }, 90_000);
+    localStorage.removeItem('wc.sendOptions');
+  });
 
   it('previews the animations on their own, a moment at a time, without touching the server', async () => {
     status = { ...status, authed: true };
     serverOrders = [];
     serverTransfers = [];
     await mount();
-    await waitFor(() => !!button('How it works'), 'demo button');
+    await waitFor(() => !!button('How it works'), 'How it works button');
     const before = calls.filter((c) => c.startsWith('POST')).length;
     await click(button('How it works'), 'How it works');
-    await waitFor(() => text().includes('Just the animations'), 'demo picker');
-    await click([...host.querySelectorAll('.win-picker button')].find((b) => b.textContent?.includes('Animations')), 'Animations');
+    await waitFor(() => !!host.querySelector('.win-how'), 'How it works');
+    await click([...host.querySelectorAll('.win-how button')].find((b) => b.textContent?.includes('Animations')), 'Animations');
     await waitFor(() => !!host.querySelector('.win-anim'), 'animations window');
     const moment = (label: string) => [...host.querySelectorAll('.anim-moments button')].find((b) => b.textContent === label);
     expect(host.querySelectorAll('.win-anim .courier').length).toBe(2); // back and front canvases

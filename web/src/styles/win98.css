@@ -985,10 +985,6 @@ tr:hover .stage-pill {
   font-size: 12px;
 }
 
-.demo-box {
-  background: var(--demo-note);
-}
-
 /* ---------------------------------------------------------------- display properties */
 
 .win-display {

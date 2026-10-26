@@ -476,13 +476,6 @@ function progressOf(t: Transfer, shown: Phase, now: number, elapsed: number): nu
   }
 }
 
-/** A tiny fast-forward sign for the time-lapse (an SVG: emoji render in another font, or in colour on phones). */
-const FastForward = () => (
-  <svg viewBox="0 0 16 12" width="16" height="12" aria-hidden="true">
-    <path d="M1 1l6.5 5L1 11zM8 1l6.5 5L8 11z" fill="currentColor" />
-  </svg>
-);
-
 function Steps({ steps, releaseAt }: { steps: TransferStep[]; releaseAt: number | null }) {
   return (
     <ol className="steps98">
@@ -545,30 +538,19 @@ function PieceList({ pieces, now, sym }: { pieces: Piece[]; now: number; sym: st
   );
 }
 
-/** The "How it works" run fast-forwards the wait: virtual time runs `speed` times faster from `realStart`. */
-export interface TimeLapse {
-  realStart: number;
-  virtualStart: number;
-  speed: number;
-}
-
 interface Props {
   transfer: Transfer;
   delays: number[];
   /** Opened because money just arrived: play the whole flow from the start. */
   autoplay?: boolean;
-  /** "How it works": no buttons that talk to the server. */
-  demo?: boolean;
-  timeLapse?: TimeLapse | null;
   onClose(): void;
   onUpdate(t: Transfer): void;
   /** Shows a first-swap order's own window (its address, or its refund form). */
   onOpenOrder?(o: Order): void;
 }
 
-export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, onClose, onUpdate, onOpenOrder }: Props) {
-  const clock = () => (timeLapse ? timeLapse.virtualStart + (Date.now() - timeLapse.realStart) * timeLapse.speed : Date.now());
-  const [now, setNow] = useState(clock);
+export function JourneyDialog({ transfer: t, delays, autoplay, onClose, onUpdate, onOpenOrder }: Props) {
+  const [now, setNow] = useState(Date.now);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [editDelay, setEditDelay] = useState(false);
@@ -581,10 +563,9 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
   const modern = theme.shell !== 'classic';
 
   useEffect(() => {
-    const iv = setInterval(() => setNow(clock()), timeLapse ? 100 : 500);
+    const iv = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(iv);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLapse]);
+  }, []);
   useEffect(() => {
     if (prevShown.current === shown) return;
     prevShown.current = shown;
@@ -626,9 +607,9 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
   const paid = t.received ? `${trimAmount(t.received)} ${t.coin}` : t.coinName;
   const xmr = t.xmr ? `${trimAmount(t.xmr)} XMR` : 'the Monero';
   const out = t.usdt ?? t.leg2?.usdt ?? (monero ? null : t.leg1?.usdt);
-  const leg1Needs = t.leg1?.stage === 'attention' && t.leg1.emergency?.choice === 'NONE' && !demo;
+  const leg1Needs = t.leg1?.stage === 'attention' && t.leg1.emergency?.choice === 'NONE';
   const name = t.privacy ? 'Privacy Enhanced' : t.oneTime || !t.routeLabel ? `${t.coinName} payment` : `Payment to "${t.routeLabel}"`;
-  const title = shown === 'done' ? 'Transfer complete' : modern && showProgress && shown !== 'paying' ? `${Math.round(percent)}% complete` : demo ? `${name} (demo)` : name;
+  const title = shown === 'done' ? 'Transfer complete' : modern && showProgress && shown !== 'paying' ? `${Math.round(percent)}% complete` : name;
 
   let eta: string | null = null;
   if ((shown === 'waiting' || shown === 'held') && left !== null && left > 0) eta = untilText(left);
@@ -749,11 +730,6 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
             )}
           </p>
         )}
-        {demo && (
-          <div className="warn-box demo-box">
-            <WarnIcon size={20} /> Demo{timeLapse ? ': the wait plays as a time-lapse' : ''}.
-          </div>
-        )}
         <JourneyStrip t={t} shown={shown} now={now} />
         <div className="lines">
           {/* each moment's words slide in as it starts (no exit: they never lag behind the strip) */}
@@ -767,11 +743,6 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
             )}
             {sub && <p className="line-sub">{sub}</p>}
           </motion.div>
-          {(shown === 'waiting' || shown === 'held') && timeLapse && (
-            <p className="line-sub timelapse">
-              <FastForward /> Time-lapse
-            </p>
-          )}
           {!finished && t.waitingFor && shown !== 'waiting' && shown !== 'held' && <p className="line-sub">Waiting for {t.waitingFor}…</p>}
           {t.error && !t.attention && <p className="line-sub">Retrying: {t.error}</p>}
         </div>
@@ -804,7 +775,7 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
           </div>
         )}
 
-        {editDelay && !demo && (
+        {editDelay && (
           <fieldset className="group98">
             <legend>
               {monero ? 'Wait in Monero' : 'Wait before it goes on'}: <b>{delay ? `${delay} hours` : 'none'}</b> (counted from when it {monero ? 'unlocked' : 'was confirmed'})
@@ -828,17 +799,17 @@ export function JourneyDialog({ transfer: t, delays, autoplay, demo, timeLapse, 
               Show address
             </button>
           )}
-          {!demo && t.canChangeDelay && !editDelay && (
+          {t.canChangeDelay && !editDelay && (
             <button type="button" className="btn98" onClick={() => setEditDelay(true)}>
               Change wait…
             </button>
           )}
-          {!demo && t.canRelease && (
+          {t.canRelease && (
             <button type="button" className="btn98" disabled={busy} onClick={() => void act(() => api.release(t.id))}>
               Release now
             </button>
           )}
-          {!demo && t.canRetry && (
+          {t.canRetry && (
             <button type="button" className="btn98" disabled={busy} onClick={() => void act(() => api.retry(t.id))}>
               Retry
             </button>

@@ -202,6 +202,34 @@ export function SwapMachine({ size = 56, spinning = false }: IconProps & { spinn
   );
 }
 
+/** Your own server (the VPS): a rack unit stack with drive lights, and a key on the front, since it holds the wallet keys. */
+export function ServerIcon({ size = 32, busy = false }: IconProps & { busy?: boolean }) {
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} role="img" aria-label="Your server">
+      {[3, 12, 21].map((y, i) => (
+        <g key={y}>
+          <rect x="3" y={y} width="26" height="8" rx="1.2" fill="#3d4450" />
+          <rect x="4" y={y + 1} width="24" height="6" rx=".8" fill="#5a6372" />
+          <path d={`M7 ${y + 2.5}h9M7 ${y + 4}h9M7 ${y + 5.5}h9`} stroke="#2b3038" strokeWidth=".8" />
+          <circle cx="22" cy={y + 4} r="1.1" fill="#3ddc6a" className={busy && i !== 1 ? 'blink' : undefined} />
+          <circle cx="25.4" cy={y + 4} r="1.1" fill={i === 1 ? '#ffb02e' : '#3ddc6a'} className={busy && i === 1 ? 'blink' : undefined} />
+        </g>
+      ))}
+      <rect x="10" y="29.4" width="12" height="1.6" fill="#2b3038" />
+    </svg>
+  );
+}
+
+/** A key: an address whose key your server holds. */
+export function SmallKey({ size = 12 }: IconProps) {
+  return (
+    <svg viewBox="0 0 12 12" width={size} height={size} aria-hidden="true">
+      <circle cx="3.6" cy="6" r="2.6" fill="none" stroke="#c8961e" strokeWidth="1.6" />
+      <path d="M6 6h5M9 6v2.2M10.6 6v1.6" stroke="#c8961e" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
 /** An hourglass whose sand really runs: the top drains, a thin stream falls, the bottom fills, then it turns over. */
 export function Hourglass({ size = 20 }: IconProps) {
   return (

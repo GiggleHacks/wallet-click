@@ -178,14 +178,12 @@ interface Props {
   onAddressBook(): void;
   creating: Coin | null;
   offline?: boolean;
-  /** The demo is "clicking" this coin button. */
-  pressing: Coin | null;
   onCreate(coin: Coin): void;
   onOpen(o: Order): void;
   onDemo(): void;
 }
 
-export function Home({ meta, orders, transfers, onOpenTransfer, sendOptions, onSendOptions, onAddresses, destinations, destinationId, onDestination, onAddressBook, creating, offline, pressing, onCreate, onOpen, onDemo }: Props) {
+export function Home({ meta, orders, transfers, onOpenTransfer, sendOptions, onSendOptions, onAddresses, destinations, destinationId, onDestination, onAddressBook, creating, offline, onCreate, onOpen, onDemo }: Props) {
   const hideFigures = usePref('hideFigures');
   const [ripple, setRipple] = useState<{ coin: Coin; x: number; y: number; key: number } | null>(null);
   const safe = safeForAll(useMinimums(), sendOptions);
@@ -223,7 +221,7 @@ export function Home({ meta, orders, transfers, onOpenTransfer, sendOptions, onS
             key={c}
             type="button"
             data-coin={c}
-            className={`btn98 coin-btn ${pressing === c ? 'is-pressed' : ''}`}
+            className="btn98 coin-btn"
             onClick={() => onCreate(c)}
             onPointerDown={(e) => {
               const r = e.currentTarget.getBoundingClientRect();

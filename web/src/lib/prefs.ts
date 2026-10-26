@@ -3,6 +3,16 @@ import { useSyncExternalStore } from 'react';
 type PrefKey = 'sound' | 'remember' | 'hideFigures' | 'calm' | 'retro';
 const DEFAULTS: Record<PrefKey, boolean> = { sound: true, remember: true, hideFigures: false, calm: false, retro: true };
 
+// Sound is on by default: a mute saved before 1.16.1 is forgotten once, so every device starts with sound on again.
+try {
+  if (localStorage.getItem('wc.soundReset') === null) {
+    localStorage.removeItem('wc.sound');
+    localStorage.setItem('wc.soundReset', '1');
+  }
+} catch {
+  /* private mode: nothing stored to reset */
+}
+
 export function getPref(key: PrefKey): boolean {
   try {
     const v = localStorage.getItem(`wc.${key}`);
