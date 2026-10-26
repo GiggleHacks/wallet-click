@@ -22,6 +22,9 @@ function audio(): { c: AudioContext; out: GainNode } | null {
   }
 }
 
+/** The shared audio context and output, or null while sound is off (for lib/chiptune). */
+export const audioOut = audio;
+
 /** 'off' = muted by the user, 'locked' = the browser is still waiting for a click before it allows audio. */
 export function audioState(): 'off' | 'locked' | 'ready' {
   if (!getPref('sound')) return 'off';

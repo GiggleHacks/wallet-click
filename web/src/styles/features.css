@@ -1076,10 +1076,6 @@ html[data-theme='win11'] .extra-btn small {
   }
 }
 
-html[data-anim='retro'] .mm-lines line.is-flowing {
-  animation-timing-function: steps(3);
-}
-
 .mm-tokens {
   position: absolute;
   inset: 0;
@@ -1095,6 +1091,32 @@ html[data-anim='retro'] .mm-lines line.is-flowing {
   height: 20px;
   margin: -10px 0 0 -10px;
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35));
+}
+
+/* Moved every frame by the map's own loop: keep it on its own layer, so the browser only slides it. */
+.mm-token.is-moving {
+  will-change: transform;
+}
+
+/* A coin landing at a stop pops (each time another piece arrives too). */
+.mm-token:not(.is-moving) {
+  animation: mm-land 0.32s ease-out;
+}
+
+@keyframes mm-land {
+  0% {
+    scale: 1.7;
+  }
+  60% {
+    scale: 0.88;
+  }
+  100% {
+    scale: 1;
+  }
+}
+
+html[data-motion='calm'] .mm-token {
+  animation: none;
 }
 
 /* Coins waiting at a stop sit on its corner, so the stop's own icon still shows. */

@@ -29,6 +29,7 @@ vi.mock('../web/src/lib/sound', () => {
       boom: count('boom'),
     },
     audioState: () => 'ready',
+    audioOut: () => null,
     primeAudio() {},
     setSoundTheme() {},
   };

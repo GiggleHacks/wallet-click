@@ -1,8 +1,8 @@
 import { motion } from 'motion/react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { beat, chip } from '../lib/chiptune';
 import { useAnimStyle } from '../lib/motion';
-import { clockText, momentsOf, spotsAt, type Column, type Holder, type MoneyPath, type Spot, type Token } from '../lib/moneyPath';
-import { sfx } from '../lib/sound';
+import { clockText, momentsOf, spotsAt, type Column, type Holder, type MoneyPath, type Token } from '../lib/moneyPath';
 import { useTheme } from '../lib/themes';
 import { CoinIcon, CoinbaseIcon, Hourglass, ModernPC, ServerIcon, SmallKey, SwapMachine, UsdcIcon, VaultIcon } from './art';
 import { Tip } from './Tip';
@@ -17,8 +17,8 @@ import { Tip } from './Tip';
 const HOLDER: Record<Holder, string> = { you: 'You', fixedfloat: 'FixedFloat', server: 'Your server', exchange: '' };
 const MIN = 60_000;
 
-/** Real playback time for a stretch of `ms` of the timeline: short moves still get a moment, a day gets a few seconds. */
-const realFor = (ms: number) => Math.min(2600, 380 + 250 * Math.log2(1 + ms / MIN));
+/** Real playback time for a stretch of `ms` of the timeline: a move gets most of a second, a day gets a few seconds. */
+const realFor = (ms: number) => Math.min(2600, 520 + 260 * Math.log2(1 + ms / MIN));
 
 /** The timeline in real playback time: breakpoints at every leg's start and end. */
 function warp(p: MoneyPath) {
@@ -41,6 +41,34 @@ function warp(p: MoneyPath) {
     return real[i - 1] + ((v - at[i - 1]) / (at[i] - at[i - 1])) * (real[i] - real[i - 1]);
   };
   return { total, toVirtual, toReal };
+}
+
+/** The 8-bit sounds for what happened between `from` and `to` on the timeline (the same sound at once plays once). */
+function cue(p: MoneyPath, from: number, to: number) {
+  if (to <= from) return;
+  const fx = new Set<() => void>();
+  const began = (at: number) => (at > from || (from <= 0 && at === 0)) && at <= to;
+  for (const l of p.legs) {
+    if (l.kind === 'travel' && l.end > from && l.end <= to) fx.add(to >= p.end ? chip.fanfare : chip.coin);
+    if (!began(l.start)) continue;
+    if (l.kind === 'swap') fx.add(chip.powerUp);
+    else if (l.kind === 'stay') fx.add(chip.lock);
+    else if (l.kind === 'hop') fx.add(chip.jump);
+    else if (l.kind === 'travel') fx.add(p.columns[l.from].kind === 'vault' && p.columns[l.to].kind === 'swap' ? chip.open : chip.dash);
+  }
+  if (fx.has(chip.fanfare)) fx.delete(chip.coin);
+  [...fx].slice(0, 2).forEach((play) => play());
+}
+
+interface Tok {
+  key: string;
+  x: number;
+  y: number;
+  /** How wide the coin is as it spins (1 = facing you). */
+  spin: number;
+  coin: Token;
+  count: number;
+  moving: boolean;
 }
 
 const TokenIcon = ({ coin, size }: { coin: Token; size: number }) => (coin === 'USDC' ? <UsdcIcon size={size} /> : <CoinIcon coin={coin} size={size} />);
@@ -68,57 +96,24 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
   const moments = useMemo(() => momentsOf(p), [p]);
   const [real, setReal] = useState(0);
   const [playing, setPlaying] = useState(style !== 'calm');
+  /** The playhead. While it plays it moves every frame; React hears about it only when something it draws changes. */
   const realRef = useRef(0);
-  realRef.current = real;
+  const seek = (v: number) => {
+    realRef.current = v;
+    setReal(v);
+  };
 
   // A new path starts again from the beginning.
   useEffect(() => {
-    setReal(0);
+    seek(0);
     setPlaying(style !== 'calm');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p]);
-
-  useEffect(() => {
-    if (!playing) return;
-    let raf = 0;
-    let last = performance.now();
-    const loop = (now: number) => {
-      const next = Math.min(w.total, realRef.current + (now - last));
-      last = now;
-      setReal(next);
-      if (next >= w.total) return setPlaying(false);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [playing, w]);
 
   const t = w.toVirtual(real);
   const spots = spotsAt(p, t);
   const n = p.shares.length;
   const now = [...moments].reverse().find((m) => m.at <= t + 1) ?? moments[0];
-
-  // Sounds while it plays: coins whoosh off, FixedFloat swaps, the vault locks and opens, a piece shuffles, each
-  // piece lands with a ding and the last with a tada. Several at once (pieces moving together) sound once.
-  const lastT = useRef(0);
-  useEffect(() => {
-    const from = lastT.current;
-    lastT.current = t;
-    if (!playing || t <= from) return;
-    const cues = new Set<() => void>();
-    const starts = (at: number) => at > from || (from <= 0 && at === 0);
-    for (const l of p.legs) {
-      if (starts(l.start) && l.start <= t) {
-        if (l.kind === 'swap') cues.add(sfx.swap);
-        else if (l.kind === 'stay') cues.add(sfx.vaultLock);
-        else if (l.kind === 'hop') cues.add(sfx.shuffle);
-        else if (l.kind === 'travel' && p.columns[l.to].kind !== 'dest') cues.add(p.columns[l.from].kind === 'vault' && p.columns[l.to].kind === 'swap' ? sfx.vaultOpen : sfx.send);
-      }
-      if (l.kind === 'travel' && p.columns[l.to].kind === 'dest' && l.end > from && l.end <= t) cues.add(t >= p.end ? sfx.tada : sfx.ding);
-    }
-    if (cues.has(sfx.tada)) cues.delete(sfx.ding);
-    [...cues].slice(0, 2).forEach((play) => play());
-  }, [t, playing, p]);
 
   // Where each stop is drawn, measured, so the coins can travel between them.
   const grid = useRef<HTMLDivElement>(null);
@@ -151,32 +146,92 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
   const keyOf = (col: number, lane: number) => (p.columns[col].lanes ? `${col}:${lane}` : `${col}:*`);
   const center = (col: number, lane: number) => centers[keyOf(col, lane)];
 
-  // Steps rather than glides in Retro; a jump in Calm.
-  const ease = (x: number) => (style === 'calm' ? (x < 0.5 ? 0 : 1) : style === 'retro' ? Math.floor(x * 6) / 6 : x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
-
-  /** Coins standing still at a stop are drawn once, with how many pieces are there. */
-  const tokens: { key: string; x: number; y: number; coin: Token; count: number; moving: boolean }[] = [];
-  const resting = new Map<string, { s: Spot; count: number }>();
-  for (const s of spots) {
-    const travelling = s.leg.kind === 'travel' && s.progress > 0 && s.progress < 1;
-    if (travelling) {
-      const a = center(s.leg.from, s.lane);
-      const b = center(s.leg.to, s.lane);
-      if (!a || !b) continue;
-      const f = ease(s.progress);
-      tokens.push({ key: `m${s.lane}`, x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, coin: s.leg.coin, count: 1, moving: true });
-    } else {
-      const col = s.leg.kind === 'travel' && s.progress <= 0 ? s.leg.from : s.leg.to;
-      const k = keyOf(col, s.lane);
-      const r = resting.get(k);
-      if (r) r.count++;
-      else resting.set(k, { s: { ...s, leg: { ...s.leg, from: col, to: col } }, count: 1 });
+  /**
+   * Every coin at `at` on the timeline. A moving coin glides (a jump in Calm) on a little arc, spinning like an old
+   * console's; coins standing still are drawn once per stop with how many are there, and pop as each one lands.
+   */
+  const calm = style === 'calm';
+  const tokensAt = (at: number): Tok[] => {
+    const list: Tok[] = [];
+    const resting = new Map<string, { coin: Token; count: number }>();
+    for (const s of spotsAt(p, at)) {
+      const x = s.progress;
+      if (s.leg.kind === 'travel' && x > 0 && x < 1) {
+        const a = center(s.leg.from, s.lane);
+        const b = center(s.leg.to, s.lane);
+        if (!a || !b) continue;
+        const f = calm ? (x < 0.5 ? 0 : 1) : x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2;
+        const lift = calm ? 0 : Math.sin(Math.PI * x) * Math.min(24, Math.hypot(b.x - a.x, b.y - a.y) * 0.22);
+        const spin = calm ? 1 : Math.max(0.15, Math.abs(Math.cos(x * Math.PI * 3)));
+        list.push({ key: `m${s.lane}`, x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f - lift, spin, coin: s.leg.coin, count: 1, moving: true });
+      } else {
+        const k = keyOf(s.leg.kind === 'travel' && x <= 0 ? s.leg.from : s.leg.to, s.lane);
+        const r = resting.get(k);
+        if (r) r.count++;
+        else resting.set(k, { coin: s.leg.coin, count: 1 });
+      }
     }
-  }
-  for (const [k, { s, count }] of resting) {
-    const c = centers[k];
-    if (c) tokens.push({ key: `r${k}`, x: c.x, y: c.y, coin: s.leg.coin, count, moving: false });
-  }
+    for (const [k, r] of resting) {
+      const c = centers[k];
+      if (c) list.push({ key: `r${k}#${r.count}`, x: c.x, y: c.y, spin: 1, coin: r.coin, count: r.count, moving: false });
+    }
+    return list;
+  };
+
+  /** Puts the coins, the clock's hands and the timeline's thumb where they are at `r`, straight onto the page. */
+  const tokenEls = useRef(new Map<string, HTMLElement>());
+  const hands = useRef<(HTMLElement | null)[]>([]);
+  const scrub = useRef<HTMLInputElement>(null);
+  const draw = (r: number, list = tokensAt(w.toVirtual(r))) => {
+    const v = w.toVirtual(r);
+    for (const k of list) {
+      const el = tokenEls.current.get(k.key);
+      if (el) el.style.transform = `translate(${k.x.toFixed(2)}px, ${k.y.toFixed(2)}px)${k.spin < 1 ? ` scaleX(${k.spin.toFixed(3)})` : ''}`;
+    }
+    const [hour, minute] = hands.current;
+    if (hour) hour.style.transform = `rotate(${(v / (12 * 3_600_000)) * 360}deg)`;
+    if (minute) minute.style.transform = `rotate(${(v / 3_600_000) * 360}deg)`;
+    if (scrub.current) scrub.current.value = String(Math.round(r));
+  };
+  useLayoutEffect(() => draw(realRef.current));
+  const latest = useRef({ draw, tokensAt });
+  latest.current = { draw, tokensAt };
+
+  // Every frame: move the playhead, play what happened, draw the coins. React redraws the stops, captions and
+  // countdowns only when a coin sets off or lands or a step begins, and otherwise about twelve times a second.
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    let last = performance.now();
+    let committed = last;
+    let sig = '';
+    const loop = (now: number) => {
+      const from = w.toVirtual(realRef.current);
+      const r = Math.min(w.total, realRef.current + (now - last));
+      last = now;
+      realRef.current = r;
+      const v = w.toVirtual(r);
+      cue(p, from, v);
+      const list = latest.current.tokensAt(v);
+      const next = `${list.map((k) => k.key).join()}|${p.legs.filter((l) => l.start <= v).length}`;
+      if (next !== sig || now - committed > 80 || r >= w.total) {
+        sig = next;
+        committed = now;
+        setReal(r);
+      }
+      latest.current.draw(r, list);
+      if (r >= w.total) return setPlaying(false);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, w, p]);
+
+  // The 8-bit beat pulses while it plays.
+  useEffect(() => {
+    beat(playing);
+    return () => beat(false);
+  }, [playing]);
 
   /** What each stop is doing right now. */
   const state = (col: number, lane: number) => {
@@ -284,7 +339,7 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
   const holdText = [...holders].map(([who, k]) => (n > 1 ? `${who} (${k} of ${n})` : who)).join(' · ');
 
   const jump = (v: number) => {
-    setReal(w.toReal(v));
+    seek(w.toReal(v));
     setPlaying(false);
   };
 
@@ -307,8 +362,8 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
         {head && <div className="mm-head-text">{head}</div>}
         <div className="mm-clock" aria-live="off">
           <span className="mm-clock-face" aria-hidden="true">
-            <i style={{ transform: `rotate(${(t / (12 * 3_600_000)) * 360}deg)` }} />
-            <i className="is-min" style={{ transform: `rotate(${(t / 3_600_000) * 360}deg)` }} />
+            <i ref={(el) => void (hands.current[0] = el)} />
+            <i className="is-min" ref={(el) => void (hands.current[1] = el)} />
           </span>
           <span>
             <b>{done ? 'All there' : `After ${clockText(t)}`}</b>
@@ -333,8 +388,15 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
         </svg>
         {cells}
         <div className="mm-tokens" aria-hidden="true">
-          {tokens.map((k) => (
-            <span key={k.key} className={`mm-token ${k.moving ? 'is-moving' : ''}`} style={{ transform: `translate(${k.x}px, ${k.y}px)` }}>
+          {tokensAt(t).map((k) => (
+            <span
+              key={k.key}
+              ref={(el) => {
+                if (el) tokenEls.current.set(k.key, el);
+                else tokenEls.current.delete(k.key);
+              }}
+              className={`mm-token ${k.moving ? 'is-moving' : ''}`}
+            >
               <TokenIcon coin={k.coin} size={20} />
               {k.count > 1 && <b>×{k.count}</b>}
             </span>
@@ -351,7 +413,7 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
       </div>
 
       <div className="mm-controls">
-        <button type="button" className="btn98" onClick={() => (done ? (setReal(0), setPlaying(true)) : setPlaying((v) => !v))}>
+        <button type="button" className="btn98" onClick={() => (done ? (seek(0), setPlaying(true)) : setPlaying((v) => !v))}>
           {done ? 'Replay' : playing ? 'Pause' : 'Play'}
         </button>
         <input
@@ -359,9 +421,10 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
           className="mm-scrub"
           min={0}
           max={Math.round(w.total)}
-          value={Math.round(real)}
+          defaultValue={0}
+          ref={scrub}
           onChange={(e) => {
-            setReal(Number(e.target.value));
+            seek(Number(e.target.value));
             setPlaying(false);
           }}
           aria-label="Timeline"
