@@ -54,11 +54,13 @@ export interface Leg {
   caption: string;
 }
 
-export type Tx =
-  | { kind: 'swap'; from: Coin; to: 'USDC' | 'XMR'; share: number }
-  | { kind: 'forward'; coin: Coin; count: number }
+/** One cost on the way: where it's taken (the column the money leaves), and from which piece (null: all of it, before it's split). */
+export type Tx = { col: number; lane: number | null } & (
+  | { kind: 'swap'; from: Coin; to: 'USDC' | 'XMR' }
+  | { kind: 'forward'; coin: Coin }
   | { kind: 'split'; coin: 'BTC'; pieces: number }
-  | { kind: 'xmr'; count: number };
+  | { kind: 'xmr' }
+);
 
 export interface MoneyPath {
   columns: Column[];
@@ -162,7 +164,7 @@ export function moneyPath(o: PathOptions): MoneyPath {
     l.go(cSwap, CONFIRM[coin], coin, `You send ${coin} straight to a fresh FixedFloat address. It confirms on the ${NAME[coin]} network.`);
     l.stay(SWAP, coin, 'swap', `FixedFloat swaps the ${coin} to USDC.`);
     l.go(cDest, PAYOUT, 'USDC', `FixedFloat sends the USDC to ${dest}. Done.`);
-    txs.push({ kind: 'swap', from: coin, to: 'USDC', share: 1 });
+    txs.push({ kind: 'swap', from: coin, to: 'USDC', col: cSwap, lane: null });
     summary = 'Straight to FixedFloat: your server never holds it.';
   } else if (!moneroPath) {
     // Straight, but held at an address of the server's own wallet first.
@@ -196,10 +198,12 @@ export function moneyPath(o: PathOptions): MoneyPath {
       l.go(cDest, PAYOUT, 'USDC', `${n > 1 ? `Piece ${k + 1} of ${n}` : 'The USDC'} lands at ${dest}.${n > 1 && k < n - 1 ? ' The next piece goes a random 5 min–2 h later.' : ' Done.'}`);
       landed.push(l.t);
     });
-    if (btcSplit) txs.push({ kind: 'split', coin: 'BTC', pieces: n });
-    if (coin === 'XMR') txs.push({ kind: 'xmr', count: n });
-    else txs.push({ kind: 'forward', coin, count: n });
-    shares.forEach((share) => txs.push({ kind: 'swap', from: coin, to: 'USDC', share }));
+    if (btcSplit) txs.push({ kind: 'split', coin: 'BTC', pieces: n, col: cAddr, lane: null });
+    shares.forEach((_, k) => {
+      const from = btcSplit ? cSplit : cAddr;
+      txs.push(coin === 'XMR' ? { kind: 'xmr', col: from, lane: k } : { kind: 'forward', coin, col: from, lane: k });
+      txs.push({ kind: 'swap', from: coin, to: 'USDC', col: cSwap, lane: k });
+    });
     if (n > 1 && coin !== 'XMR') notes.push(`The pieces are hidden from ${dest}, but still linked on the ${NAME[coin]} blockchain. Through Monero they can't be linked.`);
     summary = `Waits at ${where} on your server${btcSplit ? `, then in ${n} fresh addresses` : ''}.`;
   } else {
@@ -233,13 +237,13 @@ export function moneyPath(o: PathOptions): MoneyPath {
       if (entry === 'permanent') {
         all((l) => l.go(cPerm, CONFIRM[coin], coin, `You send ${coin} to your permanent address on your server.`));
         all((l) => l.go(cIn, CONFIRM[coin], coin, `Your server forwards it to a fresh FixedFloat order (${coin} → XMR).`));
-        txs.push({ kind: 'forward', coin, count: 1 });
+        txs.push({ kind: 'forward', coin, col: cPerm, lane: null });
       } else {
         all((l) => l.go(cIn, CONFIRM[coin], coin, `You send ${coin} to a fresh FixedFloat address. It confirms on the ${NAME[coin]} network.`));
       }
       all((l) => l.stay(SWAP, coin, 'swap', `FixedFloat swaps the ${coin} to Monero.`));
       all((l) => l.go(cVault, XMR_MOVE, 'XMR', "FixedFloat pays the XMR into a fresh vault subaddress of your server's Monero wallet."));
-      txs.push({ kind: 'swap', from: coin, to: 'XMR', share: 1 });
+      txs.push({ kind: 'swap', from: coin, to: 'XMR', col: cIn, lane: null });
     } else {
       all((l) => l.go(cVault, XMR_MOVE, 'XMR', 'You send XMR to a one-time subaddress of your server’s Monero wallet.'));
     }
@@ -265,8 +269,12 @@ export function moneyPath(o: PathOptions): MoneyPath {
       landed.push(l.t);
     });
     // The churn (or split), each piece's own move, and each send to FixedFloat.
-    txs.push({ kind: 'xmr', count: 1 + (n > 1 ? n : 0) + n });
-    shares.forEach((share) => txs.push({ kind: 'swap', from: 'XMR', to: 'USDC', share }));
+    txs.push({ kind: 'xmr', col: cVault, lane: null });
+    shares.forEach((_, k) => {
+      if (n > 1) txs.push({ kind: 'xmr', col: cSubs, lane: k });
+      txs.push({ kind: 'xmr', col: cSubs, lane: k });
+      txs.push({ kind: 'swap', from: 'XMR', to: 'USDC', col: cSwap, lane: k });
+    });
     notes.push('While it waits in Monero, the XMR price can move up or down. That isn’t a fee, but what arrives can be more or less.');
     summary = `Waits in your server's Monero wallet${n > 1 ? `, split into ${n} fresh subaddresses` : ''}.`;
   }

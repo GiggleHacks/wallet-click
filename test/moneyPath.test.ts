@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareGrid, estimate, estimateTxs } from '../web/src/lib/fees.js';
+import { compareGrid, estimate, valueFlow } from '../web/src/lib/fees.js';
 import { momentsOf, moneyPath, spotsAt, type PathOptions } from '../web/src/lib/moneyPath.js';
 import type { Fees } from '../web/src/types.js';
 
@@ -16,7 +16,7 @@ const turn = (o: Partial<PathOptions>, lane: number) => {
 describe('where the money goes', () => {
   it('a plain coin button: straight to FixedFloat, the server never holds it', () => {
     expect(kinds({})).toEqual(['wallet:you', 'swap:fixedfloat', 'dest:exchange']);
-    expect(moneyPath(base).txs).toEqual([{ kind: 'swap', from: 'BTC', to: 'USDC', share: 1 }]);
+    expect(moneyPath(base).txs).toEqual([{ kind: 'swap', from: 'BTC', to: 'USDC', col: 1, lane: null }]);
   });
 
   it('straight with a wait: held at a one-time address on the server, then forwarded', () => {
@@ -27,8 +27,9 @@ describe('where the money goes', () => {
   it('Bitcoin in pieces: one split to a fresh change address per piece, each forwarded on its own', () => {
     const p = moneyPath({ ...base, pieces: 3 });
     expect(kinds({ pieces: 3 })).toEqual(['wallet:you', 'address:server', 'address*:server', 'swap*:fixedfloat', 'dest:exchange']);
-    expect(p.txs).toContainEqual({ kind: 'split', coin: 'BTC', pieces: 3 });
-    expect(p.txs).toContainEqual({ kind: 'forward', coin: 'BTC', count: 3 });
+    // The split is taken from all of it at the one-time address; each piece pays its own forward from its own address.
+    expect(p.txs).toContainEqual({ kind: 'split', coin: 'BTC', pieces: 3, col: 1, lane: null });
+    expect(p.txs.filter((t) => t.kind === 'forward').map((t) => [t.col, t.lane])).toEqual([[2, 0], [2, 1], [2, 2]]);
     expect(p.shares).toHaveLength(3);
     expect(p.shares.reduce((s, v) => s + v, 0)).toBeCloseTo(1);
   });
@@ -55,7 +56,7 @@ describe('where the money goes', () => {
     const p = moneyPath({ ...base, ...o });
     expect(p.txs.filter((t) => t.kind === 'swap')).toHaveLength(5);
     // The split, each piece's own move, and each send to FixedFloat.
-    expect(p.txs).toContainEqual({ kind: 'xmr', count: 9 });
+    expect(p.txs.filter((t) => t.kind === 'xmr')).toHaveLength(9);
     expect(p.legs.filter((l) => l.kind === 'hop')).toHaveLength(4);
     // The wait counts from when it unlocked.
     const unlocked = p.legs.find((l) => l.caption.startsWith('The XMR unlocks'))!.end;
@@ -102,8 +103,19 @@ describe('what it costs', () => {
   });
 
   it('falls back to typical numbers, and says so', () => {
-    const e = estimateTxs([{ kind: 'swap', from: 'BTC', to: 'USDC', share: 1 }], null, 1000);
-    expect(e).toMatchObject({ pct: 1, typical: true });
+    expect(estimate(base, null, 1000)).toMatchObject({ pct: 1, typical: true });
+  });
+
+  it('follows the dollars stop by stop, and what arrives is what went in minus every cost', () => {
+    const p = moneyPath({ ...base, coin: 'ETH', route: 'monero', delayHours: 4, pieces: 4 });
+    const f = valueFlow(p, live, 500);
+    // Before the split every piece holds its share of the same money; the swap into Monero takes 0.9% of it.
+    expect(f.at.reduce((s, lane) => s + lane[0], 0)).toBeCloseTo(500);
+    expect(f.at.reduce((s, lane) => s + lane[1], 0)).toBeCloseTo(500 * 0.991);
+    // Each stop is worth no more than the one before it.
+    for (const lane of f.at) lane.forEach((v, i) => i && expect(v).toBeLessThanOrEqual(lane[i - 1] + 1e-9));
+    expect(f.out).toBeCloseTo(500 - f.usd);
+    expect(f.at.reduce((s, lane) => s + lane.at(-1)!, 0)).toBeCloseTo(f.out);
   });
 
   it('compares every route and number of pieces', () => {
