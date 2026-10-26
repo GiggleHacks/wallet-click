@@ -779,6 +779,13 @@ html[data-theme='win11'] .extra-btn small {
   display: block;
 }
 
+/* The clock's words keep one width and one line each, so nothing around it moves as the time changes. */
+.mm-clock > span:last-child {
+  width: 128px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .mm-clock small {
   font-size: 11px;
   color: var(--text-dim);
@@ -863,10 +870,11 @@ html[data-theme='win11'] .extra-btn small {
   -webkit-line-clamp: 2;
 }
 
-/* One stop per piece: the icon with its words beside it, so four pieces stay short. */
+/* One stop per piece: the icon with its words beside it, so four pieces stay short. The icon keeps its place at the
+   column's start, so a countdown coming and going never shifts it off its lines. */
 .money-map:not(.is-vertical) .mm-node.is-lane {
   flex-direction: row;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 4px;
   text-align: left;
 }
@@ -893,15 +901,22 @@ html[data-theme='win11'] .extra-btn small {
   grid-row: var(--col);
 }
 
-/* A stop everything passes through, on a phone: the icon with its words beside it, so the column stays short. */
+/* A stop everything passes through, on a phone: the icon with its words beside it, so the column stays short. The
+   icon sits in the middle column, so its place never depends on how wide its words are. */
 .is-vertical .mm-node.is-single {
-  flex-direction: row;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
   gap: 6px;
   text-align: left;
 }
 
+.is-vertical .mm-node.is-single > :first-child {
+  grid-column: 2;
+}
+
 .is-vertical .mm-node.is-single .mm-text {
+  grid-column: 3;
   align-items: flex-start;
   height: auto;
 }
@@ -945,6 +960,10 @@ html[data-theme='win11'] .extra-btn small {
 
 .mm-node.is-lane .mm-sub {
   font-size: 10px;
+}
+
+.mm-wait.is-idle {
+  visibility: hidden;
 }
 
 .mm-wait {
@@ -1111,9 +1130,24 @@ html[data-anim='retro'] .mm-coins {
   background: #1f3a93;
 }
 
+/* A fixed height (two lines of caption, one of who holds it), so the window never grows or shrinks as it plays. */
 .mm-now {
-  min-height: 52px;
+  height: 56px;
   margin-top: 4px;
+  overflow: hidden;
+}
+
+.mm-now .line-main {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.mm-now .line-sub {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .mm-now .line-main {
@@ -1134,6 +1168,39 @@ html[data-anim='retro'] .mm-coins {
 .mm-scrub {
   flex: 1;
   min-width: 0;
+}
+
+/* The coin styles to try out, under the timeline. */
+.mm-variants {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.mm-variants .seg98 {
+  flex-wrap: nowrap;
+}
+
+.mm-variants .seg-btn {
+  flex: 1 1 auto;
+  min-height: 22px;
+  padding: 1px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .mm-variants .seg98 {
+    flex: 1 1 100%;
+  }
+  .mm-variants .seg-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 1px 4px;
+  }
 }
 
 /* Steps, What it costs and Compare share one box under the map. */
@@ -1335,6 +1402,12 @@ html[data-anim='retro'] .mm-coins {
   .mm-panel-body,
   .mm-moments {
     height: 180px;
+  }
+  .mm-now {
+    height: 76px;
+  }
+  .mm-now .line-main {
+    -webkit-line-clamp: 3;
   }
 }
 
