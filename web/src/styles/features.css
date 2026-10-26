@@ -860,7 +860,7 @@ html[data-theme='win11'] .extra-btn small {
 
 .mm-node.is-single .mm-text {
   justify-content: flex-start;
-  height: 58px;
+  height: 72px;
 }
 
 .mm-node.is-single .mm-label {
@@ -1114,6 +1114,46 @@ html[data-theme='win11'] .extra-btn small {
 
 html[data-anim='retro'] .mm-coins {
   image-rendering: pixelated;
+}
+
+/* What the money is worth as it leaves a stop, after the costs taken there. */
+.mm-usd {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ok);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.mm-usd.is-none {
+  color: var(--text-faint);
+}
+
+/* A moving coin's worth, on a tag just under it. */
+.mm-tags {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.mm-tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 12px 0 0 -22px;
+  min-width: 44px;
+  padding: 0 4px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  white-space: nowrap;
+  color: #fff;
+  background: rgba(16, 90, 40, 0.92);
+  font-variant-numeric: tabular-nums;
 }
 
 /* How many pieces wait at a stop, on its coin. */

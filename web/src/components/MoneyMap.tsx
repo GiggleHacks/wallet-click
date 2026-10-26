@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { chip } from '../lib/chiptune';
+import type { Flow } from '../lib/fees';
 import { useAnimStyle } from '../lib/motion';
 import { clockText, momentsOf, spotsAt, type Column, type Holder, type MoneyPath, type Token } from '../lib/moneyPath';
 import { useTheme } from '../lib/themes';
@@ -72,6 +73,9 @@ interface Tok {
   alpha: number;
   coin: Token;
   count: number;
+  /** A moving coin: what it's worth, and the coins it travels with (pieces not split yet move as one). */
+  usd?: number;
+  group?: string;
   /** A moving coin's line, and how far along it is (for its trail). */
   line?: { a: { x: number; y: number }; b: { x: number; y: number }; progress: number };
 }
@@ -79,6 +83,9 @@ interface Tok {
 /** Along a line: mostly eased in and out, never quite stopping (the courier's flights move the same way). */
 const glide = (x: number) => 0.3 * x + 0.7 * (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
 const COIN = 20;
+
+/** "$495.20", "$1,240". */
+export const dollars = (v: number) => `$${v.toLocaleString('en-US', v >= 1000 ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const TokenIcon = ({ coin, size }: { coin: Token; size: number }) => (coin === 'USDC' ? <UsdcIcon size={size} /> : <CoinIcon coin={coin} size={size} />);
 
@@ -96,9 +103,11 @@ interface Props {
   /** Next to the clock: what this setup does, in one line. */
   head?: ReactNode;
   panels?: MapPanel[];
+  /** What the money is worth at every stop, after the costs taken there. */
+  flow?: Flow;
 }
 
-export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels = [] }: Props) {
+export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels = [], flow }: Props) {
   const style = useAnimStyle();
   const theme = useTheme();
   const w = useMemo(() => warp(p), [p]);
@@ -127,7 +136,8 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
   // Where each stop is drawn, measured, so the coins can travel between them.
   const grid = useRef<HTMLDivElement>(null);
   const nodes = useRef(new Map<string, HTMLElement>());
-  const [centers, setCenters] = useState<Record<string, { x: number; y: number }>>({});
+  /** Each stop's icon centre (where lines and coins arrive) and where they leave it: past its words, so a line never runs through them. */
+  const [centers, setCenters] = useState<Record<string, { x: number; y: number; out: { x: number; y: number } }>>({});
   const [vertical, setVertical] = useState(false);
   useLayoutEffect(() => {
     const el = grid.current;
@@ -137,14 +147,25 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
       // The window zooms in as it opens: undo its scale, so a map measured mid-zoom still lines up.
       const sx = box.width / el.offsetWidth || 1;
       const sy = box.height / el.offsetHeight || 1;
-      const next: Record<string, { x: number; y: number }> = {};
+      const down = el.offsetWidth < 560;
+      const next: Record<string, { x: number; y: number; out: { x: number; y: number } }> = {};
       for (const [key, node] of nodes.current) {
         const icon = node.querySelector('.mm-icon') ?? node;
         const r = icon.getBoundingClientRect();
-        next[key] = { x: (r.left - box.left + r.width / 2) / sx, y: (r.top - box.top + r.height / 2) / sy };
+        const x = (r.left - box.left + r.width / 2) / sx;
+        const y = (r.top - box.top + r.height / 2) / sy;
+        const words = node.querySelector('.mm-text')?.getBoundingClientRect();
+        // Words beside the icon (left to right) or under it (top to bottom) are in the way of the line out.
+        const out =
+          words && !down && words.left >= r.right - 2
+            ? { x: (words.right - box.left) / sx + 5, y }
+            : words && down && words.top >= r.bottom - 2
+              ? { x, y: (words.bottom - box.top) / sy + 4 }
+              : { x, y };
+        next[key] = { x, y, out };
       }
       setCenters(next);
-      setVertical(el.offsetWidth < 560);
+      setVertical(down);
     };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
@@ -154,6 +175,7 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
   }, [p]);
   const keyOf = (col: number, lane: number) => (p.columns[col].lanes ? `${col}:${lane}` : `${col}:*`);
   const center = (col: number, lane: number) => centers[keyOf(col, lane)];
+  const exit = (col: number, lane: number) => centers[keyOf(col, lane)]?.out;
 
   /**
    * Every coin at `at` on the timeline. A moving coin goes straight along its line from one stop to the next (a jump
@@ -171,12 +193,23 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
     for (const s of spotsAt(p, at)) {
       const x = s.progress;
       if (s.leg.kind === 'travel' && x > 0 && x < 1) {
-        const a = center(s.leg.from, s.lane);
+        const a = exit(s.leg.from, s.lane);
         const b = center(s.leg.to, s.lane);
         if (!a || !b) continue;
         const f = calm ? (x < 0.5 ? 0 : 1) : glide(x);
         const size = calm ? 1 : Math.min(1, 0.55 + (x / 0.15) * 0.45, 0.55 + ((1 - x) / 0.15) * 0.45);
-        list.push({ key: `m${s.lane}`, x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, size, alpha: 1, coin: s.leg.coin, count: 1, line: { a, b, progress: x } });
+        list.push({
+          key: `m${s.lane}`,
+          x: a.x + (b.x - a.x) * f,
+          y: a.y + (b.y - a.y) * f,
+          size,
+          alpha: 1,
+          coin: s.leg.coin,
+          count: 1,
+          usd: flow?.at[s.lane][s.leg.from],
+          group: `${keyOf(s.leg.from, s.lane)}>${keyOf(s.leg.to, s.lane)}@${s.leg.start}`,
+          line: { a, b, progress: x },
+        });
       } else {
         const col = s.leg.kind === 'travel' && x <= 0 ? s.leg.from : s.leg.to;
         const k = keyOf(col, s.lane);
@@ -213,6 +246,8 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
 
   /** Puts the coins, the clock's hands and the timeline's thumb where they are at `r`, straight onto the page. */
   const hands = useRef<(HTMLElement | null)[]>([]);
+  const tagBox = useRef<HTMLDivElement>(null);
+  const tagEls = useRef(new Map<string, HTMLSpanElement>());
   const scrub = useRef<HTMLInputElement>(null);
   const draw = (r: number, list = tokensAt(w.toVirtual(r))) => {
     const v = w.toVirtual(r);
@@ -240,6 +275,33 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
           }
         }
         paintCoin(g, k.coin, k.x, k.y, COIN * k.size, pixel, k.alpha);
+      }
+    }
+    // What each moving coin is worth, on a tag beside it (coins still moving together carry one tag).
+    const box = tagBox.current;
+    if (box) {
+      const groups = new Map<string, { x: number; y: number; usd: number }>();
+      for (const k of list) {
+        if (k.usd === undefined || !k.group) continue;
+        const same = groups.get(k.group);
+        if (same) same.usd += k.usd;
+        else groups.set(k.group, { x: k.x, y: k.y, usd: k.usd });
+      }
+      for (const [key, el] of tagEls.current) {
+        if (groups.has(key)) continue;
+        el.remove();
+        tagEls.current.delete(key);
+      }
+      for (const [key, g0] of groups) {
+        let el = tagEls.current.get(key);
+        if (!el) {
+          el = document.createElement('span');
+          el.className = 'mm-tag';
+          box.appendChild(el);
+          tagEls.current.set(key, el);
+        }
+        el.textContent = dollars(g0.usd);
+        el.style.transform = `translate(${Math.round(g0.x)}px, ${Math.round(g0.y)}px)`;
       }
     }
     const [hour, minute] = hands.current;
@@ -305,7 +367,7 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
   for (const l of p.legs) {
     if (l.kind !== 'travel') continue;
     const key = `${keyOf(l.from, l.lane)}>${keyOf(l.to, l.lane)}`;
-    const a = center(l.from, l.lane);
+    const a = exit(l.from, l.lane);
     const b = center(l.to, l.lane);
     if (!a || !b) continue;
     const lit = t >= l.end;
@@ -343,12 +405,18 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
     );
   };
 
+  // What has reached the destination so far, and what the money is worth right now, wherever it is.
+  const last = p.columns.length - 1;
+  const arrived = flow ? spots.reduce((sum, s) => sum + (s.leg.to === last && s.progress >= 1 ? flow.at[s.lane][last] : 0), 0) : 0;
+  const worthNow = flow ? spots.reduce((sum, s) => sum + flow.at[s.lane][s.leg.kind === 'travel' && s.progress < 1 ? s.leg.from : s.leg.to], 0) : null;
+
   const cells: ReactNode[] = [];
   p.columns.forEach((c, col) => {
     const laneList = c.lanes ? p.shares.map((_, k) => k) : [0];
     for (const lane of laneList) {
       const s = state(col, lane);
-      const share = c.lanes ? p.shares[lane] : 1;
+      /** What leaves this stop: the piece's own dollars, or all of it (at the destination: what has arrived so far). */
+      const worth = !flow ? null : c.lanes ? flow.at[lane][col] : c.kind === 'dest' ? arrived : flow.at.reduce((sum, l) => sum + l[col], 0);
       cells.push(
         <div
           key={`${col}:${lane}`}
@@ -369,7 +437,12 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
           <span className="mm-text">
             <span className="mm-label">{c.lanes ? `${c.kind === 'swap' ? 'Order' : c.kind === 'vault' ? 'Subaddress' : 'Address'} ${lane + 1}` : c.label}</span>
             {!c.lanes && <span className="mm-sub">{c.sub}</span>}
-            {c.lanes && amountUsd > 0 && <span className="mm-sub">≈ ${Math.round(amountUsd * share)}</span>}
+            {worth !== null && (
+              <span className={`mm-usd ${c.kind === 'dest' && !arrived ? 'is-none' : ''}`} title={c.kind === 'dest' ? `Of ${dollars(flow!.out)} that arrives` : 'What it is worth as it leaves here'}>
+                {c.kind === 'dest' && arrived < flow!.out - 0.005 ? `${dollars(arrived)} of ${dollars(flow!.out)}` : dollars(worth)}
+              </span>
+            )}
+            {!flow && c.lanes && amountUsd > 0 && <span className="mm-sub">≈ ${Math.round(amountUsd * p.shares[lane])}</span>}
             {/* A piece's stop keeps room for its countdown, so nothing moves when one starts or ends. */}
             {(c.lanes || s.left !== null) && (
               <span className={`mm-wait ${s.left === null ? 'is-idle' : ''}`}>
@@ -443,6 +516,7 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
         </svg>
         {cells}
         <canvas ref={canvas} className="mm-coins" aria-hidden="true" />
+        <div className="mm-tags" ref={tagBox} aria-hidden="true" />
         <div className="mm-tokens" aria-hidden="true">
           {tokensAt(t)
             .filter((k) => k.count > 1)
@@ -460,6 +534,11 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
           {now.caption}
         </motion.p>
         <p className="line-sub" title={`Held by: ${holdText}`}>
+          {worthNow !== null && (
+            <>
+              Worth <b>{dollars(worthNow)}</b> of {dollars(amountUsd)} ·{' '}
+            </>
+          )}
           Held by: {holdText}
         </p>
       </div>

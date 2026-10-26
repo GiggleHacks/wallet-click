@@ -4,7 +4,7 @@ import { MoneyMap } from '../components/MoneyMap';
 import { SendOptionsFields } from '../components/SendOptions';
 import { Tip } from '../components/Tip';
 import { ModalLayer, Window } from '../components/Win98';
-import { compareGrid, estimate, feeUsd, pctText, useFeeAmount, useFees } from '../lib/fees';
+import { compareGrid, feeUsd, pctText, useFeeAmount, useFees, valueFlow } from '../lib/fees';
 import { moneyPath, type PathOptions } from '../lib/moneyPath';
 import { saveSendOptions, type SendOptions } from '../lib/sendOptions';
 import { sfx } from '../lib/sound';
@@ -36,7 +36,7 @@ export function HowItWorks({ initial, delays, piecesMax = 4, moneroOk, walletOk,
   const fees = useFees();
   const opts: PathOptions = { coin, route: o.route, delayHours: o.delayHours, pieces: o.pieces, entry, dest };
   const path = useMemo(() => moneyPath(opts), [coin, o.route, o.delayHours, o.pieces, entry, dest]); // eslint-disable-line react-hooks/exhaustive-deps
-  const cost = estimate(opts, fees, amount);
+  const cost = valueFlow(path, fees, amount);
   const grid = compareGrid(opts, fees, amount, piecesMax);
   const [showSettings, setShowSettings] = useState(false);
   const routeName = coin === 'XMR' ? 'Monero' : o.route === 'monero' ? 'Through Monero' : `Straight to ${sym}`;
@@ -111,6 +111,7 @@ export function HowItWorks({ initial, delays, piecesMax = 4, moneroOk, walletOk,
           <div className="how-main">
             <MoneyMap
               path={path}
+              flow={cost}
               amountUsd={amount}
               dest={dest}
               head={
