@@ -5,6 +5,8 @@ import { useAnimStyle } from '../lib/motion';
 import { clockText, momentsOf, spotsAt, type Column, type Holder, type MoneyPath, type Token } from '../lib/moneyPath';
 import { useTheme } from '../lib/themes';
 import { CoinIcon, CoinbaseIcon, Hourglass, ModernPC, ServerIcon, SmallKey, SwapMachine, UsdcIcon, VaultIcon } from './art';
+import { CoinArt, paintCoin, paintTrail } from './Courier';
+import { PX } from './pixelArt';
 import { Tip } from './Tip';
 
 /**
@@ -64,12 +66,19 @@ interface Tok {
   key: string;
   x: number;
   y: number;
-  /** How wide the coin is as it spins (1 = facing you). */
-  spin: number;
+  /** 1 = full size: a moving coin grows out of the stop it leaves and shrinks into the next. */
+  size: number;
+  /** A coin that has just arrived fades in. */
+  alpha: number;
   coin: Token;
   count: number;
-  moving: boolean;
+  /** A moving coin's line, and how far along it is (for its trail). */
+  line?: { a: { x: number; y: number }; b: { x: number; y: number }; progress: number };
 }
+
+/** Along a line: mostly eased in and out, never quite stopping (the courier's flights move the same way). */
+const glide = (x: number) => 0.3 * x + 0.7 * (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+const COIN = 20;
 
 const TokenIcon = ({ coin, size }: { coin: Token; size: number }) => (coin === 'USDC' ? <UsdcIcon size={size} /> : <CoinIcon coin={coin} size={size} />);
 
@@ -147,46 +156,91 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
   const center = (col: number, lane: number) => centers[keyOf(col, lane)];
 
   /**
-   * Every coin at `at` on the timeline. A moving coin glides (a jump in Calm) on a little arc, spinning like an old
-   * console's; coins standing still are drawn once per stop with how many are there, and pop as each one lands.
+   * Every coin at `at` on the timeline. A moving coin goes straight along its line from one stop to the next (a jump
+   * in Calm), growing out of the stop it leaves and shrinking into the one it reaches. Coins standing still sit on
+   * their stop's corner, drawn once with how many are there, and fade in as they arrive.
    */
   const calm = style === 'calm';
+  const pixel = style === 'retro';
+  /** Where the coins waiting at a stop sit: its top corner (the left one on a phone, where its words are on the right). */
+  const corner = (c: { x: number; y: number }) => ({ x: c.x + (vertical ? -16 : 14), y: c.y - 14 });
   const tokensAt = (at: number): Tok[] => {
     const list: Tok[] = [];
-    const resting = new Map<string, { coin: Token; count: number }>();
+    const resting = new Map<string, { coin: Token; count: number; alpha: number }>();
+    const realAt = w.toReal(at);
     for (const s of spotsAt(p, at)) {
       const x = s.progress;
       if (s.leg.kind === 'travel' && x > 0 && x < 1) {
         const a = center(s.leg.from, s.lane);
         const b = center(s.leg.to, s.lane);
         if (!a || !b) continue;
-        const f = calm ? (x < 0.5 ? 0 : 1) : x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2;
-        const lift = calm ? 0 : Math.sin(Math.PI * x) * Math.min(24, Math.hypot(b.x - a.x, b.y - a.y) * 0.22);
-        const spin = calm ? 1 : Math.max(0.15, Math.abs(Math.cos(x * Math.PI * 3)));
-        list.push({ key: `m${s.lane}`, x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f - lift, spin, coin: s.leg.coin, count: 1, moving: true });
+        const f = calm ? (x < 0.5 ? 0 : 1) : glide(x);
+        const size = calm ? 1 : Math.min(1, 0.55 + (x / 0.15) * 0.45, 0.55 + ((1 - x) / 0.15) * 0.45);
+        list.push({ key: `m${s.lane}`, x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, size, alpha: 1, coin: s.leg.coin, count: 1, line: { a, b, progress: x } });
       } else {
-        const k = keyOf(s.leg.kind === 'travel' && x <= 0 ? s.leg.from : s.leg.to, s.lane);
+        const col = s.leg.kind === 'travel' && x <= 0 ? s.leg.from : s.leg.to;
+        const k = keyOf(col, s.lane);
+        const came = p.legs.filter((l) => l.lane === s.lane && l.kind === 'travel' && l.to === col && l.end <= at).at(-1);
+        const alpha = calm || !came ? 1 : Math.min(1, (realAt - w.toReal(came.end)) / 220);
         const r = resting.get(k);
-        if (r) r.count++;
-        else resting.set(k, { coin: s.leg.coin, count: 1 });
+        if (r) {
+          r.count++;
+          r.alpha = Math.max(r.alpha, alpha);
+        } else resting.set(k, { coin: s.leg.coin, count: 1, alpha });
       }
     }
     for (const [k, r] of resting) {
       const c = centers[k];
-      if (c) list.push({ key: `r${k}#${r.count}`, x: c.x, y: c.y, spin: 1, coin: r.coin, count: r.count, moving: false });
+      if (c) list.push({ key: `r${k}#${r.count}`, ...corner(c), size: 1, alpha: r.alpha, coin: r.coin, count: r.count });
     }
     return list;
   };
 
+  /** The coins are painted on a canvas over the map: at half resolution in Retro (chunky pixels), sharp otherwise. */
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const dpr = useRef(1);
+  const fitCanvas = () => {
+    const c = canvas.current;
+    const el = grid.current;
+    if (!c || !el) return;
+    dpr.current = pixel ? 1 : Math.min(3, window.devicePixelRatio || 1);
+    c.width = pixel ? Math.ceil(el.offsetWidth / PX) : Math.round(el.offsetWidth * dpr.current);
+    c.height = pixel ? Math.ceil(el.offsetHeight / PX) : Math.round(el.offsetHeight * dpr.current);
+    c.style.width = `${el.offsetWidth}px`;
+    c.style.height = `${el.offsetHeight}px`;
+  };
+  useLayoutEffect(fitCanvas, [pixel, centers]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** Puts the coins, the clock's hands and the timeline's thumb where they are at `r`, straight onto the page. */
-  const tokenEls = useRef(new Map<string, HTMLElement>());
   const hands = useRef<(HTMLElement | null)[]>([]);
   const scrub = useRef<HTMLInputElement>(null);
   const draw = (r: number, list = tokensAt(w.toVirtual(r))) => {
     const v = w.toVirtual(r);
-    for (const k of list) {
-      const el = tokenEls.current.get(k.key);
-      if (el) el.style.transform = `translate(${k.x.toFixed(2)}px, ${k.y.toFixed(2)}px)${k.spin < 1 ? ` scaleX(${k.spin.toFixed(3)})` : ''}`;
+    const c = canvas.current;
+    const g = c?.getContext('2d');
+    if (c && g) {
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.clearRect(0, 0, c.width, c.height);
+      if (!pixel) g.setTransform(dpr.current, 0, 0, dpr.current, 0, 0);
+      g.imageSmoothingEnabled = !pixel;
+      for (const k of list) {
+        if (k.line && !calm) {
+          // A dotted trail along the line behind it, and in Retro one dithered after-image, like the courier's.
+          const { a, b, progress } = k.line;
+          const at = (x: number) => ({ x: a.x + (b.x - a.x) * glide(x), y: a.y + (b.y - a.y) * glide(x) });
+          for (let i = 8; i >= 1; i--) {
+            const back = progress - i * 0.022;
+            if (back <= 0) continue;
+            const q = at(back);
+            paintTrail(g, k.coin, q.x, q.y, COIN * k.size * (0.2 + 0.25 * (1 - i / 9)), 0.42 * (1 - i / 9), i, pixel);
+          }
+          if (pixel && progress > 0.08) {
+            const q = at(progress - 0.06);
+            paintCoin(g, k.coin, q.x, q.y, COIN * k.size, true, 0.4);
+          }
+        }
+        paintCoin(g, k.coin, k.x, k.y, COIN * k.size, pixel, k.alpha);
+      }
     }
     const [hour, minute] = hands.current;
     if (hour) hour.style.transform = `rotate(${(v / (12 * 3_600_000)) * 360}deg)`;
@@ -194,6 +248,11 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
     if (scrub.current) scrub.current.value = String(Math.round(r));
   };
   useLayoutEffect(() => draw(realRef.current));
+  // The coin art loads a moment after the map opens: paint again once it's there.
+  useEffect(() => {
+    const late = setTimeout(() => latest.current.draw(realRef.current), 150);
+    return () => clearTimeout(late);
+  }, [p, style]);
   const latest = useRef({ draw, tokensAt });
   latest.current = { draw, tokensAt };
 
@@ -358,6 +417,7 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
 
   return (
     <div className={`money-map ${vertical ? 'is-vertical' : ''}`}>
+      <CoinArt />
       <div className="mm-head">
         {head && <div className="mm-head-text">{head}</div>}
         <div className="mm-clock" aria-live="off">
@@ -387,20 +447,15 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels =
           ))}
         </svg>
         {cells}
+        <canvas ref={canvas} className="mm-coins" aria-hidden="true" />
         <div className="mm-tokens" aria-hidden="true">
-          {tokensAt(t).map((k) => (
-            <span
-              key={k.key}
-              ref={(el) => {
-                if (el) tokenEls.current.set(k.key, el);
-                else tokenEls.current.delete(k.key);
-              }}
-              className={`mm-token ${k.moving ? 'is-moving' : ''}`}
-            >
-              <TokenIcon coin={k.coin} size={20} />
-              {k.count > 1 && <b>×{k.count}</b>}
-            </span>
-          ))}
+          {tokensAt(t)
+            .filter((k) => k.count > 1)
+            .map((k) => (
+              <b key={k.key} className="mm-count" style={{ transform: `translate(${k.x}px, ${k.y}px)` }}>
+                ×{k.count}
+              </b>
+            ))}
         </div>
       </div>
 
