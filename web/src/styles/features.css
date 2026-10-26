@@ -1170,39 +1170,6 @@ html[data-anim='retro'] .mm-coins {
   min-width: 0;
 }
 
-/* The coin styles to try out, under the timeline. */
-.mm-variants {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 4px;
-  font-size: 12px;
-}
-
-.mm-variants .seg98 {
-  flex-wrap: nowrap;
-}
-
-.mm-variants .seg-btn {
-  flex: 1 1 auto;
-  min-height: 22px;
-  padding: 1px 8px;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-@media (max-width: 560px) {
-  .mm-variants .seg98 {
-    flex: 1 1 100%;
-  }
-  .mm-variants .seg-btn {
-    flex: 1 1 0;
-    min-width: 0;
-    padding: 1px 4px;
-  }
-}
-
 /* Steps, What it costs and Compare share one box under the map. */
 .mm-tabs {
   margin-top: 8px;
