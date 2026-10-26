@@ -1,6 +1,7 @@
 import { buildApp } from './app.js';
 import { hasPassword } from './auth.js';
 import { config } from './config.js';
+import { egressSummary } from './egress.js';
 import { startPoller, stopOrders } from './orders.js';
 import { startTransfers, stopTransfers } from './transfers.js';
 import { walletState } from './wallets/seed.js';
@@ -12,6 +13,8 @@ if (!hasPassword()) {
 }
 if (!config.ff.apiKey || !config.ff.apiSecret) app.log.warn('FF_API_KEY / FF_API_SECRET are not set: new addresses will fail.');
 if (!config.monero.rpcUrl) app.log.warn('MONERO_RPC_URL is not set: Privacy Enhanced and permanent Monero addresses are off.');
+app.log.info(`Outbound traffic: ${egressSummary()}`);
+if (!config.egress.proxy) app.log.warn('EGRESS_PROXY is not set: set it to a Tor SOCKS proxy (socks5h://127.0.0.1:9050) so FixedFloat and the blockchain APIs don\'t see this server\'s address.');
 const hot = walletState();
 if (hot.error) app.log.error(hot.error);
 else if (!hot.ready) app.log.warn('No hot wallet (WALLET_KEY + npm run wallet:init): permanent Bitcoin/Ethereum addresses are off.');

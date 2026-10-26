@@ -338,8 +338,9 @@ describe('Privacy Enhanced (fresh address)', () => {
     // Moved once within our wallet to a fresh subaddress, then waiting.
     expect(wallet.sweeps[0]).toMatchObject({ index: 1, to: wallet.subs.get(2) });
     expect(t.state).toBe('wait');
-    expect(t.releaseAt! - t.vault!.unlockedAt!).toBeGreaterThanOrEqual(24 * H);
-    expect(t.releaseAt! - t.vault!.unlockedAt!).toBeLessThanOrEqual(24 * H + 30 * 60_000);
+    // The real wait is drawn around the chosen 24 h: from a quarter of it to three times it.
+    expect(t.releaseAt! - t.vault!.unlockedAt!).toBeGreaterThanOrEqual(6 * H);
+    expect(t.releaseAt! - t.vault!.unlockedAt!).toBeLessThanOrEqual(72 * H);
 
     // Its dollar value (for the countdown on the desktop): the Monero held, at FixedFloat's current price.
     await refreshPrices(unlockedAt);
@@ -396,7 +397,8 @@ describe('Privacy Enhanced (fresh address)', () => {
     const start = t.vault!.unlockedAt!;
 
     let v = (await post(`/api/transfers/${t.id}/delay`, { delayHours: 4 })).json();
-    expect(v.releaseAt - start).toBeLessThanOrEqual(4 * H + 30 * 60_000);
+    expect(v.releaseAt - start).toBeGreaterThanOrEqual(1 * H);
+    expect(v.releaseAt - start).toBeLessThanOrEqual(12 * H);
     expect((await post(`/api/transfers/${t.id}/delay`, { delayHours: 5 })).statusCode).toBe(400);
 
     wallet.unlock(2);
@@ -440,7 +442,7 @@ describe('Privacy Enhanced (fresh address)', () => {
       await run(t.id);
     }
     for (const t of [a, b]) wallet.unlock(transfers.get(t.id)!.churn!.index);
-    const later = Date.now() + 5 * H;
+    const later = Date.now() + 130 * H; // past any wait: the real one is drawn at random up to three times the choice
     const ta = await run(a.id, later);
     expect(ta.state).toBe('swap2');
     const tb = await run(b.id, later);
@@ -532,11 +534,11 @@ describe('permanent addresses', () => {
       await run(id);
     });
     expect(got.map((g) => g.key.split(':').slice(0, 2).join(':'))).toEqual(['recv:route', 'send:hot', 'send:payout']);
-    expect(got[0].text).toContain('0.003 BTC');
-    expect(got[0].text).toContain('Phone');
-    expect(got[0].text).toContain(`https://mempool.space/tx/${'ab'.repeat(32)}`);
-    expect(got[1].text).toContain('To the swap');
-    expect(got[2].text).toContain('240.5 USDC');
+    // Quiet pings: that it happened, the coin and your own label; no amount, address or link.
+    expect(got[0].text).toBe('📥 Received\nBTC\nPhone');
+    expect(got[1].text).toBe('📤 Sent\nBTC\nTo the swap');
+    expect(got[2].text).toMatch(/^📤 Sent\nUSDC\n/);
+    for (const g of got) expect(g.text).not.toMatch(/0\.003|240\.5|bc1q|https?:/);
   });
 
   it('forwards Ethereum: exactly the order amount, gas kept back, mainnet only', async () => {
@@ -782,7 +784,7 @@ describe('waits and pieces', () => {
 
     for (const i of [2, 3, 4]) wallet.unlock(i);
     const release = p.releaseAt!;
-    expect(release - p.vault!.unlockedAt!).toBeGreaterThanOrEqual(4 * H);
+    expect(release - p.vault!.unlockedAt!).toBeGreaterThanOrEqual(1 * H);
 
     // Before the wait is over each piece moves within the wallet, but nothing goes to FixedFloat.
     let k1 = await run(kids[0].id, release - 31 * MIN);
@@ -870,8 +872,8 @@ describe('waits and pieces', () => {
     const unlockedAt = p.vault!.unlockedAt!;
 
     let v = (await post(`/api/transfers/${p.id}/delay`, { delayHours: 12 })).json();
-    expect(v.releaseAt - unlockedAt).toBeGreaterThanOrEqual(12 * H);
-    expect(v.releaseAt - unlockedAt).toBeLessThan(13 * H);
+    expect(v.releaseAt - unlockedAt).toBeGreaterThanOrEqual(3 * H);
+    expect(v.releaseAt - unlockedAt).toBeLessThanOrEqual(36 * H);
 
     v = (await post(`/api/transfers/${p.id}/release`, {})).json();
     expect(v.releaseAt).toBeLessThanOrEqual(Date.now());
@@ -894,8 +896,8 @@ describe('waits and pieces', () => {
     const now = Date.now();
     let t = await run(id, now);
     expect(t.state).toBe('hold');
-    expect(t.releaseAt! - t.heldAt!).toBeGreaterThanOrEqual(4 * H);
-    expect(t.releaseAt! - t.heldAt!).toBeLessThanOrEqual(4 * H + 30 * MIN);
+    expect(t.releaseAt! - t.heldAt!).toBeGreaterThanOrEqual(1 * H);
+    expect(t.releaseAt! - t.heldAt!).toBeLessThanOrEqual(12 * H);
     expect(ff.creates()).toHaveLength(0);
     expect((await get(`/api/transfers/${id}`)).json()).toMatchObject({ stage: 'holding', canRelease: true, canChangeDelay: true });
 
@@ -1000,7 +1002,7 @@ describe('waits and pieces', () => {
     // Monero with a wait: its own subaddress is the vault, it moves once, then waits.
     expect(t).toMatchObject({ state: 'wait', monero: true, privacy: false });
     expect(wallet.sweeps.filter((s) => wallet.relayed.includes(s.metadata))).toMatchObject([{ index: 1, to: wallet.subs.get(2) }]);
-    expect(t.releaseAt! - t.vault!.unlockedAt!).toBeGreaterThanOrEqual(4 * H);
+    expect(t.releaseAt! - t.vault!.unlockedAt!).toBeGreaterThanOrEqual(1 * H);
     const v = (await get(`/api/transfers/${id}`)).json();
     expect(v).toMatchObject({ oneTime: true, routeLabel: null });
     expect(v.steps.map((s: { key: string }) => s.key)).toEqual(['in', 'churn', 'wait', 'swap2', 'out']);
@@ -1081,7 +1083,7 @@ describe('USDC on Base as the payout', () => {
     expect(p.state).toBe('pieces');
     const kids = kidsOf(p.id);
     for (const k of kids) expect(k.destination).toMatchObject({ address: PAYOUT_BASE, ccy: 'USDCBASE' });
-    const late = start + 5 * H;
+    const late = start + 130 * H; // past any wait (drawn at random up to three times the choice)
     for (const k of kids) wallet.unlock(k.vault!.index);
     let k1 = await run(kids[0].id, late);
     wallet.unlock(k1.churn!.index);
@@ -1114,7 +1116,7 @@ describe('USDC on Base as the payout', () => {
       await run(t.id);
     }
     for (const t of [a, b]) wallet.unlock(transfers.get(t.id)!.churn!.index);
-    const later = Date.now() + 5 * H;
+    const later = Date.now() + 130 * H; // past any wait: the real one is drawn at random up to three times the choice
     expect((await run(a.id, later)).state).toBe('swap2');
     expect((await run(b.id, later)).state).toBe('swap2'); // not "waiting for the XMR → USDT order to finish first"
     expect(ff.creates().filter((c) => c.fromCcy === 'XMR').map((c) => c.toCcy)).toEqual(['USDT', 'USDCBASE']);

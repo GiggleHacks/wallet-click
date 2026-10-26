@@ -1,6 +1,7 @@
 import * as btc from '@scure/btc-signer';
 import { ChainUnavailable, chainFetch } from '../chain.js';
 import { config } from '../config.js';
+import { patience } from '../egress.js';
 import type { HotWallet, Prepared, RouteRef, Scan } from './index.js';
 import { keyAt } from './seed.js';
 
@@ -27,7 +28,7 @@ interface Utxo {
   status: { confirmed: boolean; block_height?: number };
 }
 
-const timeout = () => AbortSignal.timeout(15_000);
+const timeout = () => AbortSignal.timeout(patience(15_000, 'chain'));
 
 /** First Esplora API that answers. */
 async function esplora<T>(pathname: string, init?: RequestInit, as: 'json' | 'text' = 'json'): Promise<T> {

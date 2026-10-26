@@ -29,7 +29,7 @@ Base network fees are much lower than Ethereum's, so this is usually the cheaper
 The **Send options** box on the main window says what the coin buttons do now (for example "Through Monero · wait 4 h · 4 pieces"); **Change…** sets it, and the browser remembers it. Each permanent address has its own copy.
 
 - **Route**: *Straight to USDC*, or *Through Monero* (Privacy Enhanced, below).
-- **Wait**: none, 4, 12, 24 or 42 hours, plus a random 0–30 minutes so the length isn't a fingerprint.
+- **Wait**: none, or about 4, 12, 24 or 42 hours. The choice is the *typical* length: each payment's real wait is drawn at random (from a quarter of it up to three times it, averaging a bit under the choice), so the time between your money going into FixedFloat and the USDC coming out isn't one of four fixed values. Change wait draws a new one.
 - **Pieces**: 1–4. The amounts are random and unequal (each at least 1.5 × FixedFloat's minimum; with too little, it's fewer pieces). Piece 1 goes when the wait is over; each next one a random 5 minutes to 2 hours after the one before has finished (FixedFloat only takes one order per direction at a time, so they never overlap). Each piece is its own FixedFloat order, so it pays its own FixedFloat and network fees.
 - **How much to send**: pieces raise the minimum (3 pieces straight to USDC need about 3 × 1.5 × FixedFloat's ≈ $10). Send options, the receive windows and My Addresses show that minimum from FixedFloat's live rates, and suggest sending about 30% more, rounded up, to be safe. Less goes in fewer pieces, or waits for more.
 
@@ -52,7 +52,7 @@ With a wait or pieces and *Straight to USDC*, a coin button gives you a **one-ti
 
 1. FixedFloat swaps the payment to **Monero**, paid to a fresh subaddress of the VPS's own Monero wallet.
 2. Once it has unlocked (10 blocks, about 20 minutes), the server moves it once to another fresh subaddress of its own, so FixedFloat's outputs never go straight back to FixedFloat.
-3. It waits the chosen hours (from the moment it unlocked) plus a random 0–30 minutes.
+3. It waits a random time around the chosen hours (counted from the moment it unlocked).
 4. A second FixedFloat order swaps exactly that Monero to USDC for the destination, and the wallet pays it.
 
 With pieces, step 2 is the split, and steps 3–4 happen for each piece. The transfer window shows every step, every piece, a countdown, and **Change wait…**, **Release now** and **Retry** (Release now skips the wait; the pieces keep their random gaps).
@@ -122,6 +122,8 @@ Backgrounds can be changed on their own on the **Background** tab. All wallpaper
 
 **Privacy:** the payer only ever sees a one-time FixedFloat deposit address (or your permanent address). FixedFloat sees both sides, and Coinbase sees a deposit from FixedFloat.
 
+**Outbound traffic (optional, recommended):** set `EGRESS_PROXY=socks5h://127.0.0.1:9050` (a local Tor) and every call to FixedFloat and to the public Esplora / Ethereum RPC APIs (scans, deposit watching, broadcasts) goes through it, so none of them sees the VPS's address or can tie your addresses together by it. There is no direct fallback: with the proxy down those calls fail rather than go out directly. `EGRESS_VIA=chain` (or `ff`) limits it to one of them, for example if FixedFloat's front door refuses Tor exits. monero-wallet-rpc is local and talks to its Monero node itself, so give *it* the proxy: `--proxy 127.0.0.1:9050` (and a node you trust, ideally your own over Tor/I2P), otherwise the node's operator sees where your transactions come from.
+
 ## Run it locally
 
 ```bash
@@ -159,6 +161,8 @@ docker compose restart
 
 When money arrives (a fresh address, a permanent one), leaves the hot wallet for a swap, or is paid out or refunded,
 the server appends one line per event to `data/telegram-outbox.jsonl`; each event pings once, even across restarts.
+A ping says only that it happened, the coin and your own label ("📥 Received · BTC · Phone"): Telegram keeps what it's sent,
+so no amounts, addresses or links go out. `NOTIFY_DETAIL=full` puts them back.
 The server never holds a bot token: a small host process delivers the lines. With the `openclaw` CLI
 set up on the host, install `scripts/wallet-click-notify.service` and give it your chat id in a local override
 (see the comments in the file).

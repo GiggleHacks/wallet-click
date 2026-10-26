@@ -22,18 +22,29 @@ beforeEach(() => {
 const lines = () => fs.readFileSync(path.join(dataDir, 'telegram-outbox.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { key: string; text: string });
 
 describe('telegram notices', () => {
-  it('formats a received ping with the address, link and UTC time', () => {
-    const text = formatNotice({
-      kind: 'received',
-      key: 'k',
-      amount: '0.015',
-      asset: 'BTC',
-      label: 'Phone',
-      address: 'bc1qexample',
-      txUrl: 'https://mempool.space/tx/abc',
-      at: Date.UTC(2026, 9, 20, 0, 22),
-    });
-    expect(text).toBe(['📥 Received', '0.015 BTC', 'Phone', 'To: bc1qexample', 'https://mempool.space/tx/abc', '2026-10-20 00:22 UTC'].join('\n'));
+  const notice = {
+    kind: 'received' as const,
+    key: 'k',
+    amount: '0.015',
+    asset: 'BTC',
+    label: 'Phone',
+    address: 'bc1qexample',
+    txUrl: 'https://mempool.space/tx/abc',
+    at: Date.UTC(2026, 9, 20, 0, 22),
+  };
+
+  it('says only that something arrived, and which coin: no amount, address, link or time', () => {
+    expect(formatNotice(notice)).toBe(['📥 Received', 'BTC', 'Phone'].join('\n'));
+    expect(formatNotice({ ...notice, kind: 'sent', detail: 'To the swap', label: null })).toBe(['📤 Sent', 'BTC', 'To the swap'].join('\n'));
+  });
+
+  it('puts the address, amount, link and UTC time back only when NOTIFY_DETAIL=full', () => {
+    process.env.NOTIFY_DETAIL = 'full';
+    try {
+      expect(formatNotice(notice)).toBe(['📥 Received', '0.015 BTC', 'Phone', 'To: bc1qexample', 'https://mempool.space/tx/abc', '2026-10-20 00:22 UTC'].join('\n'));
+    } finally {
+      delete process.env.NOTIFY_DETAIL;
+    }
   });
 
   it('pings an external deposit once, and a USDC payout once', () => {
@@ -70,13 +81,10 @@ describe('telegram notices', () => {
     });
     const got = lines();
     expect(got.map((g) => g.key)).toEqual(['recv:order:ORD1', 'send:payout:0xpayout']);
-    expect(got[0].text).toContain('📥 Received');
-    expect(got[0].text).toContain('0.02 ETH');
-    expect(got[0].text).toContain('To: 0xdeposit');
-    expect(got[1].text).toContain('📤 Sent');
-    expect(got[1].text).toContain('61.5 USDC');
-    expect(got[1].text).toContain('Coinbase (USDC on Base)');
-    expect(got[1].text).toContain('https://basescan.org/tx/0xpayout');
+    expect(got[0].text).toBe('📥 Received\nETH');
+    expect(got[1].text).toBe('📤 Sent\nUSDC\nCoinbase (USDC on Base)');
+    // Nothing that could join the legs up leaves the server.
+    for (const g of got) expect(g.text).not.toMatch(/0\.02|61\.5|0x|https?:/);
   });
 
   it('does not treat our own wallet paying FixedFloat as a new receipt, or a Monero vault payout as sent', () => {
@@ -106,9 +114,8 @@ describe('telegram notices', () => {
     noteHotSend({ txid: 'bbb', amount: '0.004', coin: 'BTC', to: 'bc1qff', at: 5 });
     const got = lines();
     expect(got).toHaveLength(2);
-    expect(got[0].text).toContain('Phone');
-    expect(got[0].text).toContain('https://mempool.space/tx/aaa');
-    expect(got[1].text).toContain('To the swap');
-    expect(got[1].text).toContain('To: bc1qff');
+    expect(got[0].text).toBe('📥 Received\nBTC\nPhone');
+    expect(got[1].text).toBe('📤 Sent\nBTC\nTo the swap');
+    for (const g of got) expect(g.text).not.toMatch(/bc1q|0\.004|https?:/);
   });
 });

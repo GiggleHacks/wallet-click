@@ -5,7 +5,9 @@ import { logger } from './logs.js';
 import { readJson, writeJsonAtomic } from './store.js';
 
 /**
- * Queues a Telegram ping when money arrives or leaves. Failures are logged and swallowed: a ping must
+ * Queues a Telegram ping when money arrives or leaves, saying only that it did (and the coin and your own label):
+ * Telegram stores everything it's sent, so amounts, addresses and links stay out unless NOTIFY_DETAIL=full.
+ * Failures are logged and swallowed: a ping must
  * never block, retry, or change a transfer. Delivery is a host process reading data/telegram-outbox.jsonl,
  * so this process never holds a bot token.
  */
@@ -70,9 +72,16 @@ function stamp(at: number): string {
   return `${new Date(at).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 }
 
+/** NOTIFY_DETAIL=full puts amounts, addresses, links and the time in the ping. Off by default: Telegram keeps what it's sent. */
+const detailed = () => process.env.NOTIFY_DETAIL?.trim().toLowerCase() === 'full';
+
 export function formatNotice(n: Notice): string {
   const emoji = n.kind === 'received' ? '📥' : '📤';
   const verb = n.kind === 'received' ? 'Received' : 'Sent';
+  if (!detailed()) {
+    // Only that something happened, and which coin: no amount, address or link, nothing that could join the legs up.
+    return [`${emoji} ${verb}`, n.asset, n.detail, n.label].filter(Boolean).join('\n');
+  }
   const lines = [`${emoji} ${verb}`, `${n.amount} ${n.asset}`.trim()];
   if (n.detail) lines.push(n.detail);
   if (n.label) lines.push(n.label);

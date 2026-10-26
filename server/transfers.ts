@@ -83,8 +83,10 @@ export interface TransferRecord {
   coin: Coin;
   privacy: boolean;
   delayHours: number | null;
-  /** Random extra wait (Privacy Enhanced), so the delay isn't an exact fingerprint. */
+  /** Older records: a small random extra on top of the chosen wait. New ones use `waitMs`. */
   jitterMs: number;
+  /** How long the wait really lasts (ms), drawn at random around the chosen hours when it's set. */
+  waitMs?: number;
   destinationId: string;
   /** Where the USDT goes, as it was when the transfer started. */
   destination: { label: string; address: string; ccy?: Stable };
@@ -215,8 +217,23 @@ const floorDec = (v: string, places: number) => {
 };
 const backoff = (tries: number) => Math.min(20 * S * 2 ** Math.max(0, tries - 1), 10 * M);
 const testMode = () => config.privacyTestDelayMin !== null;
-const delayMs = (t: TransferRecord) => (!t.delayHours ? 0 : testMode() ? config.privacyTestDelayMin! * M : t.delayHours * H);
-const newJitter = () => (testMode() ? crypto.randomInt(0, 30 * S) : crypto.randomInt(0, 30 * M));
+/**
+ * How long a wait really lasts. The choice (4, 12, 24, 42 h) is the typical length: the real one is drawn at random,
+ * a quarter of it plus an exponential tail that averages the rest, cut off at three times the choice. So the time
+ * between the money going into FixedFloat and coming out isn't one of four fixed values plus a few minutes.
+ */
+export function sampleWait(hours: number | null): number {
+  if (!hours) return 0;
+  if (testMode()) return config.privacyTestDelayMin! * M + crypto.randomInt(0, 30 * S);
+  const typical = hours * H;
+  for (;;) {
+    const u = crypto.randomInt(1, 1_000_000_001) / 1_000_000_000;
+    const wait = typical / 4 + -Math.log(u) * ((typical * 3) / 4);
+    if (wait <= typical * 3) return Math.round(wait);
+  }
+}
+/** A transfer's wait, in ms. Older records have the plain choice plus a small random extra. */
+const waitFor = (t: TransferRecord) => t.waitMs ?? (!t.delayHours ? 0 : testMode() ? config.privacyTestDelayMin! * M : t.delayHours * H) + t.jitterMs;
 /** The pause before the next piece: log-uniform from 5 minutes to 2 hours, so short and long gaps are both common. */
 const newGap = () => {
   const [lo, hi] = testMode() ? [5 * S, 30 * S] : [5 * M, 2 * H];
@@ -458,8 +475,8 @@ async function collect(t: TransferRecord, now: number): Promise<void> {
     if (!inMonero(t)) {
       if (t.delayHours && !t.heldAt) {
         t.heldAt = now;
-        t.releaseAt = now + delayMs(t) + t.jitterMs;
-        return advance(t, 'hold', `${confirmed}; waiting ${t.delayHours} h before it goes on`, now);
+        t.releaseAt = now + waitFor(t);
+        return advance(t, 'hold', `${confirmed}; waiting about ${t.delayHours} h before it goes on`, now);
       }
       if (t.releaseAt !== null && now < t.releaseAt) return advance(t, 'hold', 'Still waiting', now);
       if (piecesOf(t) > 1) {
@@ -491,6 +508,7 @@ function spawnPieces(t: TransferRecord, list: { amount: string; vault?: { index:
     k.piece = { n: i + 1, of };
     k.gapMs = i === 0 ? 0 : newGap();
     k.jitterMs = 0;
+    k.waitMs = 0; // a piece's turn comes from its parent's wait and the pieces before it
     if (p.vault) {
       k.vault = { index: p.vault.index, address: p.vault.address, amount: xmr.formatXmr(BigInt(p.amount)), confirmations: 0, unlockedAt: null };
     } else {
@@ -703,7 +721,7 @@ async function xmrIn(t: TransferRecord, now: number): Promise<void> {
   if (b.unlocked > 0n && b.unlocked >= b.total) {
     v.unlockedAt = now;
     // A piece's turn comes from its parent's wait and the pieces before it.
-    t.releaseAt = t.parentId ? pieceRelease(t) : now + delayMs(t) + t.jitterMs;
+    t.releaseAt = t.parentId ? pieceRelease(t) : now + waitFor(t);
     return advance(t, 'churn', `${v.amount} XMR unlocked${t.piece ? ` (piece ${t.piece.n} of ${t.piece.of})` : ' in the vault'}`, now);
   }
   later(t, now, 30 * S, `the Monero to unlock (${Math.min(confirmations, xmr.XMR_LOCK_BLOCKS)} of ${xmr.XMR_LOCK_BLOCKS} confirmations)`);
@@ -1008,7 +1026,8 @@ function blank(
     privacy,
     monero: privacy,
     delayHours: delayHours ?? null,
-    jitterMs: newJitter(),
+    jitterMs: 0,
+    waitMs: sampleWait(delayHours),
     destinationId,
     destination,
     routeId,
@@ -1050,7 +1069,7 @@ export async function createPrivacyTransfer(coin: Coin, delayHours: number, dest
   const o = await createOrder(coin, { now, expect: { toCcy: 'XMR', toAddress: v.address, label: 'Monero vault' }, transferId: t.id });
   t.leg1 = o.id;
   const split = pieces > 1 ? ` in ${pieces} pieces` : '';
-  note(t, `Privacy Enhanced: FixedFloat order ${o.id} pays ${COINS[coin].name} → Monero, then ${PAYOUTS[dest.ccy].symbol} to ${dest.label} after ${delayHours} h${split}`, now);
+  note(t, `Privacy Enhanced: FixedFloat order ${o.id} pays ${COINS[coin].name} → Monero, then ${PAYOUTS[dest.ccy].symbol} to ${dest.label} after about ${delayHours} h${split}`, now);
   load().transfers.push(t);
   persist();
   return t;
@@ -1080,6 +1099,7 @@ export function releaseNow(id: string, now = Date.now()): TransferRecord {
   t.delayHours = 0;
   if (t.releaseAt !== null) t.releaseAt = Math.min(t.releaseAt, now);
   t.jitterMs = 0;
+  t.waitMs = 0;
   note(t, 'Released early', now);
   t.nextAt = now;
   for (const k of childrenOf(t)) k.nextAt = now;
@@ -1093,9 +1113,10 @@ export function changeDelay(id: string, delayHours: number, now = Date.now()): T
   checkDelay(delayHours);
   if (!waitable(t)) throw new UserError('This transfer is past its wait.');
   t.delayHours = delayHours;
+  t.waitMs = sampleWait(delayHours);
   const from = inMonero(t) ? t.vault?.unlockedAt : t.heldAt;
-  if (from) t.releaseAt = from + delayMs(t) + t.jitterMs;
-  note(t, `Wait changed to ${delayHours} h`, now);
+  if (from) t.releaseAt = from + waitFor(t);
+  note(t, `Wait changed to about ${delayHours} h`, now);
   t.nextAt = now;
   for (const k of childrenOf(t)) k.nextAt = now;
   persist();
@@ -1257,7 +1278,7 @@ function stepsOf(t: TransferRecord, leg1: OrderView | null, leg2: OrderView | nu
   const left = t.releaseAt !== null ? t.releaseAt - now : null;
   // The browser shows the release time in its own time zone.
   const waitDetail = (before: string) => (t.releaseAt === null ? before : left !== null && left > 0 ? null : 'Over');
-  const waitLabel = hours ? `Wait ${hours} hours` : 'Wait (released early)';
+  const waitLabel = hours ? `Wait about ${hours} hours` : 'Wait (released early)';
 
   if (route) {
     steps.push({

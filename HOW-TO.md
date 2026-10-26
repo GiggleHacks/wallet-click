@@ -136,6 +136,16 @@ MONERO_RPC_PASSWORD=password
 
 Wallet Click uses its own account in that wallet and never touches account 0. Privacy Enhanced needs about **$110 or more** per payment, because that's FixedFloat's minimum for swaps into Monero.
 
+**Tor (hide the server's address from FixedFloat and the blockchain APIs):** install Tor on the same machine (it listens on `127.0.0.1:9050`), then add to `.env`:
+
+```ini
+EGRESS_PROXY=socks5h://127.0.0.1:9050
+```
+
+and restart. Everything sent to FixedFloat, Esplora and the Ethereum RPCs, including your transaction broadcasts, then goes through Tor, and fails if Tor is down (it never goes out directly). If FixedFloat won't talk to Tor exits, add `EGRESS_VIA=chain` to keep only the blockchain APIs on Tor. Point monero-wallet-rpc at Tor too (`--proxy 127.0.0.1:9050`).
+
+**Telegram pings** say only that money arrived or left (coin and your label). Set `NOTIFY_DETAIL=full` if you want amounts, addresses and links in them (Telegram keeps whatever it's sent).
+
 ## 9. Keeping it running
 
 **Update to a new version:**

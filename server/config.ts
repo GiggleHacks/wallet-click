@@ -95,6 +95,13 @@ export const PIECES_MAX = 4;
 /** Each piece is at least this many times FixedFloat's minimum: room for fees and prices moving while it waits. */
 export const PIECE_MIN_FACTOR = 1.5;
 
+const egressProxy = env.EGRESS_PROXY?.trim() || null;
+if (egressProxy && !/^socks5h?:\/\/[^\s/]+$/i.test(egressProxy)) {
+  throw new Error(`EGRESS_PROXY "${egressProxy}" must look like socks5h://127.0.0.1:9050 (a SOCKS5 proxy such as Tor).`);
+}
+const egressVia = list(env.EGRESS_VIA).length ? list(env.EGRESS_VIA).map((s) => s.toLowerCase()) : ['ff', 'chain'];
+for (const v of egressVia) if (v !== 'ff' && v !== 'chain') throw new Error(`EGRESS_VIA "${v}" is not "ff" or "chain".`);
+
 const num = (v: string | undefined) => (v && Number.isFinite(Number(v)) ? Number(v) : null);
 
 export const config = {
@@ -117,7 +124,17 @@ export const config = {
     apiSecret: env.FF_API_SECRET ?? '',
   },
 
-  /** Only used to find who paid, for automatic refunds of payments FixedFloat can't swap. */
+  /**
+   * Where outbound traffic goes: a SOCKS5 proxy (Tor: socks5h://127.0.0.1:9050). Unset = direct.
+   * `via` says which traffic uses it: "ff" (FixedFloat) and "chain" (Esplora and Ethereum RPC, including broadcasts).
+   * With a proxy set there is no direct fallback: if it's down, those calls fail rather than leak the VPS address.
+   */
+  egress: {
+    proxy: egressProxy,
+    via: egressVia,
+  },
+
+  /** Public blockchain APIs: who paid (automatic refunds), watching deposits, the hot wallet's scans and broadcasts. */
   chains: {
     ethRpcUrls: list(env.ETH_RPC_URLS).length ? list(env.ETH_RPC_URLS) : ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org'],
     /** Two independent Esplora APIs: refunds need both to agree on who paid. */

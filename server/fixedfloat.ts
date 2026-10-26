@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { config } from './config.js';
+import { egressFetch, patience } from './egress.js';
 
 /** FixedFloat API v2: https://ff.io/api. Every call is a signed JSON POST. */
 
@@ -85,10 +86,11 @@ export function budgetLeft(now = Date.now()): number {
 }
 
 export type Transport = (url: string, init: RequestInit) => Promise<Response>;
-let transport: Transport = (url, init) => fetch(url, init);
+const realTransport: Transport = (url, init) => egressFetch('ff')(url, init);
+let transport: Transport = realTransport;
 /** Tests swap the network for a fake FixedFloat. */
 export function setTransport(t: Transport | null): void {
-  transport = t ?? ((url, init) => fetch(url, init));
+  transport = t ?? realTransport;
   spent = [];
 }
 
@@ -103,7 +105,7 @@ export async function call<T>(method: string, data: object, weight = 1): Promise
     method: 'POST',
     headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-API-KEY': apiKey, 'X-API-SIGN': sign(body, apiSecret) },
     body,
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(patience(20_000, 'ff')),
   });
   const json = (await res.json().catch(() => null)) as { code: number; msg: string; data: T } | null;
   if (!json || typeof json.code !== 'number') throw new FfError(res.status, `FixedFloat answered with HTTP ${res.status}`);

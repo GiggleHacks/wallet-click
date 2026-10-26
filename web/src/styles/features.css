@@ -281,6 +281,13 @@ html[data-theme='win11'] .extra-btn small {
   text-decoration: underline;
 }
 
+.delay-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
 /* ---------------------------------------------------------------- Privacy Enhanced */
 
 .win-privacy {
