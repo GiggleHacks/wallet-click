@@ -5,7 +5,7 @@ import * as btc from '@scure/btc-signer';
 import type { FastifyInstance } from 'fastify';
 import { parseTransaction } from 'viem';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { PAYOUT, PAYOUT_BASE, PAYOUT_USDT, fakeFixedFloat, ffOrder, priceAnswer, xmrAddress } from './helpers.js';
+import { PAYOUT, PAYOUT_BASE, PAYOUT_USDT, btcAddress, fakeFixedFloat, ffOrder, priceAnswer, xmrAddress } from './helpers.js';
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wc-transfers-'));
 process.env.DATA_DIR = dataDir;
@@ -24,6 +24,8 @@ initWallet(process.env.WALLET_KEY, MNEMONIC);
 
 const { buildApp } = await import('../server/app.js');
 const { setTransport } = await import('../server/fixedfloat.js');
+const { config } = await import('../server/config.js');
+const { setProviderTransport } = await import('../server/providers/http.js');
 const { orders, pollDue } = await import('../server/orders.js');
 const { transfers, stepTransfer, scanRoutes, createPrivacyTransfer, refreshPrices, rescueLeftovers, planPieces } = await import('../server/transfers.js');
 const { addresses } = await import('../server/addresses.js');
@@ -517,6 +519,72 @@ describe('permanent addresses', () => {
     t = await run(id);
     expect(t).toMatchObject({ state: 'done', usdt: '240.5' });
     expect(t.forward!.raw).toEqual([]); // nothing signed left lying around
+  });
+
+  it('forwards through Swapzone, with our own refund address, while FixedFloat is down, and finishes', async () => {
+    const real = ff.transport;
+    setTransport(async (url, init) => (url.endsWith('/create') ? new Response(JSON.stringify({ code: 503, msg: 'maintenance', data: null })) : real(url, init)));
+    config.swapFallbacks = ['swapzone'];
+    config.swapzone.apiKey = 'sz-key';
+    const deposit = btcAddress('sz-engine');
+    let status = 'waiting';
+    let createBody: Record<string, unknown> = {};
+    setProviderTransport(async (url, init) => {
+      const p = new URL(url).pathname.replace('/v1', '');
+      if (p === '/exchange/currencies') return new Response(JSON.stringify([{ ticker: 'btc', network: 'BTC' }, { ticker: 'usdc', network: 'BASE' }]));
+      if (p === '/exchange/get-rate') return new Response(JSON.stringify([{ adapter: 'changenow', amountFrom: 0.001, amountTo: 80, quotaId: 'q1', minAmount: 0.0002, maxAmount: 5 }]));
+      if (p === '/exchange/create') createBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+      const finished = status === 'finished';
+      return new Response(
+        JSON.stringify({
+          transaction: {
+            id: 'szengine1',
+            from: 'btc',
+            fromNetwork: 'BTC',
+            to: 'usdc',
+            toNetwork: 'BASE',
+            status,
+            addressReceive: PAYOUT,
+            addressDeposit: deposit,
+            amountDeposit: String(createBody.amountDeposit ?? '0.0029939'),
+            amountEstimated: '240',
+            amountRealReceive: finished ? '239.5' : null,
+            payinHash: status === 'waiting' ? null : 'szin',
+            payoutHash: finished ? '0xszpayout' : null,
+          },
+        }),
+      );
+    });
+    try {
+      const r = (await post('/api/addresses', { coin: 'BTC', mode: 'direct', label: 'Phone → Coinbase' })).json();
+      chain.utxos = [{ txid: 'cd'.repeat(32), vout: 0, value: 300_000, status: { confirmed: true, block_height: chain.tip } }];
+      await scanRoutes();
+      const id = transfers.all()[0].id;
+      let t = await run(id);
+      const leg = orders.get(t.leg1!)!;
+      expect(leg).toMatchObject({ provider: 'swapzone', nativeId: 'szengine1', ownRefund: r.address, depositAddress: deposit });
+      expect(createBody).toMatchObject({ refundAddress: r.address, addressReceive: PAYOUT, quotaId: 'q1' });
+      // Our wallet paid Swapzone's deposit address, exactly the amount ordered.
+      const tx = btc.Transaction.fromRaw(Buffer.from(chain.btcBroadcast[0], 'hex'));
+      expect(btc.Address(btc.NETWORK).encode(btc.OutScript.decode(tx.getOutput(0).script!))).toBe(deposit);
+      expect(t.state).toBe('swap1');
+      expect(ff.creates()).toHaveLength(0);
+
+      status = 'exchanging';
+      leg.nextPollAt = 0;
+      await pollDue();
+      expect((await run(id)).state).toBe('swap1');
+      status = 'finished';
+      leg.nextPollAt = 0;
+      await pollDue();
+      t = await run(id);
+      expect(t).toMatchObject({ state: 'done', usdt: '239.5', payoutTx: '0xszpayout' });
+    } finally {
+      config.swapFallbacks = [];
+      config.swapzone.apiKey = '';
+      setProviderTransport(null);
+      setTransport(real);
+    }
   });
 
   it('pings Telegram when money lands at a permanent address, goes to the swap, and pays out', async () => {

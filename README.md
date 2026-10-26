@@ -124,6 +124,26 @@ Backgrounds can be changed on their own on the **Background** tab. All wallpaper
 
 **Outbound traffic (optional, recommended):** set `EGRESS_PROXY=socks5h://127.0.0.1:9050` (a local Tor) and every call to FixedFloat and to the public Esplora / Ethereum RPC APIs (scans, deposit watching, broadcasts) goes through it, so none of them sees the VPS's address or can tie your addresses together by it. There is no direct fallback: with the proxy down those calls fail rather than go out directly. `EGRESS_VIA=chain` (or `ff`) limits it to one of them, for example if FixedFloat's front door refuses Tor exits. monero-wallet-rpc is local and talks to its Monero node itself, so give *it* the proxy: `--proxy 127.0.0.1:9050` (and a node you trust, ideally your own over Tor/I2P), otherwise the node's operator sees where your transactions come from.
 
+## Other swap services (fallbacks)
+
+FixedFloat is always tried first and does the work exactly as before. **Swapzone** and **CypherGoat** (aggregators of many instant exchanges) are plugged in only as fallbacks, and only if you turn them on: with `SWAP_FALLBACKS` empty (the default) nothing changes, and no request ever goes to them.
+
+```ini
+SWAP_FALLBACKS=swapzone,cyphergoat     # in this order
+SWAPZONE_API_KEY=...                   # swapzone.io/partners/account
+CYPHERGOAT_API_KEY=...                 # needs a key from CypherGoat
+```
+
+- **When one is used:** only when FixedFloat itself can't take the order: it's down or unreachable, the pair is paused or out of reserves, no API key, or our request budget is used up. A refusal of the request itself (below the minimum, a bad address) is never retried elsewhere. If no fallback works either, you get FixedFloat's error.
+- **What it covers:** creating the swap. Once an order exists it's followed with the service that took it (marked `provider` and `exchange` on the order) and shown like any other. The Telegram pings and the transfer window don't change.
+- **When our own wallet pays** (permanent addresses, Privacy Enhanced), only **Swapzone** qualifies: it takes our refund address, so a failed swap comes back to our own wallet. CypherGoat has no refund address, so it's only used for fresh addresses a payer pays.
+- **Same safety checks:** each order is checked against what the service *answered* (the coin in, USDC on Base or our Monero subaddress, exactly our address, float rate) and refused otherwise. Orders are floating-rate, from exchanges without open financial claims. `SWAPZONE_EXCHANGES` / `CYPHERGOAT_EXCHANGES` limit which exchanges may be used, `CYPHERGOAT_MAX_KYC` (0 to 2, default 2) skips ones that ask for more KYC.
+- **A different exchange for the second swap:** if a fallback does the Monero → USDC swap, it avoids the exchange that did the first one.
+- **What differs from FixedFloat:** their orders have no "emergency" answer (continue at market rate / refund): a late or odd-sized payment, or a failed swap, shows as **needs you** and has to be sorted out with that service (the order id is on the order). A fallback order for a fresh address expects roughly the minimum×3 it was made for. Rate limits aren't published.
+- **Traffic:** the same `EGRESS_PROXY` (Tor) setting covers them (`EGRESS_VIA=ff`).
+
+CypherGoat's adapter is written from its published OpenAPI document and Swapzone's from its Postman documentation, and tested against fakes: check one small real swap with each before relying on it.
+
 ## Run it locally
 
 ```bash

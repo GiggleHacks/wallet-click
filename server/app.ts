@@ -7,7 +7,7 @@ import { ZodError } from 'zod';
 import { adoptPassword } from './auth.js';
 import { config } from './config.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
-import { FfError } from './fixedfloat.js';
+import { SwapApiError } from './providers/types.js';
 import { logger, quiet } from './logs.js';
 import { registerAuth } from './routes/auth.js';
 import { registerDestinations } from './routes/destinations.js';
@@ -59,7 +59,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     if (err instanceof UserError) return reply.code(400).send({ error: err.message });
     if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: err.message });
     if (err instanceof ZodError) return reply.code(400).send({ error: 'Invalid request' });
-    if (err instanceof FfError) {
+    if (err instanceof SwapApiError) {
       req.log.warn({ code: err.code }, err.message);
       return reply.code(err.code === -1 ? 429 : err.code === -2 ? 503 : 502).send({ error: err.message });
     }

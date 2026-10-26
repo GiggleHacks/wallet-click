@@ -104,6 +104,9 @@ for (const v of egressVia) if (v !== 'ff' && v !== 'chain') throw new Error(`EGR
 
 const num = (v: string | undefined) => (v && Number.isFinite(Number(v)) ? Number(v) : null);
 
+const fallbackNames = list(env.SWAP_FALLBACKS).map((s) => s.toLowerCase());
+for (const n of fallbackNames) if (n !== 'swapzone' && n !== 'cyphergoat') throw new Error(`SWAP_FALLBACKS "${n}" is not "swapzone" or "cyphergoat".`);
+
 export const config = {
   host: env.HOST ?? '127.0.0.1',
   port: Number(env.PORT ?? 8787),
@@ -122,6 +125,26 @@ export const config = {
     baseUrl: env.FF_API_URL ?? 'https://ff.io/api/v2',
     apiKey: env.FF_API_KEY ?? '',
     apiSecret: env.FF_API_SECRET ?? '',
+  },
+
+  /**
+   * Other swap providers, tried only when FixedFloat can't take an order (down, paused, out of reserves). Off unless
+   * named in SWAP_FALLBACKS and given a key. FixedFloat stays the primary and nothing changes while it works.
+   */
+  swapFallbacks: fallbackNames,
+  swapzone: {
+    apiKey: env.SWAPZONE_API_KEY?.trim() ?? '',
+    baseUrl: env.SWAPZONE_API_URL ?? 'https://api.swapzone.io/v1',
+    /** Only these exchanges (Swapzone adapter ids, comma separated); empty = any. */
+    exchanges: list(env.SWAPZONE_EXCHANGES).map((s) => s.toLowerCase()),
+  },
+  cyphergoat: {
+    apiKey: env.CYPHERGOAT_API_KEY?.trim() ?? '',
+    baseUrl: env.CYPHERGOAT_API_URL ?? 'https://api.cyphergoat.com',
+    /** Only these exchanges (CypherGoat partner codes); empty = any. */
+    exchanges: list(env.CYPHERGOAT_EXCHANGES).map((s) => s.toLowerCase()),
+    /** Skip exchanges whose KYC score is above this (0 none … 2 most). */
+    maxKyc: num(env.CYPHERGOAT_MAX_KYC) ?? 2,
   },
 
   /**

@@ -136,6 +136,15 @@ MONERO_RPC_PASSWORD=password
 
 Wallet Click uses its own account in that wallet and never touches account 0. Privacy Enhanced needs about **$110 or more** per payment, because that's FixedFloat's minimum for swaps into Monero.
 
+**Fallback swap services (Swapzone, CypherGoat):** FixedFloat does every swap as before. If you'd like a spare for when it's down or has a pair paused, get an API key from [Swapzone](https://swapzone.io/partners/account) (and/or CypherGoat) and add to `.env`:
+
+```ini
+SWAP_FALLBACKS=swapzone
+SWAPZONE_API_KEY=your-key
+```
+
+Leave `SWAP_FALLBACKS` out and nothing changes. See the README's *Other swap services* section for exactly when they're used and how they differ.
+
 **Tor (hide the server's address from FixedFloat and the blockchain APIs):** install Tor on the same machine (it listens on `127.0.0.1:9050`), then add to `.env`:
 
 ```ini

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { config } from './config.js';
 import { egressFetch, patience } from './egress.js';
+import { SwapApiError } from './providers/types.js';
 
 /** FixedFloat API v2: https://ff.io/api. Every call is a signed JSON POST. */
 
@@ -43,6 +44,8 @@ export interface FfOrder {
   to: FfSide;
   back?: { amount: Num; address: string | null; tag: string | null; tx: FfTx | null };
   emergency?: { status: string[] | null; choice: 'NONE' | 'EXCHANGE' | 'REFUND' | null; repeat: string | number | boolean | null };
+  /** Fallback providers only: the provider sent the coins back (FixedFloat shows it as `back.tx`). */
+  refunded?: boolean;
 }
 
 export interface FfPriceSide {
@@ -63,14 +66,7 @@ export interface FfPrice {
   errors: string[];
 }
 
-export class FfError extends Error {
-  constructor(
-    public code: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+export class FfError extends SwapApiError {}
 
 export const sign = (body: string, secret: string) => crypto.createHmac('sha256', secret).update(body).digest('hex');
 

@@ -6,7 +6,7 @@ import { DECIMALS, fromBase, toBase } from './chain.js';
 import { COINS, DELAYS, PAYOUTS, PIECE_MIN_FACTOR, PIECES_MAX, config, type Coin, type Stable } from './config.js';
 import { destinations } from './destinations.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
-import { FfError } from './fixedfloat.js';
+import { SwapApiError } from './providers/types.js';
 import { logger } from './logs.js';
 import { noteHotSend, noteRouteReceived } from './notify.js';
 import { LimitError, abandon, costOf, createOrder, flush as flushOrders, limits, openSwap, orderView, orders, pairBusy, usdPrice, type Expect, type OrderRecord, type OrderView } from './orders.js';
@@ -695,7 +695,7 @@ async function swap1(t: TransferRecord, now: number): Promise<void> {
     t.vault!.amount = v.usdt; // XMR, as FixedFloat reports it
     return advance(t, 'xmr-in', `Swapped to ${v.usdt ?? ''} XMR (FixedFloat order ${o.id})`, now);
   }
-  if (v.stage === 'refunded' && v.refundTx) {
+  if (v.stage === 'refunded' && (v.refundTx || v.providerRefunded)) {
     advance(t, 'refunded', `FixedFloat sent the payment back${v.refundTo ? ` to ${v.refundTo}` : ''}`, now);
     t.nextAt = Number.MAX_SAFE_INTEGER;
     t.settledAt ??= now;
@@ -825,7 +825,10 @@ async function open2(t: TransferRecord, now: number): Promise<void> {
   const dry = await xmr.prepareSweep(h.index, h.address);
   const lim = await limits('XMR', ccyOf(t), { now });
   const amount = floorDec(xmr.formatXmr(dry.amount), lim.precision);
-  const o = await openSwap({ from: 'XMR', amount: Number(amount), expect: usdtExpect(t), transferId: t.id, ownRefund: h.address, destinationId: t.destinationId }, now);
+  // If a fallback ends up doing this swap, it shouldn't be the exchange that did the first one: no single exchange sees both ends.
+  const first = orders.get((t.leg1 ?? (t.parentId ? transfers.get(t.parentId)?.leg1 : undefined)) ?? '');
+  const avoid = first?.exchange ? [first.exchange.toLowerCase()] : undefined;
+  const o = await openSwap({ from: 'XMR', amount: Number(amount), expect: usdtExpect(t), transferId: t.id, ownRefund: h.address, destinationId: t.destinationId, avoid }, now);
   t.leg2 = o.id;
   persist();
   advance(t, 'send2', `FixedFloat order ${o.id}: ${amount} XMR → ${symOf(t)} for ${t.destination.label}`, now);
@@ -905,7 +908,7 @@ export async function stepTransfer(t: TransferRecord, now = Date.now()): Promise
     markDirty();
     logger.warn({ err: e }, `[transfer ${t.id}] ${t.state} failed (try ${t.tries}), retrying in ${Math.round(backoff(t.tries) / S)} s`);
     // FixedFloat itself refusing (bad address, pair disabled…) won't fix itself; neither will a step failing for an hour.
-    const final = e instanceof FfError && e.code > 0 && (t.state === 'open1' || t.state === 'open2');
+    const final = e instanceof SwapApiError && e.code > 0 && (t.state === 'open1' || t.state === 'open2');
     if (final || t.tries >= GIVE_UP_TRIES) needAttention(t, why, now);
   }
 }
