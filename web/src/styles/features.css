@@ -633,20 +633,45 @@ html[data-theme='win11'] .extra-btn small {
 
 /* ---------------------------------------------------------------- How it works: the money map */
 
+/* The window fits the screen: the settings on the left, the map and its tabs on the right. Only a short screen
+   scrolls, inside the window. */
 .win-how {
-  width: min(1000px, 100%);
+  display: flex;
+  flex-direction: column;
+  width: min(1180px, 100%);
+  max-height: 100%;
 }
 
-.how-intro {
-  margin: 0 0 4px;
+.win-how > .win-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
 }
 
-/* The settings sit side by side on a wide screen (Send options' own fieldsets join the grid). */
+.win-how .btn-row {
+  margin-top: 8px;
+}
+
+.how-layout {
+  display: grid;
+  grid-template-columns: 290px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.how-main {
+  min-width: 0;
+}
+
+.how-side-toggle {
+  display: none;
+}
+
 .how-settings {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 0 10px;
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
 }
 
 .how-settings .sendopts {
@@ -654,12 +679,22 @@ html[data-theme='win11'] .extra-btn small {
 }
 
 .how-settings .group98 {
-  margin-top: 8px;
+  margin-top: 6px;
+  padding-top: 4px;
+  padding-bottom: 6px;
 }
 
-.how-settings .min-note,
-.how-settings .error-text {
-  grid-column: 1 / -1;
+.how-settings .group98:first-child {
+  margin-top: 0;
+}
+
+.how-settings .min-note {
+  margin-top: 6px;
+  padding: 4px 8px;
+}
+
+.how-settings .seg98 {
+  flex-wrap: wrap;
 }
 
 .how-coin-row {
@@ -677,18 +712,66 @@ html[data-theme='win11'] .extra-btn small {
 }
 
 .how-amount .input98 {
-  width: 92px;
+  width: 76px;
 }
 
-.how-summary {
-  margin: 12px 0 4px;
+/* A medium screen: the settings across the top, the map under them. */
+@media (max-width: 1000px) {
+  .how-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .how-settings {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0 10px;
+  }
+  .how-settings .group98:first-child {
+    margin-top: 6px;
+  }
+  .how-settings .min-note,
+  .how-settings .error-text {
+    grid-column: 1 / -1;
+  }
+}
+
+/* A phone: the settings fold into one bar that says what's picked. */
+@media (max-width: 720px) {
+  .how-side-toggle {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-height: 30px;
+    text-align: left;
+  }
+  .how-side-toggle > span:first-child {
+    min-width: 0;
+    font-weight: 400;
+  }
+  .how-side:not(.is-open) .how-settings {
+    display: none;
+  }
+  .how-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.mm-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-bottom: 6px;
+}
+
+.mm-head-text {
+  min-width: 0;
 }
 
 .mm-clock {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
 }
 
 .mm-clock b,
@@ -733,9 +816,8 @@ html[data-theme='win11'] .extra-btn small {
   display: grid;
   grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
   grid-template-rows: repeat(var(--lanes), auto);
-  gap: 10px 6px;
-  min-height: 150px;
-  padding: 30px 8px 10px;
+  gap: 6px 6px;
+  padding: 30px 8px 8px;
   background: var(--field);
   box-shadow: var(--sunken);
 }
@@ -754,17 +836,51 @@ html[data-theme='win11'] .extra-btn small {
   text-align: center;
 }
 
+.mm-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Stops everything passes through all have the same height, so their icons sit on one line. */
 .mm-node.is-single {
   grid-row: 1 / span var(--lanes);
   align-self: center;
+}
+
+.mm-node.is-single .mm-text {
+  justify-content: flex-start;
+  height: 58px;
+}
+
+.mm-node.is-single .mm-label {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* One stop per piece: the icon with its words beside it, so four pieces stay short. */
+.money-map:not(.is-vertical) .mm-node.is-lane {
+  flex-direction: row;
+  justify-content: center;
+  gap: 4px;
+  text-align: left;
+}
+
+.money-map:not(.is-vertical) .mm-node.is-lane .mm-text {
+  align-items: flex-start;
 }
 
 /* On a phone: top to bottom, the pieces side by side. */
 .is-vertical .mm-grid {
   grid-template-columns: repeat(var(--lanes), minmax(0, 1fr));
   grid-template-rows: repeat(var(--cols), auto);
-  gap: 26px 4px;
-  padding: 12px 6px;
+  gap: 22px 4px;
+  padding: 10px 6px;
 }
 
 .is-vertical .mm-node {
@@ -777,9 +893,23 @@ html[data-theme='win11'] .extra-btn small {
   grid-row: var(--col);
 }
 
+/* A stop everything passes through, on a phone: the icon with its words beside it, so the column stays short. */
+.is-vertical .mm-node.is-single {
+  flex-direction: row;
+  justify-content: center;
+  gap: 6px;
+  text-align: left;
+}
+
+.is-vertical .mm-node.is-single .mm-text {
+  align-items: flex-start;
+  height: auto;
+}
+
 .mm-icon {
   position: relative;
   display: grid;
+  flex: none;
   place-items: center;
   width: 44px;
   height: 44px;
@@ -802,10 +932,19 @@ html[data-theme='win11'] .extra-btn small {
   overflow-wrap: anywhere;
 }
 
+.mm-node.is-lane .mm-label {
+  font-size: 11px;
+}
+
 .mm-sub {
+  max-width: 100%;
   font-size: 11px;
   line-height: 1.15;
   color: var(--text-dim);
+}
+
+.mm-node.is-lane .mm-sub {
+  font-size: 10px;
 }
 
 .mm-wait {
@@ -872,7 +1011,7 @@ html[data-theme='win11'] .extra-btn small {
   z-index: 0;
   grid-column: var(--from) / var(--to);
   grid-row: 1 / -1;
-  margin: -26px -3px -6px;
+  margin: -26px -3px -4px;
   border: 2px dashed #6b7686;
   border-radius: 6px;
   background: rgba(90, 99, 114, 0.09);
@@ -881,7 +1020,7 @@ html[data-theme='win11'] .extra-btn small {
 .is-vertical .mm-server {
   grid-column: 1 / -1;
   grid-row: var(--from) / var(--to);
-  margin: -24px -3px -6px;
+  margin: -20px -3px -6px;
 }
 
 .mm-server-tag {
@@ -894,6 +1033,13 @@ html[data-theme='win11'] .extra-btn small {
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+/* On a phone the tag sits at the frame's right edge, clear of the stop's words. */
+.is-vertical .mm-server-tag {
+  top: 1px;
+  right: 6px;
+  left: auto;
 }
 
 .mm-lines {
@@ -953,7 +1099,12 @@ html[data-anim='retro'] .mm-lines line.is-flowing {
 
 /* Coins waiting at a stop sit on its corner, so the stop's own icon still shows. */
 .mm-token:not(.is-moving) {
-  margin: -26px 0 0 6px;
+  margin: -24px 0 0 4px;
+}
+
+/* On a phone a stop's words are on its right: the coins sit on its other corner. */
+.is-vertical .mm-token:not(.is-moving) {
+  margin: -24px 0 0 -26px;
 }
 
 .mm-token b {
@@ -969,11 +1120,15 @@ html[data-anim='retro'] .mm-lines line.is-flowing {
 }
 
 .mm-now {
-  min-height: 54px;
-  margin-top: 6px;
+  min-height: 52px;
+  margin-top: 4px;
 }
 
 .mm-now .line-main {
+  margin: 0;
+}
+
+.mm-now .line-sub {
   margin: 0;
 }
 
@@ -981,6 +1136,7 @@ html[data-anim='retro'] .mm-lines line.is-flowing {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 2px;
 }
 
 .mm-scrub {
@@ -988,11 +1144,34 @@ html[data-anim='retro'] .mm-lines line.is-flowing {
   min-width: 0;
 }
 
+/* Steps, What it costs and Compare share one box under the map. */
+.mm-tabs {
+  margin-top: 8px;
+}
+
+.mm-tabs .tab98 {
+  font-size: 12px;
+}
+
+.mm-panel {
+  padding: 6px;
+}
+
+.mm-panel > [hidden] {
+  display: none;
+}
+
+.mm-panel-body,
 .mm-moments {
-  max-height: 168px;
-  margin: 6px 0 0;
-  padding: 2px;
+  height: 150px;
   overflow: auto;
+}
+
+/* Positioned, so a step's offsetTop is measured from the list when it scrolls to the current one. */
+.mm-moments {
+  position: relative;
+  margin: 0;
+  padding: 2px;
   list-style: none;
   font-size: 12px;
   background: var(--field);
@@ -1024,19 +1203,17 @@ html[data-anim='retro'] .mm-lines line.is-flowing {
 
 .mm-at {
   display: inline-block;
-  min-width: 84px;
+  min-width: 70px;
   font-family: var(--mono);
   font-size: 11px;
 }
 
-/* What it costs, and the comparison. */
-.how-fees {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 0 10px;
-  margin-top: 6px;
+.how-panel-title {
+  margin: 0 0 4px;
+  font-size: 12px;
 }
 
+/* What it costs, and the comparison. */
 .fee-table,
 .fee-grid {
   width: 100%;
@@ -1088,6 +1265,10 @@ html[data-anim='retro'] .mm-lines line.is-flowing {
 
 .fee-grid td {
   padding: 2px;
+}
+
+.fee-grid + .line-sub {
+  margin: 4px 0 0;
 }
 
 .fee-cell {
@@ -1147,17 +1328,21 @@ html[data-anim='retro'] .mm-lines line.is-flowing {
 }
 
 @media (max-width: 560px) {
-  .how-settings {
-    grid-template-columns: 1fr;
+  .win-how > .win-body {
+    padding: 6px;
+  }
+  .mm-head {
+    flex-wrap: wrap;
   }
   .mm-label {
     font-size: 11px;
   }
-  .mm-node.is-lane .mm-sub {
-    font-size: 10px;
-  }
   .fee-grid tbody th {
     white-space: normal;
+  }
+  .mm-panel-body,
+  .mm-moments {
+    height: 180px;
   }
 }
 

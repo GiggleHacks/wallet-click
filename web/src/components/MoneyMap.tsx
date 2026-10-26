@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { motion } from 'motion/react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAnimStyle } from '../lib/motion';
 import { clockText, momentsOf, spotsAt, type Column, type Holder, type MoneyPath, type Spot, type Token } from '../lib/moneyPath';
@@ -45,13 +45,23 @@ function warp(p: MoneyPath) {
 
 const TokenIcon = ({ coin, size }: { coin: Token; size: number }) => (coin === 'USDC' ? <UsdcIcon size={size} /> : <CoinIcon coin={coin} size={size} />);
 
+/** A tab beside "Steps" under the map (What it costs, Compare). */
+export interface MapPanel {
+  key: string;
+  label: ReactNode;
+  body: ReactNode;
+}
+
 interface Props {
   path: MoneyPath;
   amountUsd: number;
   dest?: string;
+  /** Next to the clock: what this setup does, in one line. */
+  head?: ReactNode;
+  panels?: MapPanel[];
 }
 
-export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase' }: Props) {
+export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase', head, panels = [] }: Props) {
   const style = useAnimStyle();
   const theme = useTheme();
   const w = useMemo(() => warp(p), [p]);
@@ -88,13 +98,27 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase' }: Props) {
   const n = p.shares.length;
   const now = [...moments].reverse().find((m) => m.at <= t + 1) ?? moments[0];
 
-  // A little sound as each piece lands, and at the end.
-  const landed = spots.filter((s) => s.leg.to === p.columns.length - 1 && s.progress >= 1).length;
-  const lastLanded = useRef(landed);
+  // Sounds while it plays: coins whoosh off, FixedFloat swaps, the vault locks and opens, a piece shuffles, each
+  // piece lands with a ding and the last with a tada. Several at once (pieces moving together) sound once.
+  const lastT = useRef(0);
   useEffect(() => {
-    if (landed > lastLanded.current && playing) (landed === n ? sfx.tada : sfx.send)();
-    lastLanded.current = landed;
-  }, [landed, n, playing]);
+    const from = lastT.current;
+    lastT.current = t;
+    if (!playing || t <= from) return;
+    const cues = new Set<() => void>();
+    const starts = (at: number) => at > from || (from <= 0 && at === 0);
+    for (const l of p.legs) {
+      if (starts(l.start) && l.start <= t) {
+        if (l.kind === 'swap') cues.add(sfx.swap);
+        else if (l.kind === 'stay') cues.add(sfx.vaultLock);
+        else if (l.kind === 'hop') cues.add(sfx.shuffle);
+        else if (l.kind === 'travel' && p.columns[l.to].kind !== 'dest') cues.add(p.columns[l.from].kind === 'vault' && p.columns[l.to].kind === 'swap' ? sfx.vaultOpen : sfx.send);
+      }
+      if (l.kind === 'travel' && p.columns[l.to].kind === 'dest' && l.end > from && l.end <= t) cues.add(t >= p.end ? sfx.tada : sfx.ding);
+    }
+    if (cues.has(sfx.tada)) cues.delete(sfx.ding);
+    [...cues].slice(0, 2).forEach((play) => play());
+  }, [t, playing, p]);
 
   // Where each stop is drawn, measured, so the coins can travel between them.
   const grid = useRef<HTMLDivElement>(null);
@@ -106,11 +130,14 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase' }: Props) {
     if (!el) return;
     const measure = () => {
       const box = el.getBoundingClientRect();
+      // The window zooms in as it opens: undo its scale, so a map measured mid-zoom still lines up.
+      const sx = box.width / el.offsetWidth || 1;
+      const sy = box.height / el.offsetHeight || 1;
       const next: Record<string, { x: number; y: number }> = {};
       for (const [key, node] of nodes.current) {
         const icon = node.querySelector('.mm-icon') ?? node;
         const r = icon.getBoundingClientRect();
-        next[key] = { x: r.left - box.left + r.width / 2, y: r.top - box.top + r.height / 2 };
+        next[key] = { x: (r.left - box.left + r.width / 2) / sx, y: (r.top - box.top + r.height / 2) / sy };
       }
       setCenters(next);
       setVertical(el.offsetWidth < 560);
@@ -231,17 +258,17 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase' }: Props) {
               {s.hopping && <span className="mm-hop" />}
             </span>
           </Tip>
-          <span className="mm-label">
-            {c.lanes ? `${c.kind === 'swap' ? 'Order' : c.kind === 'vault' ? 'Subaddress' : 'Address'} ${lane + 1}` : c.label}
+          <span className="mm-text">
+            <span className="mm-label">{c.lanes ? `${c.kind === 'swap' ? 'Order' : c.kind === 'vault' ? 'Subaddress' : 'Address'} ${lane + 1}` : c.label}</span>
+            {!c.lanes && <span className="mm-sub">{c.sub}</span>}
+            {c.lanes && amountUsd > 0 && <span className="mm-sub">≈ ${Math.round(amountUsd * share)}</span>}
+            {s.left !== null && (
+              <span className="mm-wait">
+                <Hourglass size={12} /> {clockText(s.left)}
+              </span>
+            )}
+            {!c.lanes && HOLDER[c.holder] && c.holder !== 'server' && s.left === null && <span className={`mm-holder holder-${c.holder}`}>{HOLDER[c.holder]}</span>}
           </span>
-          {!c.lanes && <span className="mm-sub">{c.sub}</span>}
-          {c.lanes && amountUsd > 0 && <span className="mm-sub">≈ ${Math.round(amountUsd * share)}</span>}
-          {s.left !== null && (
-            <span className="mm-wait">
-              <Hourglass size={12} /> {clockText(s.left)}
-            </span>
-          )}
-          {!c.lanes && HOLDER[c.holder] && c.holder !== 'server' && <span className={`mm-holder holder-${c.holder}`}>{HOLDER[c.holder]}</span>}
         </div>,
       );
     }
@@ -261,17 +288,33 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase' }: Props) {
     setPlaying(false);
   };
 
+  // The tabs under the map: the steps, then the caller's. The steps list keeps the current step in view.
+  const [tab, setTab] = useState('steps');
+  const tabs: { key: string; label: ReactNode }[] = [{ key: 'steps', label: 'Steps' }, ...panels];
+  const list = useRef<HTMLOListElement>(null);
+  const nowIndex = moments.indexOf(now);
+  useEffect(() => {
+    const ol = list.current;
+    const li = ol?.children[nowIndex] as HTMLElement | undefined;
+    if (!ol || !li || ol.hidden) return;
+    if (li.offsetTop < ol.scrollTop) ol.scrollTop = li.offsetTop;
+    else if (li.offsetTop + li.offsetHeight > ol.scrollTop + ol.clientHeight) ol.scrollTop = li.offsetTop + li.offsetHeight - ol.clientHeight;
+  }, [nowIndex, tab]);
+
   return (
     <div className={`money-map ${vertical ? 'is-vertical' : ''}`}>
-      <div className="mm-clock" aria-live="off">
-        <span className="mm-clock-face" aria-hidden="true">
-          <i style={{ transform: `rotate(${(t / (12 * 3_600_000)) * 360}deg)` }} />
-          <i className="is-min" style={{ transform: `rotate(${(t / 3_600_000) * 360}deg)` }} />
-        </span>
-        <span>
-          <b>{done ? 'All there' : `After ${clockText(t)}`}</b>
-          <small>{done ? `in about ${clockText(p.end)} (an example)` : 'example times'}</small>
-        </span>
+      <div className="mm-head">
+        {head && <div className="mm-head-text">{head}</div>}
+        <div className="mm-clock" aria-live="off">
+          <span className="mm-clock-face" aria-hidden="true">
+            <i style={{ transform: `rotate(${(t / (12 * 3_600_000)) * 360}deg)` }} />
+            <i className="is-min" style={{ transform: `rotate(${(t / 3_600_000) * 360}deg)` }} />
+          </span>
+          <span>
+            <b>{done ? 'All there' : `After ${clockText(t)}`}</b>
+            <small>{done ? `in about ${clockText(p.end)} (an example)` : 'example times'}</small>
+          </span>
+        </div>
       </div>
 
       <div className="mm-grid" ref={grid} style={{ '--cols': p.columns.length, '--lanes': n } as React.CSSProperties}>
@@ -300,11 +343,10 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase' }: Props) {
       </div>
 
       <div className="mm-now">
-        <AnimatePresence initial={false} mode="popLayout">
-          <motion.p key={now.caption} className="line-main" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-            {now.caption}
-          </motion.p>
-        </AnimatePresence>
+        {/* The new caption fades in where it stands; the old one goes at once, so the two never overlap. */}
+        <motion.p key={now.caption} className="line-main" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
+          {now.caption}
+        </motion.p>
         <p className="line-sub">Held by: {holdText}</p>
       </div>
 
@@ -327,15 +369,29 @@ export function MoneyMap({ path: p, amountUsd, dest = 'Coinbase' }: Props) {
         />
       </div>
 
-      <ol className="mm-moments" aria-label="What happens, in order">
-        {moments.map((m, i) => (
-          <li key={i} className={`${m.at <= t + 1 ? 'is-past' : ''} ${m === now ? 'is-now' : ''}`}>
-            <button type="button" onClick={() => jump(m.at)}>
-              <span className="mm-at">{clockText(m.at)}</span> {m.caption}
-            </button>
-          </li>
+      <div className="tabs98 mm-tabs" role="tablist">
+        {tabs.map((k) => (
+          <button key={k.key} type="button" role="tab" aria-selected={tab === k.key} className={`tab98 ${tab === k.key ? 'is-active' : ''}`} onClick={() => setTab(k.key)}>
+            {k.label}
+          </button>
         ))}
-      </ol>
+      </div>
+      <div className="tab-panel mm-panel">
+        <ol className="mm-moments" role="tabpanel" aria-label="What happens, in order" hidden={tab !== 'steps'} ref={list}>
+          {moments.map((m, i) => (
+            <li key={i} className={`${m.at <= t + 1 ? 'is-past' : ''} ${m === now ? 'is-now' : ''}`}>
+              <button type="button" onClick={() => jump(m.at)}>
+                <span className="mm-at">{clockText(m.at)}</span> {m.caption}
+              </button>
+            </li>
+          ))}
+        </ol>
+        {panels.map((k) => (
+          <div key={k.key} className="mm-panel-body" role="tabpanel" hidden={tab !== k.key}>
+            {k.body}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
