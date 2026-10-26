@@ -320,31 +320,6 @@ export function paintTrail(g: CanvasRenderingContext2D, kind: CourierCoin, x: nu
   }
 }
 
-/** A line filled in behind a coin, in its glow colour (a solid bar of pixels in Retro). */
-export function paintRail(g: CanvasRenderingContext2D, kind: CourierCoin, x1: number, y1: number, x2: number, y2: number, pixel: boolean) {
-  const k = pixel ? 1 / PX : 1;
-  g.save();
-  g.strokeStyle = LOOK[kind].glow;
-  g.lineWidth = pixel ? 2 : 3.5;
-  g.lineCap = pixel ? 'butt' : 'round';
-  g.beginPath();
-  g.moveTo(x1 * k, y1 * k);
-  g.lineTo(x2 * k, y2 * k);
-  g.stroke();
-  g.restore();
-}
-
-/** A glint where a coin has just arrived (`f` 0–1 as it fades): a stepped pixel twinkle in Retro. */
-export function paintSpark(g: CanvasRenderingContext2D, x: number, y: number, size: number, f: number, n: number, pixel: boolean) {
-  if (pixel) retro.spark(g, x, y, size, f, n);
-  else {
-    const s = size * (f < 0.2 ? f / 0.2 : 1 - (f - 0.2) / 0.8);
-    g.globalAlpha = 0.9 * (1 - f);
-    g.drawImage(glint(), x - s, y - s, s * 2, s * 2);
-    g.globalAlpha = 1;
-  }
-}
-
 /** The coin art, rasterised once for `paintCoin` (the courier does the same when it mounts). */
 export function CoinArt() {
   const icons = useRef<HTMLDivElement>(null);
