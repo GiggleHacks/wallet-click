@@ -20,6 +20,7 @@ import {
 import { config } from '../config.js';
 import { HttpError } from '../errors.js';
 import { VERSION } from '../version.js';
+import { agentAuthorized } from './stash.js';
 
 const PUBLIC_PATHS = new Set(['/api/status', '/api/login', '/api/logout']);
 
@@ -61,6 +62,11 @@ export function registerAuth(app: FastifyInstance): void {
   app.addHook('preHandler', async (req, reply) => {
     const route = req.routeOptions.url;
     if (!route || !route.startsWith('/api/')) return;
+    // OpenClaw's routes take the agent token instead of a sign-in (and nothing else takes that token).
+    if (route.startsWith('/api/agent/')) {
+      if (!agentAuthorized(req)) return reply.code(401).send({ error: 'Locked' });
+      return;
+    }
     const token = req.cookies[COOKIE_NAME];
     if (!PUBLIC_PATHS.has(route) && !verifySession(token)) return reply.code(401).send({ error: 'Locked' });
     // Remembered devices quietly get a fresh sign-in about once a week, so they're never asked again.

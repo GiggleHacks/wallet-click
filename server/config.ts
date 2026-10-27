@@ -102,6 +102,9 @@ if (egressProxy && !/^socks5h?:\/\/[^\s/]+$/i.test(egressProxy)) {
 const egressVia = list(env.EGRESS_VIA).length ? list(env.EGRESS_VIA).map((s) => s.toLowerCase()) : ['ff', 'chain'];
 for (const v of egressVia) if (v !== 'ff' && v !== 'chain') throw new Error(`EGRESS_VIA "${v}" is not "ff" or "chain".`);
 
+const agentToken = env.AGENT_TOKEN?.trim() || null;
+if (agentToken && agentToken.length < 32) throw new Error('AGENT_TOKEN must be at least 32 characters (use `openssl rand -hex 32`).');
+
 const num = (v: string | undefined) => (v && Number.isFinite(Number(v)) ? Number(v) : null);
 
 const fallbackNames = list(env.SWAP_FALLBACKS).map((s) => s.toLowerCase());
@@ -163,6 +166,23 @@ export const config = {
     /** Two independent Esplora APIs: refunds need both to agree on who paid. */
     btcApis: list(env.BTC_API_URLS).length ? list(env.BTC_API_URLS) : ['https://mempool.space/api', 'https://blockstream.info/api'],
   },
+
+  /** The Wallet window: fresh addresses for more coins, held on this server until you move them (server/stash). */
+  stash: {
+    ltcApis: list(env.LTC_API_URLS).length ? list(env.LTC_API_URLS) : ['https://litecoinspace.org/api'],
+    solRpcUrls: list(env.SOL_RPC_URLS).length ? list(env.SOL_RPC_URLS) : ['https://solana-rpc.publicnode.com', 'https://api.mainnet-beta.solana.com'],
+    baseRpcUrls: list(env.BASE_RPC_URLS).length ? list(env.BASE_RPC_URLS) : ['https://base-rpc.publicnode.com', 'https://base.drpc.org'],
+    arbRpcUrls: list(env.ARB_RPC_URLS).length ? list(env.ARB_RPC_URLS) : ['https://arbitrum-one-rpc.publicnode.com', 'https://arbitrum.drpc.org'],
+    opRpcUrls: list(env.OP_RPC_URLS).length ? list(env.OP_RPC_URLS) : ['https://optimism-rpc.publicnode.com', 'https://optimism.drpc.org'],
+    polygonRpcUrls: list(env.POLYGON_RPC_URLS).length ? list(env.POLYGON_RPC_URLS) : ['https://polygon-bor-rpc.publicnode.com', 'https://polygon.drpc.org'],
+    bscRpcUrls: list(env.BSC_RPC_URLS).length ? list(env.BSC_RPC_URLS) : ['https://bsc-rpc.publicnode.com', 'https://bsc.drpc.org'],
+  },
+
+  /**
+   * Lets a local agent (OpenClaw) use /api/agent/* with "Authorization: Bearer <token>" instead of a sign-in.
+   * Unset = those routes are off. Loopback alone is never trusted: Tailscale Funnel traffic arrives from 127.0.0.1 too.
+   */
+  agentToken,
 
   payout: {
     address: payoutAddress,

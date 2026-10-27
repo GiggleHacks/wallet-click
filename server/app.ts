@@ -13,6 +13,7 @@ import { registerAuth } from './routes/auth.js';
 import { registerDestinations } from './routes/destinations.js';
 import { registerLogs } from './routes/logs.js';
 import { registerOrders } from './routes/orders.js';
+import { registerStash } from './routes/stash.js';
 import { registerTransfers } from './routes/transfers.js';
 import { registerSecurity } from './security.js';
 import { setupHotWallets } from './wallets/setup.js';
@@ -52,6 +53,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   registerOrders(app);
   registerDestinations(app);
   registerTransfers(app);
+  registerStash(app);
   registerLogs(app);
 
   app.setErrorHandler((err, req, reply) => {

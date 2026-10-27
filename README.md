@@ -71,6 +71,22 @@ When money lands, it rings. Once it's confirmed (BTC 1 block, ETH 12 blocks, XMR
 
 Costs: one extra network fee per Bitcoin/Ethereum forward. Reusing a Bitcoin/Ethereum address is visible on-chain (Monero subaddresses aren't).
 
+### Wallet (fresh addresses for more coins)
+
+Someone wants to pay in a coin you don't keep, or you don't want them looking at your usual address? Open **Wallet** (desktop icon or Start menu), pick the coin and click **New address**. Each address is brand new, has no history, and is never handed out again.
+
+| Held on the server, at an address of its own | Anything else FixedFloat takes |
+|---|---|
+| Bitcoin, Litecoin, Ethereum (mainnet, Base, Arbitrum, Optimism), Polygon (POL), BNB Smart Chain (BNB), Solana, Monero | **More coins…** gives FixedFloat's deposit address (with its memo / tag when the coin needs one). Whatever arrives is swapped into a fresh Monero address of the Wallet, and held there |
+
+- **The moment it's broadcast** it rings (and pings Telegram); it pings again once it's confirmed. Layer 2 chains have no public mempool, so there "broadcast" means the first block, a second or two later.
+- **Then it sits there.** In **Holdings**, each address shows what it holds; **Swap to Monero** sends all of it through FixedFloat to a fresh Monero address of the Wallet (held again), **Send to Coinbase** swaps it to USDC on Base for an address book destination. Both ask for the password. **Settings** can make either happen on its own once a payment confirms.
+- **Separate from everything else:** its own derivation accounts (BTC `m/84'/0'/2'`, LTC `m/84'/2'/0'`, EVM `m/44'/60'/2'` shared by every EVM chain, Solana `m/44'/501'/i'/0'` like Phantom), its own Monero account (`wallet-click-stash`), and its own file (`data/stash.json`). Restoring the 24 words in a wallet that takes those paths (Electrum-LTC for Litecoin, Phantom for Solana) finds the coins too.
+- **Same safety rules as the hot wallet:** a move signs one transaction that empties the address into a FixedFloat order it just created and checked (right coin in, USDC on Base to your address book or XMR to the Wallet's own subaddress, float rate), saves it, then broadcasts it. FixedFloat's one-order-per-pair rule covers Wallet and transfer orders together.
+- **Limits:** FixedFloat's minimums apply (about $110 into Monero; the window shows each). Native coins only: tokens (USDC/USDT on Solana, Tron or EVM chains) go through **More coins…** for now. EVM chains keep a little gas behind after a move.
+
+**OpenClaw.** With `AGENT_TOKEN` set, `scripts/wc-agent.py` on the same host can do the same over Telegram: `address SOL --label Sam` (always a new address), `list`, `show <id>`, `move <id> xmr|coinbase`. It can't name an address to send to: money only goes to your own Monero or your address book, and every move it starts pings Telegram. Install `scripts/openclaw/wallet-click/` as an OpenClaw skill, and put the token in a root-only `/etc/wallet-click-agent.env` (`AGENT_TOKEN=...`).
+
 ## Themes
 
 Open **Themes** on the desktop or in the Start menu. Each theme changes the fonts, window chrome, controls, taskbar, Start menu, sign-in screen, transfer dialog, sounds and wallpaper.
@@ -200,5 +216,6 @@ set up on the host, install `scripts/wallet-click-notify.service` and give it yo
 - jsdom runs of the real flow and the demo, checking the sounds, plus switching themes and backgrounds.
 - The address book (password, checksum, USDC on Base only; the old USDT entries hidden and refused), Monero orders, and order checks against what was asked for (USDC on Base, the right network, exactly the saved address), plus older USDT permanent addresses and transfers still finishing as USDT.
 - The transfer engine against a fake monero-wallet-rpc, Esplora and Ethereum RPC: Privacy Enhanced end to end (vault, churn, wait, second swap), release and change of the wait, relaying the saved transaction after a failed relay, the one-order-per-pair rule, permanent Monero/Bitcoin/Ethereum forwards (BIP84/BIP44 test vectors, exact amounts and inputs), collecting below the minimum, and no secrets in any API answer.
+- The Wallet window: Solana (Phantom's test vector), Litecoin and EVM addresses from their own accounts and never reused (restarts too), one ping for a broadcast and one for a confirmation, moves that pay only a checked FixedFloat order (Solana, Bitcoin and Base transactions decoded and checked), FixedFloat addresses for other coins paying our own Monero, the agent token (refused without it, and only on its own routes), and no tokens or signed transactions in any answer.
 - Waits and pieces: random unequal amounts, the Monero split (fee out of the pieces, refused on an old wallet) with each piece moving and swapping on its own, the random gaps after each piece, fewer pieces when there's too little, Change wait and Release now reaching the pieces, the direct wait taking in later payments, the Bitcoin split to change-chain addresses (BIP84 change test vector), Ethereum pieces from one address, and one-time addresses (hidden, expiring).
 

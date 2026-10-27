@@ -860,7 +860,7 @@ export async function openSwap(
  * FixedFloat's rules (ToS 2.20): no new order may be paid in the same direction until the previous one is
  * complete. Returns the order still in the way, if any. Orders stuck for days don't block forever.
  */
-export function pairBusy(from: Coin, to: PayoutCcy, now = Date.now()): OrderRecord | null {
+export function pairBusy(from: Coin, to: PayoutCcy, now = Date.now()): { id: string } | null {
   return (
     load().orders.find((r) => {
       // FixedFloat's rule, so only FixedFloat's own orders count.
@@ -871,9 +871,15 @@ export function pairBusy(from: Coin, to: PayoutCcy, now = Date.now()): OrderReco
       // Paid, but FixedFloat hasn't seen it yet: by our own wallet, or spotted on-chain.
       if (s === 'NEW' || s === 'EXPIRED') return (r.ownRefund !== undefined && now - r.createdAt < 24 * H) || seenCounts(r, now);
       return false;
-    }) ?? null
+    }) ??
+    otherOrders.map((busy) => busy(COINS[from].code, to, now)).find(Boolean) ??
+    null
   );
 }
+
+/** Other FixedFloat orders on the same key (the Wallet window's swaps), so the one-order-per-pair rule covers them too. */
+const otherOrders: ((fromCode: string, to: string, now: number) => { id: string } | null)[] = [];
+export const registerPairCheck = (busy: (fromCode: string, to: string, now: number) => { id: string } | null) => otherOrders.push(busy);
 
 /** Marks an order our wallet will never pay (so it doesn't hold up the pair). */
 export function abandon(r: OrderRecord): void {

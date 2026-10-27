@@ -506,3 +506,210 @@ export function LevelIcon({ level, size = 14 }: IconProps & { level: 'debug' | '
     </svg>
   );
 }
+
+/** The Wallet window: a leather billfold with a coin peeking out. */
+export function WalletIcon({ size = 32 }: IconProps) {
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} role="img" aria-label="Wallet">
+      <circle cx="21" cy="7.6" r="4.6" fill="#b8650a" />
+      <circle cx="21" cy="7" r="4.6" fill="#ffc83a" />
+      <path d="M18.8 5.4a3 3 0 0 1 3.6-.8" fill="none" stroke="#fff" strokeOpacity=".6" strokeWidth="1" strokeLinecap="round" />
+      <rect x="2.5" y="9.5" width="27" height="19" rx="2.5" fill="#5a3418" />
+      <rect x="3.5" y="10.5" width="25" height="17" rx="1.8" fill="#8a5428" />
+      <path d="M4.5 13.5h23" stroke="#5a3418" strokeWidth="1" strokeDasharray="1.4 1.2" />
+      <path d="M18 15.5h11.5v8H18a4 4 0 0 1 0-8z" fill="#6b3d1c" />
+      <circle cx="19.8" cy="19.5" r="1.7" fill="#ffd23a" stroke="#805300" strokeWidth=".6" />
+    </svg>
+  );
+}
+
+/** Any other coin: a rim in its brand colour with its ticker on it (Bitcoin, Ethereum and Monero have their own art). */
+export function TickerCoin({ symbol, color, size = 32 }: IconProps & { symbol: string; color: string }) {
+  const art = symbol === 'BTC' ? <BtcIcon size={size} /> : symbol === 'XMR' ? <XmrIcon size={size} /> : symbol === 'ETH' ? <EthIcon size={size} /> : null;
+  if (art) return art;
+  const text = symbol.slice(0, 4);
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} role="img" aria-label={symbol}>
+      <circle cx="16" cy="16.6" r="15" fill="#000" fillOpacity=".35" />
+      <circle cx="16" cy="16" r="15" fill={color} />
+      <circle cx="16" cy="16" r="11.5" fill="none" stroke="#fff" strokeOpacity=".35" strokeWidth="1.2" />
+      <path d="M5.5 10.5A12.5 12.5 0 0 1 22 4.6" fill="none" stroke="#fff" strokeOpacity=".45" strokeWidth="1.6" strokeLinecap="round" />
+      <text x="16" y="16.2" textAnchor="middle" dominantBaseline="central" fill="#fff" fontFamily="Tahoma, Verdana, sans-serif" fontWeight="700" fontSize={text.length > 3 ? 7.2 : 9}>
+        {text}
+      </text>
+    </svg>
+  );
+}
+
+/** The network a token or an Ethereum L2 lives on: a small badge in the coin's lower right corner. */
+const NETWORK_BADGES: Record<string, { fill: string; text?: string; bar?: boolean }> = {
+  BASE: { fill: '#0052ff', bar: true },
+  ARBITRUM: { fill: '#213147', text: 'A' },
+  OP: { fill: '#ff0420', text: 'OP' },
+  OPTIMISM: { fill: '#ff0420', text: 'OP' },
+  TRX: { fill: '#eb0029', text: 'T' },
+  TRON: { fill: '#eb0029', text: 'T' },
+  SOL: { fill: '#14151a', text: 'S' },
+  BSC: { fill: '#f0b90b', text: 'B' },
+  MATIC: { fill: '#8247e5', text: 'P' },
+  POL: { fill: '#8247e5', text: 'P' },
+  ETH: { fill: '#627eea', text: 'E' },
+  AVAX: { fill: '#e84142', text: 'A' },
+  ZKSYNC: { fill: '#1e69ff', text: 'Z' },
+  TON: { fill: '#0098ea', text: 'T' },
+};
+
+function Badge({ network }: { network: string }) {
+  const b = NETWORK_BADGES[network.toUpperCase()];
+  if (!b) return null;
+  return (
+    <g>
+      <circle cx="25" cy="25" r="6.6" fill={b.fill} stroke="#fff" strokeWidth="1.4" />
+      {b.bar && <rect x="21.6" y="24" width="6.8" height="2" fill="#fff" />}
+      {b.text && (
+        <text x="25" y="25.3" textAnchor="middle" dominantBaseline="central" fill="#fff" fontFamily="Tahoma, Verdana, sans-serif" fontWeight="700" fontSize={b.text.length > 1 ? 5.2 : 7}>
+          {b.text}
+        </text>
+      )}
+    </g>
+  );
+}
+
+export function LtcIcon(p: IconProps) {
+  return (
+    <Svg {...p} label="Litecoin">
+      <Rim fill="#345d9d" edge="#203c6a" />
+      {/* Ł: the upright, the base, and the slash through it */}
+      <path d="M13.3 7.5h3.6l-2.4 10.2-1 4.2h9.4l-.8 3.1H8.9l1.8-7.5z" fill="#fff" />
+      <path d="m9.4 18.3 9.3-3.4-.6 2.6-9.3 3.4z" fill="#fff" />
+    </Svg>
+  );
+}
+
+export function SolIcon(p: IconProps) {
+  return (
+    <Svg {...p} label="Solana">
+      <defs>
+        <linearGradient id="sol-g" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stopColor="#9945ff" />
+          <stop offset="1" stopColor="#14f195" />
+        </linearGradient>
+      </defs>
+      <Rim fill="#14151a" edge="#000" />
+      <path d="M10.4 9h13.4l-2.2 2.6H8.2zM8.2 14.7h13.4l2.2 2.6H10.4zM10.4 20.4h13.4l-2.2 2.6H8.2z" fill="url(#sol-g)" />
+    </Svg>
+  );
+}
+
+export function PolIcon(p: IconProps) {
+  return (
+    <Svg {...p} label="Polygon">
+      <Rim fill="#8247e5" edge="#5a2db0" />
+      {/* two linked hexagons */}
+      <path
+        d="m19.5 11.4 4 2.3v4.6l-4 2.3-4-2.3v-2l2 1.2v.7l2 1.2 2-1.2v-2.3l-2-1.2-6 3.5-4-2.3v-4.6l4-2.3 4 2.3v2l-2-1.2v-.7l-2-1.2-2 1.2v2.3l2 1.2z"
+        fill="#fff"
+        transform="translate(0 1.3)"
+      />
+    </Svg>
+  );
+}
+
+export function BnbIcon(p: IconProps) {
+  return (
+    <Svg {...p} label="BNB">
+      <Rim fill="#f0b90b" edge="#b88a00" />
+      <g fill="#fff">
+        <path d="m16 6.8 3.3 3.3-1.4 1.4L16 9.6l-1.9 1.9-1.4-1.4zM16 25.2l-3.3-3.3 1.4-1.4 1.9 1.9 1.9-1.9 1.4 1.4z" />
+        <path d="m9.6 14.6 1.4 1.4-1.4 1.4L8.2 16zM22.4 14.6l1.4 1.4-1.4 1.4L21 16z" />
+        <path d="m16 13.2 2.8 2.8-2.8 2.8-2.8-2.8z" />
+      </g>
+    </Svg>
+  );
+}
+
+export function DogeIcon(p: IconProps) {
+  return (
+    <Svg {...p} label="Dogecoin">
+      <Rim fill="#c2a633" edge="#8c7520" />
+      <path d="M11.5 8.5h5.2c4.4 0 7.3 2.9 7.3 7.5s-2.9 7.5-7.3 7.5h-5.2v-6.3H9.6v-2.4h1.9zm3.2 3v3.3h3.2v2.4h-3.2v3.3h1.9c2.5 0 4.1-1.8 4.1-4.5s-1.6-4.5-4.1-4.5z" fill="#fff" />
+    </Svg>
+  );
+}
+
+export function XrpIcon(p: IconProps) {
+  return (
+    <Svg {...p} label="XRP">
+      <Rim fill="#23292f" edge="#000" />
+      <path d="M8.6 9h2.9l3.3 3.2a1.7 1.7 0 0 0 2.4 0L20.5 9h2.9l-4.9 4.8a3.6 3.6 0 0 1-5 0zM8.6 23h2.9l3.3-3.2a1.7 1.7 0 0 1 2.4 0l3.3 3.2h2.9l-4.9-4.8a3.6 3.6 0 0 0-5 0z" fill="#fff" />
+    </Svg>
+  );
+}
+
+export function TrxIcon(p: IconProps) {
+  return (
+    <Svg {...p} label="TRON">
+      <Rim fill="#eb0029" edge="#a3001c" />
+      <path d="m8.2 9.2 15.2 2.9-8.4 12.5zm2.4 1.6 4.5 11 .7-6.9zm6.4 4.5-.7 6.8 4.6-6.8zm-4.5-4.6 4.5 4.1 3.6-2.6z" fill="#fff" />
+    </Svg>
+  );
+}
+
+/** A colour for a coin without art of its own, the same every time for the same code. */
+const hue = (code: string) => [...code].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+
+/**
+ * Any coin's icon: the held ones by Wallet id (BTC, LTC, ETH-BASE…), others by FixedFloat code and network
+ * (USDTTRC: Tether with a Tron badge). Coins without art get their ticker on a coin in a colour of their own.
+ */
+export function AnyCoinIcon({ id, code, network, size = 32 }: IconProps & { id?: string | null; code?: string | null; network?: string | null }) {
+  const n = (network ?? '').toUpperCase();
+  const withBadge = (icon: React.ReactNode, net: string) => (
+    <svg viewBox="0 0 32 32" width={size} height={size} role="img" aria-label={`${code ?? id} on ${net}`}>
+      <svg viewBox="0 0 32 32" width="32" height="32">
+        {icon}
+      </svg>
+      <Badge network={net} />
+    </svg>
+  );
+  switch (id) {
+    case 'BTC':
+      return <BtcIcon size={size} />;
+    case 'LTC':
+      return <LtcIcon size={size} />;
+    case 'ETH':
+      return <EthIcon size={size} />;
+    case 'ETH-BASE':
+      return withBadge(<EthIcon />, 'BASE');
+    case 'ETH-ARB':
+      return withBadge(<EthIcon />, 'ARBITRUM');
+    case 'ETH-OP':
+      return withBadge(<EthIcon />, 'OP');
+    case 'POL':
+      return <PolIcon size={size} />;
+    case 'BNB':
+      return <BnbIcon size={size} />;
+    case 'SOL':
+      return <SolIcon size={size} />;
+    case 'XMR':
+      return <XmrIcon size={size} />;
+  }
+  const c = (code ?? '').toUpperCase();
+  // FixedFloat codes put the network after the coin (USDTTRC, USDCSOL, ETHZKSYNC): the coin's art plus a badge.
+  const tokens: [string, () => React.ReactNode][] = [
+    ['USDT', () => <UsdtIcon />],
+    ['USDC', () => <UsdcIcon />],
+    ['ETH', () => <EthIcon />],
+    ['BTC', () => <BtcIcon />],
+  ];
+  for (const [prefix, art] of tokens) {
+    if (c.startsWith(prefix) && c !== prefix) return withBadge(art(), n && n !== prefix ? n : c.slice(prefix.length));
+  }
+  if (c === 'USDT') return <UsdtIcon size={size} />;
+  if (c === 'DOGE') return <DogeIcon size={size} />;
+  if (c === 'XRP') return <XrpIcon size={size} />;
+  if (c === 'TRX') return <TrxIcon size={size} />;
+  if (c === 'SOL') return <SolIcon size={size} />;
+  if (c === 'LTC') return <LtcIcon size={size} />;
+  return <TickerCoin symbol={c || '?'} color={`hsl(${hue(c)} 55% 42%)`} size={size} />;
+}

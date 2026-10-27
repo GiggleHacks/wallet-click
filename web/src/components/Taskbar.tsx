@@ -7,7 +7,7 @@ import { useTheme, type Theme } from '../lib/themes';
 import type { Coin } from '../types';
 import { APP_VERSION } from '../version';
 import { VersionTag } from './VersionTag';
-import { AppMark, BookIcon, ClockIcon, CoinIcon, DisplayIcon, HouseIcon, KeyIcon, LineSpeaker, LogIcon, PlayIcon, PowerIcon, Speaker, StartGlyph } from './art';
+import { AppMark, BookIcon, ClockIcon, CoinIcon, DisplayIcon, HouseIcon, KeyIcon, LineSpeaker, LogIcon, PlayIcon, PowerIcon, Speaker, StartGlyph, WalletIcon } from './art';
 
 export interface TaskItem {
   key: string;
@@ -35,6 +35,8 @@ interface Props {
   onPrivacy(): void;
   onAddresses(): void;
   onLogs(): void;
+  /** The Wallet window (fresh addresses for more coins, held until moved). */
+  onWallet?(): void;
   onLock(): void;
   /** Extra things in the notification area (a countdown on phones). */
   tray?: ReactNode;
@@ -176,7 +178,7 @@ function Win11Menu({ entries }: { entries: Entry[] }) {
   );
 }
 
-export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, onDisplay, onAddressBook, onPrivacy, onAddresses, onLogs, onLock, tray }: Props) {
+export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, onDisplay, onAddressBook, onPrivacy, onAddresses, onLogs, onWallet, onLock, tray }: Props) {
   const theme = useTheme();
   const [menu, setMenu] = useState(false);
   const { time, date } = useClock();
@@ -218,6 +220,7 @@ export function Taskbar({ items, balloon, onDismissBalloon, onCreate, onDemo, on
     { key: 'btc', label: 'New Bitcoin address', short: 'Bitcoin', icon: (s) => <CoinIcon coin="BTC" size={s} />, onClick: pick(() => onCreate('BTC')), tile: '#d9790b' },
     { key: 'eth', label: 'New Ethereum address', short: 'Ethereum', icon: (s) => <CoinIcon coin="ETH" size={s} />, onClick: pick(() => onCreate('ETH')), tile: '#4a5fc1' },
     { key: 'xmr', label: 'New Monero address', short: 'Monero', icon: (s) => <CoinIcon coin="XMR" size={s} />, onClick: pick(() => onCreate('XMR')), tile: '#c45000' },
+    ...(onWallet ? [{ key: 'wallet', label: 'Wallet…', short: 'Wallet', icon: (s: number) => <WalletIcon size={s} />, onClick: pick(onWallet), tile: '#7a4a24' }] : []),
     { key: 'privacy', label: 'Send options…', short: 'Options', icon: (s) => <ClockIcon size={s} />, onClick: pick(onPrivacy), tile: '#4b3a9a' },
     { key: 'addresses', label: 'My Addresses…', short: 'My Addresses', icon: (s) => <HouseIcon size={s} />, onClick: pick(onAddresses), tile: '#9a3b1f' },
     { key: 'book', label: 'Address Book…', short: 'Address Book', icon: (s) => <BookIcon size={s} />, onClick: pick(onAddressBook), tile: '#1d5aa8' },

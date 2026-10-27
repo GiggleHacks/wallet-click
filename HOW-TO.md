@@ -136,6 +136,20 @@ MONERO_RPC_PASSWORD=password
 
 Wallet Click uses its own account in that wallet and never touches account 0. Privacy Enhanced needs about **$110 or more** per payment, because that's FixedFloat's minimum for swaps into Monero.
 
+**Wallet (a fresh address for almost any coin):** uses the same hot wallet (and Monero, if set up). Open **Wallet** on the desktop or in the Start menu, pick a coin, type who's paying if you like, and click **New address**. Hand that address over. You get a ring (and a Telegram ping) when the payment is broadcast and again when it's confirmed. It then waits in **Holdings** until you click **Swap to Monero** or **Send to Coinbase**. For a coin that isn't in the grid, use **More coins…**: FixedFloat gives the address and swaps whatever arrives into your Monero.
+
+To ask for addresses over Telegram through OpenClaw, add a token to `.env` and give the same token to the helper script, readable only by root:
+
+```bash
+TOKEN=$(openssl rand -hex 32)
+echo "AGENT_TOKEN=$TOKEN" >> .env
+echo "AGENT_TOKEN=$TOKEN" | sudo tee /etc/wallet-click-agent.env >/dev/null && sudo chmod 600 /etc/wallet-click-agent.env
+docker compose up -d
+WC_URL=http://127.0.0.1:8787 python3 scripts/wc-agent.py address SOL --label test
+```
+
+Then copy `scripts/openclaw/wallet-click/` into OpenClaw's skills folder, so "give me a fresh Solana address" works from Telegram. (`WC_URL` is your `WC_PORT`; it defaults to 8818.)
+
 **Fallback swap services (Swapzone, CypherGoat):** FixedFloat does every swap as before. If you'd like a spare for when it's down or has a pair paused, get an API key from [Swapzone](https://swapzone.io/partners/account) (and/or CypherGoat) and add to `.env`:
 
 ```ini

@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { egressSummary } from './egress.js';
 import { startPoller, stopOrders } from './orders.js';
 import { fallbackSummary, fallbacks } from './providers/index.js';
+import { startStash } from './stash/engine.js';
 import { startTransfers, stopTransfers } from './transfers.js';
 import { walletState } from './wallets/seed.js';
 
@@ -23,12 +24,15 @@ else if (!hot.ready) app.log.warn('No hot wallet (WALLET_KEY + npm run wallet:in
 if (hot.backupPending) app.log.warn('data/seed-backup.txt still holds the hot wallet words: write them down, then delete it.');
 const stopPoller = startPoller(app.log);
 const stopEngine = startTransfers(app.log);
+const stopStash = startStash(app.log);
+if (config.agentToken) app.log.info('OpenClaw access (AGENT_TOKEN) is on: /api/agent/*');
 await app.listen({ host: config.host, port: config.port });
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     stopPoller();
     stopEngine();
+    stopStash();
     stopTransfers();
     stopOrders();
     app.close().finally(() => process.exit(0));

@@ -2008,3 +2008,365 @@ html[data-shell='classic'][data-mode='dark'] .tip-box {
 .anim-style .seg-btn {
   min-width: 0;
 }
+
+/* ---------------------------------------------------------------- the Wallet window */
+
+.win-wallet {
+  width: min(600px, 100%);
+}
+
+/* The one loud thing: a pocket-calculator LCD with what's held, the same in every theme. */
+.wal-lcd {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 2px 12px;
+  margin-bottom: 10px;
+  padding: 10px 14px 9px;
+  background: linear-gradient(180deg, #a9b98c, #9aab7c);
+  color: #1f2a14;
+  box-shadow: var(--sunken);
+  font-family: var(--mono);
+}
+
+.wal-lcd-label {
+  grid-column: 1;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.wal-lcd-value {
+  grid-column: 1;
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 1px 1px 0 rgba(31, 42, 20, 0.18);
+}
+
+.wal-lcd-sub {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: end;
+  font-size: 11px;
+  opacity: 0.7;
+  text-align: right;
+}
+
+.wal-panel {
+  max-height: min(64vh, 620px);
+  overflow-y: auto;
+}
+
+/* The coin drop-down: a field like any other, opening a searchable list with each coin's icon. */
+.wal-select {
+  position: relative;
+  margin-bottom: 4px;
+}
+
+.wal-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wal-caret {
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  width: 18px;
+  margin: -2px -2px -2px auto;
+  background: var(--face);
+  box-shadow: var(--raised);
+  color: var(--text);
+}
+
+.wal-select-btn[aria-expanded='true'] .wal-caret {
+  box-shadow: var(--pressed);
+}
+
+.wal-opt-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.wal-opt-name {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wal-opt-sub {
+  overflow: hidden;
+  font-size: 11px;
+  opacity: 0.75;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* It opens in place, pushing what's below down: a floating list would be cut off by the scrolling tab. */
+.wal-drop {
+  position: relative;
+  z-index: 2;
+  margin-top: -2px;
+  padding: 4px;
+  background: var(--face);
+  box-shadow: var(--raised), 2px 3px 0 rgba(0, 0, 0, 0.25);
+}
+
+.wal-search {
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.wal-drop-list {
+  max-height: min(300px, 48vh);
+  margin: 0;
+  padding: 2px 0;
+  overflow-y: auto;
+  list-style: none;
+  background: var(--field);
+  box-shadow: var(--sunken);
+}
+
+.wal-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.wal-opt.is-active {
+  background: var(--navy);
+  color: #fff;
+}
+
+.wal-opt.is-chosen .wal-opt-name::after {
+  content: ' ✓';
+}
+
+.wal-opt.is-off {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.wal-group {
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.wal-group.is-note {
+  font-weight: 400;
+}
+
+.wal-new {
+  min-width: 220px;
+}
+
+.wal-card + .btn-row {
+  margin-top: 8px;
+}
+
+.wal-copy-row {
+  justify-content: flex-start;
+  margin: 6px 0;
+}
+
+.wal-memo {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.wal-warn {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.wal-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 10px 0 0;
+}
+
+.wal-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--shade);
+}
+
+.wal-status.is-incoming .wal-dot,
+.wal-chip.is-incoming {
+  background: #f0b400;
+}
+
+.wal-status.is-held .wal-dot,
+.wal-chip.is-held {
+  background: #3aa655;
+}
+
+.wal-status.is-moving .wal-dot,
+.wal-chip.is-moving {
+  background: #4a7bd8;
+}
+
+.wal-status.is-incoming .wal-dot {
+  animation: wal-blink 1s steps(2, jump-none) infinite;
+}
+
+@keyframes wal-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.wal-filter {
+  margin-bottom: 6px;
+}
+
+.wal-list {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.wal-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wal-row-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wal-row-sub {
+  overflow: hidden;
+  font-size: 11px;
+  opacity: 0.75;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wal-row-amt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wal-chip {
+  padding: 0 5px;
+  font-size: 10px;
+  color: #fff;
+  background: var(--shade);
+}
+
+.wal-detail {
+  margin-top: 10px;
+}
+
+.wal-move {
+  margin-top: 10px;
+}
+
+.wal-moves {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.wal-moves li + li {
+  margin-top: 3px;
+}
+
+.wal-empty {
+  margin: 12px 0;
+  color: var(--text-dim);
+}
+
+.wal-arrivals {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wal-arrival {
+  text-align: left;
+}
+
+.wal-hide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.wal-countdown {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wal-status.is-incoming .wal-dot {
+    animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .wal-lcd-value {
+    font-size: 24px;
+  }
+  .wal-panel {
+    max-height: none;
+  }
+  .wal-hide-grid {
+    grid-template-columns: 1fr;
+  }
+  .wal-new {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* The drop-down's highlighted row follows each theme's list selection. */
+html[data-theme='win10'] .wal-opt.is-active {
+  background: #cce8ff;
+  color: #000;
+}
+
+html[data-theme='win11'] .wal-drop,
+html[data-theme='win11'] .wal-drop-list {
+  border-radius: 6px;
+}
+
+html[data-theme='win11'] .wal-opt {
+  margin: 0 3px;
+  border-radius: 4px;
+}
+
+html[data-theme='win11'] .wal-opt.is-active {
+  background: rgba(0, 0, 0, 0.06);
+  color: inherit;
+  box-shadow: inset 3px 0 #005fb8;
+}
+
+html[data-mode='dark'][data-theme='win10'] .wal-opt.is-active,
+html[data-mode='dark'][data-theme='win11'] .wal-opt.is-active {
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+}

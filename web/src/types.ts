@@ -235,3 +235,104 @@ export interface LogLine {
   msg: string;
   detail?: string;
 }
+
+/** The Wallet window: fresh addresses held on the server until moved (server/stash). */
+export type WalletState = 'waiting' | 'incoming' | 'held' | 'moving' | 'moved';
+
+export interface WalletMove {
+  id: string;
+  to: 'xmr' | 'coinbase';
+  by: 'you' | 'openclaw' | 'auto' | 'swap';
+  step: 'quote' | 'order' | 'signed' | 'sent' | 'done' | 'failed';
+  createdAt: number;
+  sentAt: number | null;
+  doneAt: number | null;
+  amount: string | null;
+  out: string | null;
+  toLabel: string | null;
+  error: string | null;
+  orderId: string | null;
+  orderStatus: string | null;
+  txUrl: string | null;
+  payoutUrl: string | null;
+  xmrEntryId: string | null;
+}
+
+export interface WalletEntry {
+  id: string;
+  asset: string;
+  name: string;
+  symbol: string;
+  network: string;
+  color: string;
+  kind: 'utxo' | 'evm' | 'sol' | 'xmr' | 'via';
+  label: string;
+  by: 'you' | 'openclaw' | 'auto' | 'swap';
+  createdAt: number;
+  address: string;
+  uri: string | null;
+  warning: string;
+  explorer: string | null;
+  state: WalletState;
+  amount: string;
+  spendable: string;
+  heldSymbol: string;
+  usd: number | null;
+  confirmed: boolean;
+  firstSeenAt: number | null;
+  txs: { id: string; url: string }[];
+  scanError: string | null;
+  archived: boolean;
+  from: { kind: 'move' | 'via'; ccy: string; entryId: string | null } | null;
+  via: {
+    code: string;
+    name: string;
+    network: string;
+    tag: string | null;
+    expiresAt: number | null;
+    min: string | null;
+    max: string | null;
+    status: string | null;
+    stage: Stage | null;
+    received: string | null;
+    orderId: string;
+  } | null;
+  moves: WalletMove[];
+}
+
+export interface WalletAsset {
+  id: string;
+  name: string;
+  symbol: string;
+  network: string;
+  color: string;
+  kind: 'utxo' | 'evm' | 'sol' | 'xmr';
+  ready: boolean;
+  hidden: boolean;
+  usd: number | null;
+  minUsd: { xmr: number | null; coinbase: number | null };
+}
+
+export interface WalletSettings {
+  onArrival: 'hold' | 'xmr' | 'coinbase';
+  destinationId: string;
+  hidden: string[];
+  pings: boolean;
+}
+
+export interface WalletData {
+  entries: WalletEntry[];
+  totalUsd: number;
+  settings: WalletSettings;
+  assets: WalletAsset[];
+  ready: { wallet: boolean; monero: boolean; fixedfloat: boolean };
+  destinations: { id: string; label: string }[];
+}
+
+export interface WalletCoin {
+  code: string;
+  name: string;
+  network: string;
+  coin: string;
+  tag: boolean;
+}
