@@ -95,7 +95,20 @@ export const PIECES_MAX = 4;
 /** Each piece is at least this many times FixedFloat's minimum: room for fees and prices moving while it waits. */
 export const PIECE_MIN_FACTOR = 1.5;
 
+const egressProxy = env.EGRESS_PROXY?.trim() || null;
+if (egressProxy && !/^socks5h?:\/\/[^\s/]+$/i.test(egressProxy)) {
+  throw new Error(`EGRESS_PROXY "${egressProxy}" must look like socks5h://127.0.0.1:9050 (a SOCKS5 proxy such as Tor).`);
+}
+const egressVia = list(env.EGRESS_VIA).length ? list(env.EGRESS_VIA).map((s) => s.toLowerCase()) : ['ff', 'chain'];
+for (const v of egressVia) if (v !== 'ff' && v !== 'chain') throw new Error(`EGRESS_VIA "${v}" is not "ff" or "chain".`);
+
+const agentToken = env.AGENT_TOKEN?.trim() || null;
+if (agentToken && agentToken.length < 32) throw new Error('AGENT_TOKEN must be at least 32 characters (use `openssl rand -hex 32`).');
+
 const num = (v: string | undefined) => (v && Number.isFinite(Number(v)) ? Number(v) : null);
+
+const fallbackNames = list(env.SWAP_FALLBACKS).map((s) => s.toLowerCase());
+for (const n of fallbackNames) if (n !== 'swapzone' && n !== 'cyphergoat') throw new Error(`SWAP_FALLBACKS "${n}" is not "swapzone" or "cyphergoat".`);
 
 export const config = {
   host: env.HOST ?? '127.0.0.1',
@@ -117,12 +130,59 @@ export const config = {
     apiSecret: env.FF_API_SECRET ?? '',
   },
 
-  /** Only used to find who paid, for automatic refunds of payments FixedFloat can't swap. */
+  /**
+   * Other swap providers, tried only when FixedFloat can't take an order (down, paused, out of reserves). Off unless
+   * named in SWAP_FALLBACKS and given a key. FixedFloat stays the primary and nothing changes while it works.
+   */
+  swapFallbacks: fallbackNames,
+  swapzone: {
+    apiKey: env.SWAPZONE_API_KEY?.trim() ?? '',
+    baseUrl: env.SWAPZONE_API_URL ?? 'https://api.swapzone.io/v1',
+    /** Only these exchanges (Swapzone adapter ids, comma separated); empty = any. */
+    exchanges: list(env.SWAPZONE_EXCHANGES).map((s) => s.toLowerCase()),
+  },
+  cyphergoat: {
+    apiKey: env.CYPHERGOAT_API_KEY?.trim() ?? '',
+    baseUrl: env.CYPHERGOAT_API_URL ?? 'https://api.cyphergoat.com',
+    /** Only these exchanges (CypherGoat partner codes); empty = any. */
+    exchanges: list(env.CYPHERGOAT_EXCHANGES).map((s) => s.toLowerCase()),
+    /** Skip exchanges whose KYC score is above this (0 none … 2 most). */
+    maxKyc: num(env.CYPHERGOAT_MAX_KYC) ?? 2,
+  },
+
+  /**
+   * Where outbound traffic goes: a SOCKS5 proxy (Tor: socks5h://127.0.0.1:9050). Unset = direct.
+   * `via` says which traffic uses it: "ff" (FixedFloat) and "chain" (Esplora and Ethereum RPC, including broadcasts).
+   * With a proxy set there is no direct fallback: if it's down, those calls fail rather than leak the VPS address.
+   */
+  egress: {
+    proxy: egressProxy,
+    via: egressVia,
+  },
+
+  /** Public blockchain APIs: who paid (automatic refunds), watching deposits, the hot wallet's scans and broadcasts. */
   chains: {
     ethRpcUrls: list(env.ETH_RPC_URLS).length ? list(env.ETH_RPC_URLS) : ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org'],
     /** Two independent Esplora APIs: refunds need both to agree on who paid. */
     btcApis: list(env.BTC_API_URLS).length ? list(env.BTC_API_URLS) : ['https://mempool.space/api', 'https://blockstream.info/api'],
   },
+
+  /** The Wallet window: fresh addresses for more coins, held on this server until you move them (server/stash). */
+  stash: {
+    ltcApis: list(env.LTC_API_URLS).length ? list(env.LTC_API_URLS) : ['https://litecoinspace.org/api'],
+    solRpcUrls: list(env.SOL_RPC_URLS).length ? list(env.SOL_RPC_URLS) : ['https://solana-rpc.publicnode.com', 'https://api.mainnet-beta.solana.com'],
+    baseRpcUrls: list(env.BASE_RPC_URLS).length ? list(env.BASE_RPC_URLS) : ['https://base-rpc.publicnode.com', 'https://base.drpc.org'],
+    arbRpcUrls: list(env.ARB_RPC_URLS).length ? list(env.ARB_RPC_URLS) : ['https://arbitrum-one-rpc.publicnode.com', 'https://arbitrum.drpc.org'],
+    opRpcUrls: list(env.OP_RPC_URLS).length ? list(env.OP_RPC_URLS) : ['https://optimism-rpc.publicnode.com', 'https://optimism.drpc.org'],
+    polygonRpcUrls: list(env.POLYGON_RPC_URLS).length ? list(env.POLYGON_RPC_URLS) : ['https://polygon-bor-rpc.publicnode.com', 'https://polygon.drpc.org'],
+    bscRpcUrls: list(env.BSC_RPC_URLS).length ? list(env.BSC_RPC_URLS) : ['https://bsc-rpc.publicnode.com', 'https://bsc.drpc.org'],
+  },
+
+  /**
+   * Lets a local agent (OpenClaw) use /api/agent/* with "Authorization: Bearer <token>" instead of a sign-in.
+   * Unset = those routes are off. Loopback alone is never trusted: Tailscale Funnel traffic arrives from 127.0.0.1 too.
+   */
+  agentToken,
 
   payout: {
     address: payoutAddress,

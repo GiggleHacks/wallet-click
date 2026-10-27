@@ -466,11 +466,9 @@ describe('following an order', () => {
       await pollDue(); // looking again sends nothing new
     });
     expect(got.map((g) => g.key)).toEqual([expect.stringMatching(/^recv:order:/), 'send:payout:0xout']);
-    expect(got[0].text).toContain('📥 Received');
-    expect(got[0].text).toContain('0.006 ETH');
-    expect(got[1].text).toContain('📤 Sent');
-    expect(got[1].text).toContain('15.2 USDC');
-    expect(got[1].text).toContain('https://basescan.org/tx/0xout');
+    expect(got[0].text).toBe('📥 Received\nETH');
+    expect(got[1].text).toMatch(/^📤 Sent\nUSDC\n/);
+    for (const g of got) expect(g.text).not.toMatch(/0\.006|15\.2|0x|https?:/);
   });
 
   it('leaves reused addresses to FixedFloat', async () => {

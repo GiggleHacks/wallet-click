@@ -7,12 +7,13 @@ import { ZodError } from 'zod';
 import { adoptPassword } from './auth.js';
 import { config } from './config.js';
 import { HttpError, UserError, friendlyError } from './errors.js';
-import { FfError } from './fixedfloat.js';
+import { SwapApiError } from './providers/types.js';
 import { logger, quiet } from './logs.js';
 import { registerAuth } from './routes/auth.js';
 import { registerDestinations } from './routes/destinations.js';
 import { registerLogs } from './routes/logs.js';
 import { registerOrders } from './routes/orders.js';
+import { registerStash } from './routes/stash.js';
 import { registerTransfers } from './routes/transfers.js';
 import { registerSecurity } from './security.js';
 import { setupHotWallets } from './wallets/setup.js';
@@ -52,6 +53,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
   registerOrders(app);
   registerDestinations(app);
   registerTransfers(app);
+  registerStash(app);
   registerLogs(app);
 
   app.setErrorHandler((err, req, reply) => {
@@ -59,7 +61,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     if (err instanceof UserError) return reply.code(400).send({ error: err.message });
     if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: err.message });
     if (err instanceof ZodError) return reply.code(400).send({ error: 'Invalid request' });
-    if (err instanceof FfError) {
+    if (err instanceof SwapApiError) {
       req.log.warn({ code: err.code }, err.message);
       return reply.code(err.code === -1 ? 429 : err.code === -2 ? 503 : 502).send({ error: err.message });
     }

@@ -132,7 +132,7 @@ const label = (b: Bomb) => {
   const piece = t.state === 'pieces' ? ' until the next piece' : '';
   if (b.phase === 'attention') return `${what}: needs you`;
   if (b.phase === 'swapping') return `${what}: the wait is over, swapping to ${symbolOf(t.payoutCcy)}`;
-  if (b.phase === 'armed') return `${what}: a ${countdown(b.left)} wait starts once ${viaMonero(t) ? 'the Monero unlocks' : 'the payment is confirmed'}`;
+  if (b.phase === 'armed') return `${what}: a wait of about ${countdown(b.left)} starts once ${viaMonero(t) ? 'the Monero unlocks' : 'the payment is confirmed'}`;
   return `${what}: ${countdown(b.left)} left${piece}`;
 };
 

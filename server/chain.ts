@@ -1,4 +1,5 @@
 import { config, type Coin } from './config.js';
+import { egressFetch, patience } from './egress.js';
 
 /**
  * Direct blockchain lookups (public Ethereum RPCs, Esplora APIs for Bitcoin). Never used to move money:
@@ -11,12 +12,13 @@ import { config, type Coin } from './config.js';
  */
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
-let fetchFn: Fetch = (url, init) => fetch(url, init);
-/** The fetch used for every public blockchain endpoint (tests swap it for fakes). */
+const realFetch = egressFetch('chain');
+let fetchFn: Fetch = realFetch;
+/** The fetch used for every public blockchain endpoint (tests swap it for fakes). Through EGRESS_PROXY when that's set. */
 export const chainFetch: Fetch = (url, init) => fetchFn(url, init);
 /** Tests swap the network for fakes. */
 export function setChainFetch(f: Fetch | null): void {
-  fetchFn = f ?? ((url, init) => fetch(url, init));
+  fetchFn = f ?? realFetch;
 }
 
 /** Busy exchange wallets send hundreds of thousands of transactions; a person's wallet doesn't. */
@@ -25,7 +27,7 @@ export const EXCHANGE_NONCE = 50_000;
 /** A temporary problem (endpoint down, rate-limited, tx not indexed yet): try again later. */
 export class ChainUnavailable extends Error {}
 
-const timeout = () => AbortSignal.timeout(12_000);
+const timeout = () => AbortSignal.timeout(patience(12_000, 'chain'));
 
 export async function rpcAt<T>(url: string, method: string, params: unknown[]): Promise<T> {
   const res = await fetchFn(url, {

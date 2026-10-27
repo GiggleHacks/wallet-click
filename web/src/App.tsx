@@ -1,7 +1,7 @@
 import { AnimatePresence } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
-import { AppMark, BookIcon, CoinIcon, DisplayIcon, HouseIcon, LogIcon, PlayIcon, ShieldIcon, WarnIcon } from './components/art';
+import { AppMark, BookIcon, CoinIcon, DisplayIcon, HouseIcon, LogIcon, PlayIcon, ShieldIcon, WalletIcon, WarnIcon } from './components/art';
 import { JourneyDialog } from './components/JourneyDialog';
 import { DisplayProperties } from './components/DisplayProperties';
 import { Taskbar, type Balloon, type TaskItem } from './components/Taskbar';
@@ -26,6 +26,7 @@ import { Lock } from './pages/Lock';
 import { Logs } from './pages/Logs';
 import { Receive, ReceiveOnce } from './pages/Receive';
 import { SendOptionsDialog } from './pages/SendOptionsDialog';
+import { Wallet } from './pages/Wallet';
 import { APP_VERSION } from './version';
 import type { Coin, Destination, Meta, Order, Route, Stage, Status, Transfer, TransferStage } from './types';
 
@@ -77,13 +78,18 @@ interface DesktopProps {
   onAddressBook(): void;
   onAddresses(): void;
   onLogs(): void;
+  onWallet(): void;
   bombs: Bomb[];
   onBomb(t: Transfer): void;
 }
 
-function DesktopIcons({ onDemo, onDisplay, onAddressBook, onAddresses, onLogs, bombs, onBomb }: DesktopProps) {
+function DesktopIcons({ onDemo, onDisplay, onAddressBook, onAddresses, onLogs, onWallet, bombs, onBomb }: DesktopProps) {
   return (
     <nav className="desk-icons" aria-label="Desktop">
+      <button type="button" className="desk-icon" onClick={onWallet}>
+        <WalletIcon size={32} />
+        <span>Wallet</span>
+      </button>
       <button type="button" className="desk-icon" onClick={onDemo}>
         <PlayIcon size={32} />
         <span>How it works</span>
@@ -137,6 +143,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
   const sendOptions = useSendOptions();
   const [myAddresses, setMyAddresses] = useState(false);
   const [logs, setLogs] = useState(false);
+  const [wallet, setWallet] = useState(false);
   const [offline, setOffline] = useState(false);
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [destinationId, setDestinationId] = useState(() => getChoice('destination') ?? DEFAULT_DESTINATION);
@@ -276,6 +283,44 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
       clearTimeout(timer);
     };
   }, [refresh]);
+
+  // Money arriving at a Wallet address rings and shows a balloon, even with the Wallet window closed (it rings itself when open).
+  const walletRef = useRef(wallet);
+  walletRef.current = wallet;
+  useEffect(() => {
+    const seen = new Map<string, string>();
+    let first = true;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const loop = async () => {
+      try {
+        const w = await api.wallet();
+        for (const e of w.entries) {
+          const was = seen.get(e.id);
+          seen.set(e.id, e.state);
+          if (first || walletRef.current || was === e.state) continue;
+          const who = e.label ? ` from ${e.label}` : '';
+          if (was === 'waiting' && e.state === 'incoming') {
+            sfx.ding();
+            flashTitle(`Incoming: ${e.symbol}`);
+            notify('Payment incoming', `${e.via?.received ? `${trimAmount(e.via.received)} ` : e.amount !== '0' ? `${trimAmount(e.amount)} ` : ''}${e.symbol}${who}, confirming. Click to open the Wallet.`, () => setWallet(true));
+          } else if (e.state === 'held' && was !== 'held' && !e.from) {
+            sfx.ding();
+            notify('Held in the Wallet', `${trimAmount(e.amount)} ${e.heldSymbol}${who} is confirmed.`, () => setWallet(true));
+          }
+        }
+        first = false;
+      } catch {
+        /* the main poll shows when the server is unreachable */
+      }
+      if (alive) timer = setTimeout(loop, 10_000);
+    };
+    void loop();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, []);
 
   const pickDemo = () => {
     sfx.open();
@@ -430,6 +475,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
         onAddressBook={() => setBook(true)}
         onAddresses={() => setMyAddresses(true)}
         onLogs={() => (sfx.open(), setLogs(true))}
+        onWallet={() => (sfx.open(), setWallet(true))}
         bombs={bombs}
         onBomb={openBomb}
       />
@@ -489,6 +535,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
         {myAddresses && <Addresses delays={delays} destinations={destinations} seedBackupPending={meta?.features?.seedBackupPending} onClose={() => setMyAddresses(false)} />}
       </AnimatePresence>
       <AnimatePresence>{logs && <Logs onClose={() => setLogs(false)} />}</AnimatePresence>
+      <AnimatePresence>{wallet && <Wallet onClose={() => setWallet(false)} />}</AnimatePresence>
       {message && <MessageBox title="Wallet Click" text={message} onOk={() => setMessage(null)} />}
       <Taskbar
         items={items}
@@ -501,6 +548,7 @@ function Main({ onLocked, theme, wallpaper, mode, onLook }: MainProps) {
         onPrivacy={() => setOptionsOpen(true)}
         onAddresses={() => setMyAddresses(true)}
         onLogs={() => setLogs(true)}
+        onWallet={() => setWallet(true)}
         onLock={lock}
         tray={<TrayBomb bombs={bombs} onOpen={openBomb} />}
       />

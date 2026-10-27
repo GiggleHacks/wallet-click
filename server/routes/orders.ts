@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { COIN_IDS, COINS, DELAYS, PIECES_MAX, config, type Coin } from '../config.js';
 import { HttpError } from '../errors.js';
 import { createOrder, orderView, orders, refundOrder } from '../orders.js';
+import { fallbacks } from '../providers/index.js';
 import { transferView, transfers } from '../transfers.js';
 import { walletState } from '../wallets/seed.js';
 import { VERSION } from '../version.js';
@@ -18,7 +19,7 @@ export function registerOrders(app: FastifyInstance): void {
   app.get('/api/meta', async () => ({
     payout: { address: config.payoutBase.address, label: config.payoutBase.label, ccy: config.payoutBase.ccy, network: config.payoutBase.network },
     coins: Object.fromEntries(COIN_IDS.map((id) => [id, { name: COINS[id].name, network: COINS[id].network }])),
-    swapConfigured: Boolean(config.ff.apiKey && config.ff.apiSecret),
+    swapConfigured: Boolean((config.ff.apiKey && config.ff.apiSecret) || fallbacks().length),
     features: { monero: Boolean(config.monero.rpcUrl), wallet: walletState().ready, seedBackupPending: walletState().backupPending, walletError: walletState().error },
     privacy: { delays: DELAYS, piecesMax: PIECES_MAX, testDelayMin: config.privacyTestDelayMin },
     version: VERSION,

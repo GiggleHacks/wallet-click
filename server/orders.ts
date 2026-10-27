@@ -7,6 +7,7 @@ import { HttpError, UserError, friendlyError } from './errors.js';
 import { FfError, budgetLeft, ff, type FfOrder } from './fixedfloat.js';
 import { logger } from './logs.js';
 import { noteOrderMoney } from './notify.js';
+import { SwapApiError, fallbacks, providerById, type CreatedSwap, type FallbackProvider, type ProviderId } from './providers/index.js';
 import { readJson, writeJsonAtomic } from './store.js';
 
 /**
@@ -78,6 +79,12 @@ export interface OrderRecord {
   abandoned?: boolean;
   /** Dollar prices of the coin in and the coin out when FixedFloat started the exchange: what the swap cost is worked out from. */
   prices?: { from: number; to: number; at: number };
+  /** Which fallback provider took this order. Missing: FixedFloat (every older order). */
+  provider?: ProviderId;
+  /** The fallback provider's own id for it (`id` is ours, with a prefix). */
+  nativeId?: string;
+  /** The exchange that does the swap ("fixedfloat", or one of an aggregator's). */
+  exchange?: string;
 }
 
 interface OrdersFile {
@@ -156,6 +163,7 @@ export const orders = {
     dirty = false;
     recentCreates.length = 0;
     inFlight.clear();
+    primaryDownUntil = 0;
     limitCache.clear();
     priceTriedAt.clear();
   },
@@ -192,7 +200,7 @@ export function stageOf(o: FfOrder): Stage {
     case 'WITHDRAW':
       return 'sending';
     case 'DONE':
-      return o.back?.tx?.id && !o.to.tx?.id ? 'refunded' : 'done';
+      return (o.back?.tx?.id && !o.to.tx?.id) || o.refunded ? 'refunded' : 'done';
     case 'EXPIRED':
       return 'expired';
     case 'EMERGENCY':
@@ -248,7 +256,7 @@ function withChoice(r: OrderRecord, choice: 'EXCHANGE' | 'REFUND'): FfOrder {
 }
 
 async function maybeContinue(r: OrderRecord, now: number): Promise<void> {
-  if (emergencyAction(r.ff) !== 'continue' || inFlight.has(r.id)) return;
+  if (r.provider || emergencyAction(r.ff) !== 'continue' || inFlight.has(r.id)) return; // the emergency answers are FixedFloat's
   const tx = depositTx(r);
   if (r.auto.forTx !== tx) r.auto = freshAnswer(tx); // a new deposit: start over
   if (r.auto.sentAt && now - r.auto.sentAt < 2 * M) return; // give FixedFloat time to apply the last answer
@@ -283,7 +291,7 @@ const UNSAFE_SENDER =
 
 /** Sends a below-minimum payment back to the wallet it came from, when that can be known safely. */
 async function maybeRefund(r: OrderRecord, now: number): Promise<void> {
-  if (emergencyAction(r.ff) !== 'refund' || inFlight.has(r.id)) return;
+  if (r.provider || emergencyAction(r.ff) !== 'refund' || inFlight.has(r.id)) return;
   const tx = depositTx(r);
   const amount = r.ff.from.tx?.amount;
   if (!r.autoRefund || r.autoRefund.forTx !== tx) r.autoRefund = { ...freshAnswer(tx), to: null, source: null, gaveUp: false };
@@ -342,6 +350,7 @@ async function maybeRefund(r: OrderRecord, now: number): Promise<void> {
 
 /** The owner's own refund address (password-checked by the route). */
 export async function refundOrder(r: OrderRecord, address: string): Promise<void> {
+  if (r.provider) throw new UserError(`This swap runs on ${providerById(r.provider).label} (${r.exchange ?? 'an exchange'}), which has no refund answer to give from here. Contact them with order ${r.nativeId}.`);
   if (r.ff.status !== 'EMERGENCY' || (r.ff.emergency?.choice && r.ff.emergency.choice !== 'NONE')) throw new UserError("This transfer doesn't need a refund.");
   if (inFlight.has(r.id) || (r.autoRefund?.sentAt && Date.now() - r.autoRefund.sentAt < 2 * M)) throw new UserError('A refund is already being sent. Give it a moment.');
   if (!ADDRESS_FORMATS[r.coin](address)) throw new UserError(`That doesn't look like a ${COINS[r.coin].name} address.`);
@@ -366,7 +375,7 @@ export async function pollOrder(r: OrderRecord, now = Date.now()): Promise<void>
   const [wasStatus, wasError] = [r.ff.status, r.pollError];
   const had = { from: Boolean(r.ff.from.tx?.id), to: Boolean(r.ff.to.tx?.id), refund: Boolean(r.ff.back?.tx?.id) };
   try {
-    r.ff = stripToken(await ff.order(r.id, r.token));
+    r.ff = stripToken(r.provider ? await providerById(r.provider).order(r.nativeId ?? r.id) : await ff.order(r.id, r.token));
     r.pollError = null;
   } catch (e) {
     r.pollError = friendlyError(e);
@@ -375,7 +384,7 @@ export async function pollOrder(r: OrderRecord, now = Date.now()): Promise<void>
   if (r.ff.status !== wasStatus) {
     const got = r.ff.from.tx?.amount ? `, received ${r.ff.from.tx.amount} ${r.coin}` : '';
     const sent = r.ff.to.tx?.amount ? `, paid out ${r.ff.to.tx.amount} ${r.toCcy}` : '';
-    logger.info(`[order ${r.id}] FixedFloat: ${wasStatus} → ${r.ff.status}${got}${sent}`);
+    logger.info(`[order ${r.id}] ${r.provider ? providerById(r.provider).label : 'FixedFloat'}: ${wasStatus} → ${r.ff.status}${got}${sent}`);
   }
   if (r.pollError && r.pollError !== wasError) logger.warn(`[order ${r.id}] couldn't check with FixedFloat: ${r.pollError}`);
   if (!r.pollError) noteMoney(r, now, { hadFrom: had.from, hadTo: had.to, hadRefund: had.refund });
@@ -481,7 +490,7 @@ export async function pollDue(now = Date.now()): Promise<void> {
       .sort((a, b) => a.nextPollAt - b.nextPollAt)
       .slice(0, 8);
     for (const r of due) {
-      if (budgetLeft() < 60) break;
+      if (!r.provider && budgetLeft() < 60) break; // FixedFloat's request budget; the others have none of ours
       await pollOrder(r);
     }
   } finally {
@@ -529,6 +538,21 @@ export function costOf(inUsd: number, usd: number): { usd: number; pct: number; 
 
 // ---------------------------------------------------------------- creating
 
+/** FixedFloat can't do this swap right now (paused, out of reserves, no usable limits): worth trying a fallback. */
+export class PairUnavailable extends UserError {}
+
+/** Whether a failure means FixedFloat itself can't take an order (so a fallback may), not that the request is wrong. */
+export function fallbackWorthy(e: unknown): boolean {
+  if (e instanceof PairUnavailable) return true;
+  // -1: our own request budget, -2: no API key, 5xx: FixedFloat's side. Other codes are FixedFloat refusing this request.
+  if (e instanceof SwapApiError) return e.code === -1 || e.code === -2 || e.code >= 500;
+  if (e instanceof Error) {
+    const cause = String((e as { cause?: { code?: string } }).cause?.code ?? '');
+    return e.name === 'TimeoutError' || e.name === 'AbortError' || /fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|socket|network/i.test(`${e.message} ${cause}`);
+  }
+  return false;
+}
+
 const PRICE_ERRORS: Record<string, (from: string, to: string) => string> = {
   MAINTENANCE_FROM: (c) => `FixedFloat has ${c} deposits paused for maintenance. Try again later.`,
   OFFLINE_FROM: (c) => `FixedFloat isn't accepting ${c} right now. Try again later.`,
@@ -548,11 +572,14 @@ export interface Expect {
 
 const COINBASE_EXPECT = (): Expect => ({ toCcy: config.payoutBase.ccy, toAddress: config.payoutBase.address, label: config.payoutBase.label });
 
-/** Refuses any order that doesn't pay exactly what we asked for: the right coin in, the right payout, to exactly our address. */
-export function checkCreated(o: FfOrder, coin: Coin, expect: Expect = COINBASE_EXPECT()): void {
+/**
+ * Refuses any order that doesn't pay exactly what we asked for: the right coin in, the right payout, to exactly our
+ * address. A fallback provider's order is checked the same way, against what it answered (FixedFloat's also needs a token).
+ */
+export function checkCreated(o: FfOrder, coin: Coin, expect: Expect = COINBASE_EXPECT(), opts: { needToken?: boolean } = {}): void {
   const problems: string[] = [];
   const want = PAYOUTS[expect.toCcy];
-  if (!o.token) problems.push('it came without an access token');
+  if (!o.token && opts.needToken !== false) problems.push('it came without an access token');
   if (!o.from?.address) problems.push('it has no deposit address');
   if (o.from?.code !== COINS[coin].code) problems.push(`it expects ${o.from?.code} instead of ${COINS[coin].code}`);
   // FixedFloat codes name the network too ("USDT" is ERC-20; Tron is "USDTTRC"; "USDCBASE" is Base), so the code is the main check.
@@ -579,6 +606,9 @@ export interface Limits {
   /** Roughly how much comes out per coin in (FixedFloat's fee included). */
   outPerCoin: number | null;
   precision: number;
+  /** Set when a fallback provider quoted it (missing: FixedFloat), and the exchange behind it. */
+  provider?: ProviderId;
+  exchange?: string;
 }
 
 const limitCache = new Map<string, { at: number; limits: Limits }>();
@@ -601,6 +631,53 @@ export function usdPrice(coin: Coin, now = Date.now(), maxAge = PRICE_FRESH): nu
  */
 export async function limits(from: Coin, to: PayoutCcy, opts: { now?: number; cached?: boolean } = {}): Promise<Limits> {
   const now = opts.now ?? Date.now();
+  const others = fallbacks();
+  // Without fallbacks (the default) this is exactly FixedFloat's answer, errors included.
+  if (!others.length) return primaryLimits(from, to, opts);
+  if (!(opts.cached && now < primaryDownUntil)) {
+    try {
+      return await primaryLimits(from, to, opts);
+    } catch (e) {
+      if (!fallbackWorthy(e)) throw e;
+      primaryDownUntil = now + PRIMARY_DOWN_FOR;
+      for (const p of others) {
+        try {
+          return await limitsVia(p, from, to, { now, cached: opts.cached });
+        } catch {
+          /* the next one, or FixedFloat's own error below */
+        }
+      }
+      throw e;
+    }
+  }
+  for (const p of others) {
+    try {
+      return await limitsVia(p, from, to, { now, cached: true });
+    } catch {
+      /* the next one */
+    }
+  }
+  return primaryLimits(from, to, opts);
+}
+
+/** After FixedFloat has failed like that, leave it alone for this long when only an estimate is wanted. */
+const PRIMARY_DOWN_FOR = M;
+let primaryDownUntil = 0;
+
+/** One fallback provider's limits and rate for a pair. */
+async function limitsVia(p: FallbackProvider, from: Coin, to: PayoutCcy, opts: { now?: number; cached?: boolean; avoid?: string[] } = {}): Promise<Limits> {
+  const now = opts.now ?? Date.now();
+  const key = `${from}>${to}@${p.id}`;
+  const hit = limitCache.get(key);
+  if (opts.cached && !opts.avoid?.length && hit && now - hit.at < LIMITS_FRESH) return hit.limits;
+  const raw = await p.limits(from, to, COINS[from].probeAmount, opts.avoid);
+  const result: Limits = { ...raw, provider: p.id };
+  if (!opts.avoid?.length) limitCache.set(key, { at: now, limits: result });
+  return result;
+}
+
+async function primaryLimits(from: Coin, to: PayoutCcy, opts: { now?: number; cached?: boolean } = {}): Promise<Limits> {
+  const now = opts.now ?? Date.now();
   const key = `${from}>${to}`;
   const hit = limitCache.get(key);
   if (opts.cached && hit && now - hit.at < LIMITS_FRESH) return hit.limits;
@@ -608,11 +685,11 @@ export async function limits(from: Coin, to: PayoutCcy, opts: { now?: number; ca
   const price = await ff.price(COINS[from].code, to, COINS[from].probeAmount);
   const blocking = (price.errors ?? []).filter((e) => !e.startsWith('LIMIT_'));
   if (blocking.length) {
-    throw new UserError(PRICE_ERRORS[blocking[0]]?.(COINS[from].name, PAYOUTS[to].label) ?? `FixedFloat can't do this swap right now (${blocking.join(', ')}).`);
+    throw new PairUnavailable(PRICE_ERRORS[blocking[0]]?.(COINS[from].name, PAYOUTS[to].label) ?? `FixedFloat can't do this swap right now (${blocking.join(', ')}).`);
   }
   const min = Number(price.from.min);
   const max = Number(price.from.max);
-  if (!(min > 0) || !(max > min)) throw new UserError('FixedFloat did not return usable limits. Try again shortly.');
+  if (!(min > 0) || !(max > min)) throw new PairUnavailable('FixedFloat did not return usable limits. Try again shortly.');
   const per = (v: unknown) => {
     const n = Number(v) / Number(price.from.amount);
     return Number.isFinite(n) && n > 0 ? n : null;
@@ -622,11 +699,50 @@ export async function limits(from: Coin, to: PayoutCcy, opts: { now?: number; ca
   return result;
 }
 
-function newRecord(created: FfOrder, coin: Coin, expect: Expect, lim: Limits, now: number, extra: Partial<OrderRecord>): OrderRecord {
+/** FixedFloat's own order, in the shape fallback orders come in. */
+const ownOrder = (o: FfOrder): CreatedSwap => ({ nativeId: o.id, token: o.token ?? '', exchange: 'fixedfloat', order: o });
+
+/**
+ * Runs `attempt` with FixedFloat first, exactly as before. Only when FixedFloat itself can't take an order (down,
+ * paused, out of reserves: `fallbackWorthy`) does it try the configured fallbacks, in order; if none works, FixedFloat's
+ * own error is what comes back. Failures that mean the request is wrong (below the minimum, a refused address) are
+ * never retried elsewhere.
+ */
+async function withFallback<T>(from: Coin, to: PayoutCcy, now: number, opts: { walletPaid: boolean; avoid?: string[] }, attempt: (via: FallbackProvider | null, lim: Limits) => Promise<T>): Promise<T> {
+  const others = fallbacks({ walletPaid: opts.walletPaid });
+  let failure: unknown;
+  if (!others.length || now >= primaryDownUntil) {
+    try {
+      return await attempt(null, await primaryLimits(from, to, { now }));
+    } catch (e) {
+      if (!others.length || !fallbackWorthy(e)) throw e;
+      failure = e;
+      primaryDownUntil = now + PRIMARY_DOWN_FOR;
+      logger.warn(`FixedFloat can't take this ${from} → ${to} swap (${friendlyError(e)}): trying ${others.map((p) => p.label).join(', ')}`);
+    }
+  }
+  for (const p of others) {
+    try {
+      const out = await attempt(p, await limitsVia(p, from, to, { now, avoid: opts.avoid }));
+      logger.info(`${p.label} took the ${from} → ${to} swap instead of FixedFloat`);
+      return out;
+    } catch (e) {
+      logger.warn(`${p.label} couldn't take it either: ${friendlyError(e)}`);
+    }
+  }
+  if (failure) throw failure;
+  // FixedFloat was skipped (it failed a moment ago) and nothing else took it: give it another chance.
+  return attempt(null, await primaryLimits(from, to, { now }));
+}
+
+function newRecord(made: CreatedSwap, via: FallbackProvider | null, coin: Coin, expect: Expect, lim: Limits, now: number, extra: Partial<OrderRecord>): OrderRecord {
+  const created = made.order;
   const depositAddress = created.from.address;
   return {
-    id: created.id,
-    token: created.token!,
+    id: via ? `${via.idPrefix}${made.nativeId}` : created.id,
+    token: made.token,
+    ...(via ? { provider: via.id, nativeId: made.nativeId } : {}),
+    exchange: made.exchange,
     coin,
     depositAddress,
     createdAt: now,
@@ -661,17 +777,26 @@ export async function createOrder(
 
   const dest = opts.expect ? null : destinations.need(opts.destinationId);
   const expect: Expect = opts.expect ?? { toCcy: dest!.ccy, toAddress: dest!.address, label: dest!.label };
-  const lim = await limits(coin, expect.toCcy, { now });
-  const nominal = ceilTo(Math.min(lim.min * 3, lim.max), lim.precision);
-  recentCreates.push(now);
-  const created = await ff.create(COINS[coin].code, expect.toCcy, nominal, expect.toAddress);
-  checkCreated(created, coin, expect);
+  let counted = false; // an order only counts toward the throttle once its limits were found, and only once
+  const { made, via, lim } = await withFallback(coin, expect.toCcy, now, { walletPaid: false }, async (via, lim) => {
+    if (!counted) recentCreates.push(now);
+    counted = true;
+    const nominal = ceilTo(Math.min(lim.min * 3, lim.max), lim.precision);
+    if (!via) {
+      const created = await ff.create(COINS[coin].code, expect.toCcy, nominal, expect.toAddress);
+      checkCreated(created, coin, expect);
+      return { made: ownOrder(created), via, lim };
+    }
+    const made = await via.create({ from: coin, to: expect.toCcy, amount: nominal, toAddress: expect.toAddress });
+    checkCreated(made.order, coin, expect, { needToken: false });
+    return { made, via, lim };
+  });
 
-  const record = newRecord(created, coin, expect, lim, now, {
+  const record = newRecord(made, via, coin, expect, lim, now, {
     ...(dest ? { destinationId: dest.id } : {}),
     ...(opts.transferId ? { transferId: opts.transferId } : {}),
   });
-  logger.info(`[order ${record.id}] new ${coin} address ${record.depositAddress}: pays ${expect.toCcy} to ${expect.label}${opts.transferId ? ` (transfer ${opts.transferId})` : ''}, minimum ${lim.min} ${coin}`);
+  logger.info(`[order ${record.id}] new ${coin} address ${record.depositAddress}: pays ${expect.toCcy} to ${expect.label}${opts.transferId ? ` (transfer ${opts.transferId})` : ''}, minimum ${lim.min} ${coin}${via ? `, via ${via.label} (${made.exchange})` : ''}`);
   load().orders.push(record);
   markDirty();
   flush();
@@ -694,26 +819,37 @@ export class LimitError extends UserError {
  * the coins to the returned order's deposit address, and only there. Refunds come back to `ownRefund`.
  */
 export async function openSwap(
-  req: { from: Coin; amount: number; expect: Expect; transferId: string; ownRefund: string; destinationId?: string },
+  req: { from: Coin; amount: number; expect: Expect; transferId: string; ownRefund: string; destinationId?: string; avoid?: string[] },
   now = Date.now(),
 ): Promise<OrderRecord> {
-  const lim = await limits(req.from, req.expect.toCcy, { now });
-  if (req.amount < lim.min) throw new LimitError(`Below FixedFloat's minimum of ${lim.min} ${req.from}.`, lim.min, lim.max);
-  if (req.amount > lim.max) throw new LimitError(`Above FixedFloat's maximum of ${lim.max} ${req.from}.`, lim.min, lim.max);
-  // An earlier, never-paid order of this transfer (a crash between creating it and saving the transfer) must not block the pair.
-  for (const r of load().orders) if (r.transferId === req.transferId && r.ownRefund && r.ff.status === 'NEW' && !r.abandoned) abandon(r);
-  const created = await ff.create(COINS[req.from].code, req.expect.toCcy, req.amount, req.expect.toAddress);
-  checkCreated(created, req.from, req.expect);
-  // Our wallet only ever pays an address FixedFloat hasn't used before: paying an old one could reopen someone else's order.
-  if (load().orders.some((o) => o.depositAddress.toLowerCase() === created.from.address.toLowerCase())) {
-    throw new Error(`FixedFloat order ${created.id} reuses an old deposit address; making another one.`);
-  }
-  const record = newRecord(created, req.from, req.expect, lim, now, {
+  // Our own wallet pays this one, so a fallback is only used if it takes our refund address (see `fallbacks`).
+  const { made, via, lim } = await withFallback(req.from, req.expect.toCcy, now, { walletPaid: true, avoid: req.avoid }, async (via, lim) => {
+    const who = via ? via.label : 'FixedFloat';
+    if (req.amount < lim.min) throw new LimitError(`Below ${who}'s minimum of ${lim.min} ${req.from}.`, lim.min, lim.max);
+    if (req.amount > lim.max) throw new LimitError(`Above ${who}'s maximum of ${lim.max} ${req.from}.`, lim.min, lim.max);
+    // An earlier, never-paid order of this transfer (a crash between creating it and saving the transfer) must not block the pair.
+    for (const r of load().orders) if (r.transferId === req.transferId && r.ownRefund && r.ff.status === 'NEW' && !r.abandoned) abandon(r);
+    let made: CreatedSwap;
+    if (!via) {
+      const created = await ff.create(COINS[req.from].code, req.expect.toCcy, req.amount, req.expect.toAddress);
+      checkCreated(created, req.from, req.expect);
+      made = ownOrder(created);
+    } else {
+      made = await via.create({ from: req.from, to: req.expect.toCcy, amount: req.amount, toAddress: req.expect.toAddress, refundAddress: req.ownRefund, avoid: req.avoid });
+      checkCreated(made.order, req.from, req.expect, { needToken: false });
+    }
+    // Our wallet only ever pays an address the provider hasn't used before: paying an old one could reopen someone else's order.
+    if (load().orders.some((o) => o.depositAddress.toLowerCase() === made.order.from.address.toLowerCase())) {
+      throw new Error(`${who} order ${made.order.id} reuses an old deposit address; making another one.`);
+    }
+    return { made, via, lim };
+  });
+  const record = newRecord(made, via, req.from, req.expect, lim, now, {
     transferId: req.transferId,
     ownRefund: req.ownRefund,
     ...(req.destinationId ? { destinationId: req.destinationId } : {}),
   });
-  logger.info(`[order ${record.id}] ${req.amount} ${req.from} → ${req.expect.toCcy} for ${req.expect.label} (transfer ${req.transferId}): our wallet pays ${record.depositAddress}`);
+  logger.info(`[order ${record.id}] ${req.amount} ${req.from} → ${req.expect.toCcy} for ${req.expect.label} (transfer ${req.transferId}): our wallet pays ${record.depositAddress}${via ? `, via ${via.label} (${made.exchange})` : ''}`);
   load().orders.push(record);
   markDirty();
   flush();
@@ -724,19 +860,26 @@ export async function openSwap(
  * FixedFloat's rules (ToS 2.20): no new order may be paid in the same direction until the previous one is
  * complete. Returns the order still in the way, if any. Orders stuck for days don't block forever.
  */
-export function pairBusy(from: Coin, to: PayoutCcy, now = Date.now()): OrderRecord | null {
+export function pairBusy(from: Coin, to: PayoutCcy, now = Date.now()): { id: string } | null {
   return (
     load().orders.find((r) => {
-      if (r.coin !== from || r.toCcy !== to || r.abandoned || now - r.createdAt > 3 * D) return false;
+      // FixedFloat's rule, so only FixedFloat's own orders count.
+      if (r.provider || r.coin !== from || r.toCcy !== to || r.abandoned || now - r.createdAt > 3 * D) return false;
       const s = r.ff.status;
       if (s === 'PENDING' || s === 'EXCHANGE' || s === 'WITHDRAW') return true;
       if (s === 'EMERGENCY') return r.ff.emergency?.choice !== 'REFUND';
       // Paid, but FixedFloat hasn't seen it yet: by our own wallet, or spotted on-chain.
       if (s === 'NEW' || s === 'EXPIRED') return (r.ownRefund !== undefined && now - r.createdAt < 24 * H) || seenCounts(r, now);
       return false;
-    }) ?? null
+    }) ??
+    otherOrders.map((busy) => busy(COINS[from].code, to, now)).find(Boolean) ??
+    null
   );
 }
+
+/** Other FixedFloat orders on the same key (the Wallet window's swaps), so the one-order-per-pair rule covers them too. */
+const otherOrders: ((fromCode: string, to: string, now: number) => { id: string } | null)[] = [];
+export const registerPairCheck = (busy: (fromCode: string, to: string, now: number) => { id: string } | null) => otherOrders.push(busy);
 
 /** Marks an order our wallet will never pay (so it doesn't hold up the pair). */
 export function abandon(r: OrderRecord): void {
@@ -823,6 +966,11 @@ export function orderView(r: OrderRecord, now = Date.now()) {
     autoContinued: recent(r.auto),
     autoError: emergencyAction(o) === 'continue' ? r.auto.error : null,
     reusedAddress: r.reusedAddress,
+    /** Who took it: "fixedfloat", or a fallback ("swapzone", "cyphergoat"), and the exchange behind it. */
+    provider: r.provider ?? 'fixedfloat',
+    exchange: r.exchange ?? 'fixedfloat',
+    /** A fallback provider sent the coins back (it gives no refund transaction to show). */
+    providerRefunded: Boolean(o.refunded),
     pollError: r.pollError,
     /** Once it's done: roughly what the swap cost (dollar value in, at the exchange, minus what came out). */
     cost: o.status === 'DONE' && toTx?.id && received && usdt && r.prices ? costOf(Number(received) * r.prices.from, Number(received) * r.prices.from - Number(usdt) * r.prices.to) : null,

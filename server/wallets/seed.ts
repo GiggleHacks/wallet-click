@@ -5,6 +5,7 @@ import { HDKey } from '@scure/bip32';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { config } from '../config.js';
+import { slip10Ed25519 } from '../stash/ed25519.js';
 import { readJson, writeJsonAtomic } from '../store.js';
 
 /**
@@ -63,16 +64,20 @@ export function initWallet(key: string, mnemonic = generateMnemonic(wordlist, 25
 }
 
 let root: HDKey | null = null;
+/** The BIP39 seed itself, for ed25519 (SLIP-10) keys, which BIP32 can't derive. */
+let seedBytes: Uint8Array | null = null;
 let unlockError: string | null = null;
 
 /** Unlocks the seed with WALLET_KEY. Returns false (and the wallet stays off) when either is missing. */
 export function unlock(): boolean {
   root = null;
+  seedBytes = null;
   unlockError = null;
   const enc = readJson<EncFile>(walletFile());
   if (!enc || !config.walletKey) return false;
   try {
-    root = HDKey.fromMasterSeed(mnemonicToSeedSync(decrypt(enc, config.walletKey)));
+    seedBytes = mnemonicToSeedSync(decrypt(enc, config.walletKey));
+    root = HDKey.fromMasterSeed(seedBytes);
     return true;
   } catch (e) {
     unlockError = (e as Error).message;
@@ -96,7 +101,14 @@ export function keyAt(derivationPath: string): HDKey {
   return k;
 }
 
+/** An ed25519 private key (SLIP-10, hardened steps only), for Solana; only the wallet modules use it. */
+export function ed25519KeyAt(derivationPath: string): Uint8Array {
+  if (!seedBytes) throw new Error('The hot wallet is locked (WALLET_KEY).');
+  return slip10Ed25519(seedBytes, derivationPath).key;
+}
+
 /** Tests: forget the unlocked seed. */
 export function lock(): void {
   root = null;
+  seedBytes = null;
 }

@@ -109,19 +109,27 @@ interface XmrState {
   version: 1;
   /** Our account in the wallet: created once, never 0. */
   account: number | null;
+  /** The Wallet window's own account ("wallet-click-stash"): held coins never mix with transfers. Never 0. */
+  stash?: number | null;
 }
+
+/** Which of our accounts: the transfers' one, or the Wallet window's. */
+export type XmrAccount = 'main' | 'stash';
 let state: XmrState | null = null;
 const stateFile = () => path.join(config.dataDir, 'monero.json');
 
-async function account(): Promise<number> {
+async function account(which: XmrAccount = 'main'): Promise<number> {
   state ??= readJson<XmrState>(stateFile()) ?? { version: 1, account: null };
-  if (state.account) return state.account;
-  const label = config.monero.accountLabel;
+  const known = which === 'main' ? state.account : state.stash;
+  if (known) return known;
+  const label = which === 'main' ? config.monero.accountLabel : `${config.monero.accountLabel}-stash`;
   const { subaddress_accounts: accounts } = await call<{ subaddress_accounts: { account_index: number; label: string }[] }>('get_accounts');
   let index = accounts.find((a) => a.account_index > 0 && a.label === label)?.account_index;
   index ??= (await call<{ account_index: number }>('create_account', { label })).account_index;
   if (!(Number.isInteger(index) && index > 0)) throw new XmrError(-1, 'Refusing to use Monero account 0.');
-  state.account = index;
+  if (which === 'stash' && index === state.account) throw new XmrError(-1, "The Wallet window must not share the transfers' Monero account.");
+  if (which === 'main') state.account = index;
+  else state.stash = index;
   writeJsonAtomic(stateFile(), state);
   return index;
 }
@@ -129,8 +137,8 @@ async function account(): Promise<number> {
 // ---------------------------------------------------------------- reading
 
 /** A fresh subaddress in our account. */
-export async function newSubaddress(label: string): Promise<{ index: number; address: string }> {
-  const r = await call<{ address: string; address_index: number }>('create_address', { account_index: await account(), label });
+export async function newSubaddress(label: string, which: XmrAccount = 'main'): Promise<{ index: number; address: string }> {
+  const r = await call<{ address: string; address_index: number }>('create_address', { account_index: await account(which), label });
   if (!(r.address_index > 0)) throw new XmrError(-1, 'The Monero wallet returned an unexpected subaddress.');
   return { index: r.address_index, address: r.address };
 }
@@ -144,9 +152,9 @@ export interface XmrIncoming {
 }
 
 /** Everything that has arrived at one of our subaddresses (confirmed or in the mempool). */
-export async function incoming(index: number): Promise<XmrIncoming[]> {
+export async function incoming(index: number, which: XmrAccount = 'main'): Promise<XmrIncoming[]> {
   type T = { txid: string; amount: unknown; confirmations?: number; subaddr_index?: { minor: number }; double_spend_seen?: boolean };
-  const r = await call<{ in?: T[]; pool?: T[] }>('get_transfers', { in: true, pool: true, account_index: await account(), subaddr_indices: [index] });
+  const r = await call<{ in?: T[]; pool?: T[] }>('get_transfers', { in: true, pool: true, account_index: await account(which), subaddr_indices: [index] });
   const rows = [...(r.in ?? []).map((t) => ({ t, pool: false })), ...(r.pool ?? []).map((t) => ({ t, pool: true }))];
   return rows
     .filter(({ t }) => (t.subaddr_index?.minor ?? index) === index && !t.double_spend_seen)
@@ -154,9 +162,9 @@ export async function incoming(index: number): Promise<XmrIncoming[]> {
 }
 
 /** What a subaddress holds now: everything, and the part that can be spent already. */
-export async function balance(index: number): Promise<{ total: bigint; unlocked: bigint; blocksToUnlock: number }> {
+export async function balance(index: number, which: XmrAccount = 'main'): Promise<{ total: bigint; unlocked: bigint; blocksToUnlock: number }> {
   type B = { address_index: number; balance: unknown; unlocked_balance: unknown; blocks_to_unlock?: number };
-  const r = await call<{ per_subaddress?: B[] }>('get_balance', { account_index: await account(), address_indices: [index] });
+  const r = await call<{ per_subaddress?: B[] }>('get_balance', { account_index: await account(which), address_indices: [index] });
   const row = (r.per_subaddress ?? []).find((b) => b.address_index === index);
   return { total: big(row?.balance), unlocked: big(row?.unlocked_balance), blocksToUnlock: row?.blocks_to_unlock ?? 0 };
 }
@@ -181,11 +189,11 @@ export interface XmrSweep {
  * Signs (does not relay) a transaction moving everything unlocked at one of our subaddresses to `to`.
  * Callers pass only a verified FixedFloat deposit address or another subaddress of ours.
  */
-export async function prepareSweep(index: number, to: string): Promise<XmrSweep> {
+export async function prepareSweep(index: number, to: string, which: XmrAccount = 'main'): Promise<XmrSweep> {
   type R = { tx_hash_list?: string[]; amount_list?: unknown[]; fee_list?: unknown[]; tx_metadata_list?: string[] };
   const r = await call<R>('sweep_all', {
     address: to,
-    account_index: await account(),
+    account_index: await account(which),
     subaddr_indices: [index],
     do_not_relay: true,
     get_tx_metadata: true,
@@ -233,9 +241,9 @@ export async function relay(metadata: string): Promise<string> {
 }
 
 /** Whether one of our outgoing transactions reached the network (pending or confirmed), and how deep. */
-export async function sent(txid: string): Promise<{ confirmations: number; failed: boolean } | null> {
+export async function sent(txid: string, which: XmrAccount = 'main'): Promise<{ confirmations: number; failed: boolean } | null> {
   try {
-    const r = await call<{ transfer?: { type: string; confirmations?: number } }>('get_transfer_by_txid', { txid, account_index: await account() });
+    const r = await call<{ transfer?: { type: string; confirmations?: number } }>('get_transfer_by_txid', { txid, account_index: await account(which) });
     if (!r.transfer) return null;
     return { confirmations: r.transfer.confirmations ?? 0, failed: r.transfer.type === 'failed' };
   } catch (e) {

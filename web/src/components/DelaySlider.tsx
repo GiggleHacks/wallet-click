@@ -15,7 +15,7 @@ export function DelaySlider({ value, delays, onChange, disabled }: { value: numb
         disabled={disabled}
         onChange={(e) => onChange(delays[Number(e.target.value)])}
         aria-label="Wait before it goes on"
-        aria-valuetext={value ? `${value} hours` : 'No wait'}
+        aria-valuetext={value ? `about ${value} hours` : 'No wait'}
       />
       <div className="delay-ticks">
         {delays.map((d, n) => (
@@ -31,6 +31,7 @@ export function DelaySlider({ value, delays, onChange, disabled }: { value: numb
           </button>
         ))}
       </div>
+      {value > 0 && <small className="delay-note">A typical wait: each payment's real wait is drawn at random around it (from a quarter to three times as long), so it isn't a fixed length.</small>}
     </div>
   );
 }

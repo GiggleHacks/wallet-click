@@ -136,6 +136,39 @@ MONERO_RPC_PASSWORD=password
 
 Wallet Click uses its own account in that wallet and never touches account 0. Privacy Enhanced needs about **$110 or more** per payment, because that's FixedFloat's minimum for swaps into Monero.
 
+**Wallet (a fresh address for almost any coin):** uses the same hot wallet (and Monero, if set up). Open **Wallet** on the desktop or in the Start menu, pick a coin, type who's paying if you like, and click **New address**. Hand that address over. You get a ring (and a Telegram ping) when the payment is broadcast and again when it's confirmed. It then waits in **Holdings** until you click **Swap to Monero** or **Send to Coinbase**. For a coin that isn't in the grid, use **More coins…**: FixedFloat gives the address and swaps whatever arrives into your Monero.
+
+To ask for addresses over Telegram through OpenClaw, add a token to `.env` and give the same token to the helper script, readable only by root:
+
+```bash
+TOKEN=$(openssl rand -hex 32)
+echo "AGENT_TOKEN=$TOKEN" >> .env
+echo "AGENT_TOKEN=$TOKEN" | sudo tee /etc/wallet-click-agent.env >/dev/null && sudo chmod 600 /etc/wallet-click-agent.env
+docker compose up -d
+WC_URL=http://127.0.0.1:8787 python3 scripts/wc-agent.py address SOL --label test
+```
+
+Then copy `scripts/openclaw/wallet-click/` into OpenClaw's skills folder, so "give me a fresh Solana address" works from Telegram. (`WC_URL` is your `WC_PORT`; it defaults to 8818.)
+
+**Fallback swap services (Swapzone, CypherGoat):** FixedFloat does every swap as before. If you'd like a spare for when it's down or has a pair paused, get an API key from [Swapzone](https://swapzone.io/partners/account) (and/or CypherGoat) and add to `.env`:
+
+```ini
+SWAP_FALLBACKS=swapzone
+SWAPZONE_API_KEY=your-key
+```
+
+Leave `SWAP_FALLBACKS` out and nothing changes. See the README's *Other swap services* section for exactly when they're used and how they differ.
+
+**Tor (hide the server's address from FixedFloat and the blockchain APIs):** install Tor on the same machine (it listens on `127.0.0.1:9050`), then add to `.env`:
+
+```ini
+EGRESS_PROXY=socks5h://127.0.0.1:9050
+```
+
+and restart. Everything sent to FixedFloat, Esplora and the Ethereum RPCs, including your transaction broadcasts, then goes through Tor, and fails if Tor is down (it never goes out directly). If FixedFloat won't talk to Tor exits, add `EGRESS_VIA=chain` to keep only the blockchain APIs on Tor. Point monero-wallet-rpc at Tor too (`--proxy 127.0.0.1:9050`).
+
+**Telegram pings** say only that money arrived or left (coin and your label). Set `NOTIFY_DETAIL=full` if you want amounts, addresses and links in them (Telegram keeps whatever it's sent).
+
 ## 9. Keeping it running
 
 **Update to a new version:**

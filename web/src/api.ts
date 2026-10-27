@@ -1,5 +1,5 @@
 import { clientLog } from './lib/devlog';
-import type { Coin, Destination, Fees, LogLine, Meta, Minimums, Order, Quote, Route, Stable, Status, Transfer } from './types';
+import type { Coin, Destination, Fees, LogLine, Meta, Minimums, Order, Quote, Route, Stable, Status, Transfer, WalletCoin, WalletData, WalletEntry, WalletSettings } from './types';
 
 export class ApiError extends Error {
   constructor(
@@ -54,6 +54,15 @@ export const api = {
   addresses: () => request<{ addresses: Route[]; available: Record<Coin | 'privacy', boolean> }>('GET', '/api/addresses'),
   createAddress: (body: { coin: Coin; mode: 'direct' | 'privacy'; delayHours: number | null; pieces?: number; destinationId: string; label: string }) => request<Route>('POST', '/api/addresses', body),
   updateAddress: (id: string, patch: { label?: string; delayHours?: number; pieces?: number; archived?: boolean }) => request<Route>('POST', `/api/addresses/${id}`, patch),
+  wallet: () => request<WalletData>('GET', '/api/stash'),
+  walletCoins: () => request<{ coins: WalletCoin[] }>('GET', '/api/stash/coins'),
+  /** A fresh address: a held coin (`asset`), or any other coin FixedFloat takes (`code`), swapped into Monero. */
+  walletAddress: (body: { asset?: string; code?: string; label?: string }) => request<WalletEntry>('POST', '/api/stash', body),
+  walletUpdate: (id: string, patch: { label?: string; archived?: boolean }) => request<WalletEntry>('POST', `/api/stash/${id}`, patch),
+  walletMove: (id: string, to: 'xmr' | 'coinbase', password: string, destinationId?: string) => request<WalletEntry>('POST', `/api/stash/${id}/move`, { to, password, ...(destinationId ? { destinationId } : {}) }),
+  walletMoveAll: (to: 'xmr' | 'coinbase', password: string, destinationId?: string) =>
+    request<{ started: string[]; skipped: { id: string; why: string }[] }>('POST', '/api/stash/move-all', { to, password, ...(destinationId ? { destinationId } : {}) }),
+  walletSettings: (patch: Partial<WalletSettings> & { password?: string }) => request<WalletData>('POST', '/api/stash/settings', patch),
   logs: (after: number) => request<{ lines: LogLine[]; startedAt: number }>('GET', `/api/logs?after=${after}`),
   minimums: () => request<Minimums>('GET', '/api/minimums'),
   fees: () => request<Fees>('GET', '/api/fees'),
